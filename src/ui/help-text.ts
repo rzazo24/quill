@@ -13,6 +13,7 @@ const en: HelpSection[] = [
   { id: 'read', title: 'Reading', body: `Sign in with your npub. There are three tabs:
 
 • Following: notes of the people you follow (not their replies) and what they repost, marked “Ana reposted”. A repost does not vouch for the note: the filter judges it by its own author. You can switch reposts off in Settings.
+• At the top of Following a switch chooses **Follows** (the people you follow) or **Network**: the notes of the people they follow, each marked “Followed by Ana and 3 more” so you can see why it is there. Network leaves out the “outside your network” rule (that is what it is showing you); every other rule applies. It looks at the accounts followed by the most of your follows, up to 200.
 • Mentions: replies and mentions from anyone. This is where the filter works hardest.
 • Me: your account, your Clave connection, your own notes and sign out.
 
@@ -68,6 +69,7 @@ const es: HelpSection[] = [
   { id: 'read', title: 'Leer', body: `Entra con tu npub. Hay tres pestañas:
 
 • Siguiendo: notas de la gente que sigues (sin sus respuestas) y lo que comparten, marcado «Ana compartió». Un repost no avala la nota: el filtro la juzga por su propio autor. Puedes desactivar los reposts en Ajustes.
+• Arriba de Siguiendo, un interruptor elige **Seguidos** (la gente que sigues) o **Red**: las notas de la gente a la que ellos siguen, cada una marcada «Seguida por Ana y 3 más» para que veas por qué está ahí. Red deja fuera la regla «fuera de tu red» (es justo lo que enseña); el resto de reglas se aplican. Mira las cuentas seguidas por más de tus seguidos, hasta 200.
 • Menciones: respuestas y menciones de cualquiera. Aquí es donde más trabaja el filtro.
 • Yo: tu cuenta, tu conexión con Clave, tus propias notas y cerrar sesión.
 

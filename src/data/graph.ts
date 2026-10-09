@@ -6,6 +6,8 @@ export interface GraphInfo {
   /** How many of your follows' lists arrived, out of how many you follow. */
   answered: number
   total: number
+  /** The follow lists that arrived (owner -> who they follow): who follows whom, kept for the "Network" view. */
+  lists: ReadonlyMap<string, readonly string[]>
 }
 
 /**
@@ -21,5 +23,5 @@ export function buildGraph(me: string, follows: ReadonlySet<string>, lists: Read
   }
   const answered = [...lists.keys()].filter((k) => follows.has(k)).length
   const loaded = expected > 0 && answered >= expected * 0.5
-  return { graph: { loaded, distance: (pk) => dist.get(pk) ?? null }, answered, total: expected }
+  return { graph: { loaded, distance: (pk) => dist.get(pk) ?? null }, answered, total: expected, lists }
 }

@@ -5,6 +5,7 @@ import { hashtagTags, mentionTags, mergeTags, reactionTags, replyTags } from '..
 import { parseIdentity } from '../core/identity.js'
 import { mentionedKeys, shortNpub } from '../core/refs.js'
 import { judgeAll, tally, type Judged, type Settings } from '../core/verdict.js'
+import { loadNetwork } from '../data/network.js'
 import { loadFollowing, loadMentions, loadMine, loadNames, loadNote, loadThread, type Thread, type ThreadNode } from '../data/feed.js'
 import { Engagement, loadEngagement, normReaction } from '../data/engaged.js'
 import { countNew, groupReactions, loadActivity, type Activity } from '../data/activity.js'
@@ -16,10 +17,10 @@ import { checkTemplate, MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
 import { logo, icon } from './icons.js'
 import { detectLang, problemText, t, type Key, type Lang } from './i18n.js'
-import { renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
+import { renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type Review } from './sign-ui.js'
 import { installHint, type Env } from './install.js'
-import { parseAvatars, parseFont, parseLang, parseReposts, parseSettings, parseWords, safeGet, safeSet, type AvatarStyle, type FontSize, type KV } from './store.js'
+import { parseAvatars, parseFeedMode, parseFont, parseLang, parseReposts, parseSettings, parseWords, safeGet, safeSet, type AvatarStyle, type FeedMode, type FontSize, type KV } from './store.js'
 import { addRelay, parseRelays, removeRelay } from '../net/relays.js'
 import { listState, loadPublishedRelays, relayListTemplate } from '../data/relaylist.js'
 
@@ -64,6 +65,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let font: FontSize = parseFont(safeGet(kv, 'font'))
   let showReposts = parseReposts(safeGet(kv, 'reposts'))
   let avatarStyle: AvatarStyle = parseAvatars(safeGet(kv, 'avatars'))
+  let feedMode: FeedMode = parseFeedMode(safeGet(kv, 'feed'))
   let relayError: string | null = null
   const probes = new Map<string, 'testing' | 'up' | 'down'>()
   let published: string[] | null | undefined // the relay list on Nostr: undefined = not read (yet), null = none
@@ -151,7 +153,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   async function nameThem(items: Judged[]): Promise<void> {
-    const keys = [...items.flatMap((j) => [j.event.pubkey, ...(j.repostedBy ?? []), ...mentionedKeys(j.event.content)]), ...(signer?.pubkey ? [signer.pubkey] : [])].filter((k) => !names.has(k))
+    const keys = [...items.flatMap((j) => [j.event.pubkey, ...(j.repostedBy ?? []), ...(j.followedBy ?? []).slice(0, 1), ...mentionedKeys(j.event.content)]), ...(signer?.pubkey ? [signer.pubkey] : [])].filter((k) => !names.has(k))
     if (!keys.length) return
     for (const [k, n] of await loadNames(fetcher, keys)) names.set(k, n)
   }
@@ -178,7 +180,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
           if (seenAt === null) loadSeen()
           act = await loadActivity(fetcher, ctx(), settings)
         }
-        const items = act ? act.notes : route.name === 'me' ? await loadMine(fetcher, ctx(), settings) : await loadFollowing(fetcher, ctx(), settings, { reposts: showReposts })
+        const items = act ? act.notes : route.name === 'me' ? await loadMine(fetcher, ctx(), settings) : (feedMode === 'network' ? await loadNetwork(fetcher, session!, ctx(), settings) : await loadFollowing(fetcher, ctx(), settings, { reposts: showReposts }))
         if (mine !== run) return
         await nameThem(act ? [...items, ...act.reactions] : items)
         if (route.name === 'me' && !names.has(me)) for (const [k, n] of await loadNames(fetcher, [me])) names.set(k, n)
@@ -189,7 +191,13 @@ export function startApp(root: HTMLElement, deps: Deps): void {
           const block = renderReactionGroups(groupReactions(act, markFrom), view())
           const line = fresh.shown || fresh.hidden ? h('p', { class: 'meta new-line', role: 'status' }, [fresh.shown ? t(lang, 'newItems', { n: fresh.shown }) : '', fresh.hidden ? t(lang, 'newHidden', { n: fresh.hidden }) : ''].filter(Boolean).join(' · ')) : null
           content = h('div', { class: 'stack' }, renderSummary(tally(items), view(), toggleSettings), line, block, renderList(items, view()))
-        } else content = route.name === 'me' ? renderList(items, view()) : h('div', { class: 'stack' }, renderSummary(tally(items), view(), toggleSettings), renderList(items, view()))
+        } else if (route.name === 'me') content = renderList(items, view())
+        else {
+          // Following: the people you follow, or the network; in the network an empty list says why (no follow lists arrived, or just nothing new)
+          const network = route.name === 'following' && feedMode === 'network'
+          const empty = network && !items.length ? h('p', { class: 'empty' }, t(lang, session!.graphInfo.answered === 0 ? 'networkNotLoaded' : 'networkEmpty')) : null
+          content = h('div', { class: 'stack' }, route.name === 'following' ? renderFeedMode(feedMode, changeFeedMode, view()) : null, renderSummary(tally(items), view(), toggleSettings), empty ?? renderList(items, view()))
+        }
       }
     } catch { content = h('p', { class: 'empty' }, t(lang, 'noNote')) }
     if (mine !== run) return
@@ -237,6 +245,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
 
   function toggleSettings(): void { deps.setHash('#/settings/filter') } // the filter settings live in Settings
   function changeSettings(s: Settings): void { settings = s; safeSet(kv, 'settings', JSON.stringify(s)); void load() }
+  function changeFeedMode(m: FeedMode): void { feedMode = m; safeSet(kv, 'feed', m === 'follows' ? null : m); void load() }
   function changeAvatars(a: AvatarStyle): void { avatarStyle = a; safeSet(kv, 'avatars', a === 'initials' ? null : a); void load() } // the cards are built once and kept: they are rebuilt with the new pictures
   function changeReposts(on: boolean): void { showReposts = on; safeSet(kv, 'reposts', on ? null : '0'); void load() }
   function changeFont(f: FontSize): void { font = f; safeSet(kv, 'font', f); applyFont(); draw() }

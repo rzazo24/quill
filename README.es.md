@@ -28,7 +28,7 @@ Principios: la conducta es una prueba, **la falta de datos no lo es** (una clave
 
 ## Qué hace
 
-- **Siguiendo** (con lo que comparte la gente que sigues, juzgado por el filtro como todo lo demás), **Menciones** (donde el filtro se gana el sueldo), **Yo** (tu cuenta, tu conexión con Clave, los ajustes del filtro y tus propias notas) y cualquier **hilo**.
+- **Siguiendo** (con lo que comparte la gente que sigues, juzgado por el filtro como todo lo demás; un interruptor **Seguidos | Red** lo amplía a las notas de la gente a la que ellos siguen, cada una diciendo quién sigue a su autor), **Menciones** (donde el filtro se gana el sueldo), **Yo** (tu cuenta, tu conexión con Clave, los ajustes del filtro y tus propias notas) y cualquier **hilo**.
 - **Notificaciones dentro de la app**: un número en *Menciones*, las notas nuevas marcadas y una lista de quién reaccionó a tus notas.
 - **Reaccionar** con un toque; lo que ya has reaccionado o respondido queda marcado; **responder** y **escribir una nota** con una pantalla de revisión que muestra el texto exacto, el tipo, las etiquetas y los relés antes de pedirle nada al firmador.
 - **Ayuda**: una página con secciones plegables (el filtro, escribir con Clave, ajustes, instalar), tras el botón ?, en los dos idiomas.

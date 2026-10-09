@@ -453,3 +453,35 @@ describe('avatar style', () => {
     const bad = boot({ stored: { me, avatars: 'photos' } }); await tick(150); expect(people(bad).every((x) => !x.classList.contains('art'))).toBe(true)
   })
 })
+
+describe('the Network view in Following', () => {
+  const mode = (a: ReturnType<typeof boot>) => a.root.querySelector('.seg.feedmode') as HTMLElement | null
+  const btn = (a: ReturnType<typeof boot>, label: string) => [...mode(a)!.querySelectorAll('button')].find((b) => b.textContent === label) as HTMLButtonElement
+  // Ana (friend) follows `far`, who has written a note: that is the network
+  const net = [...world.filter((e) => !(e.kind === 3 && e.pubkey === friend)), list(friend, 3, [['p', far]]), ev(far, 'a note from far, followed by my friend', { created_at: 1_900_000_000 })]
+  it('has a switch Follows | Network on Following only, with Follows open by default', async () => {
+    const a = boot({ events: net, stored: { me } }); await tick(150)
+    expect([...mode(a)!.querySelectorAll('button')].map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([['Follows', 'true'], ['Network', 'false']])
+    expect(a.text()).toContain('a post from my friend'); expect(a.text()).not.toContain('a note from far')
+    await a.go('#/mentions'); await tick(100); expect(mode(a)).toBeNull(); await a.go('#/me'); await tick(100); expect(mode(a)).toBeNull()
+  })
+  it('Network shows the notes of the people your follows follow, each saying who follows its author, and not the notes of people you already follow', async () => {
+    const a = boot({ events: net, stored: { me } }); await tick(150); btn(a, 'Network').click(); await tick(150)
+    expect(btn(a, 'Network').getAttribute('aria-pressed')).toBe('true'); expect(a.text()).toContain('a note from far, followed by my friend'); expect(a.text()).not.toContain('a post from my friend')
+    const card = [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('a note from far'))!; expect(card.querySelector('.reposted')!.textContent).toBe('Followed by Ana'); expect(card.querySelector('.reposted svg')).not.toBeNull()
+    expect(a.mem.get('feed')).toBe('network'); btn(a, 'Follows').click(); await tick(150); expect(a.mem.has('feed')).toBe(false); expect(a.text()).toContain('a post from my friend'); expect(a.text()).not.toContain('a note from far')
+  })
+  it('the choice is remembered, and a stored value that is not a mode falls back to Follows', async () => {
+    const a = boot({ events: net, stored: { me, feed: 'network' } }); await tick(200); expect(btn(a, 'Network').getAttribute('aria-pressed')).toBe('true'); expect(a.text()).toContain('a note from far')
+    const bad = boot({ events: net, stored: { me, feed: 'everything' } }); await tick(150); expect(btn(bad, 'Follows').getAttribute('aria-pressed')).toBe('true')
+  })
+  it('the network does not hide everything because of the "outside your network" rule, even with the reach set to follows only', async () => {
+    const strict = JSON.stringify({ rules: { repeatedText: true, burst: true, linkOnly: true, outsideNetwork: true }, maxDistance: 1, burstEvents: 5 })
+    const a = boot({ events: net, stored: { me, feed: 'network', settings: strict } }); await tick(200)
+    expect(a.root.querySelector('details.folded')).toBeNull(); expect(a.text()).toContain('a note from far')
+  })
+  it('an empty network says why: the lists did not arrive, or there is just nothing new', async () => {
+    const noLists = boot({ events: world.filter((e) => !(e.kind === 3 && e.pubkey === friend)), stored: { me, feed: 'network' } }); await tick(200); expect(noLists.text()).toContain('has not loaded yet')
+    const nothing = boot({ events: world, stored: { me, feed: 'network' } }); await tick(200); expect(nothing.text()).toContain('Nothing new from the people your follows follow')
+  })
+})

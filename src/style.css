@@ -213,3 +213,6 @@ button.icon.on { color: var(--accent); border-color: var(--accent); background: 
 .seg.avatars button { display: inline-flex; align-items: center; gap: 8px; padding-left: 8px } .seg.avatars .avatar { width: 26px; height: 26px; font-size: .65rem; border-width: 1px }
 
 .prefs .seg + .check { margin-top: 12px }
+
+/* Following: Follows | Network */
+.seg.feedmode { display: flex; gap: 8px } .seg.feedmode button { flex: 1; max-width: 200px }
