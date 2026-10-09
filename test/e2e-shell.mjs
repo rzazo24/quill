@@ -24,8 +24,13 @@ say(samples.every((x) => !x.docScrolls), 'and the page itself never became scrol
 s = await probe(); say(s.mainTop === 0, `a new view starts at the top (scrollTop ${s.mainTop})`)
 // react in the middle of a long list: nothing may jump
 await p.click('nav.tabbar a[href="#/"]'); await p.waitForSelector('.note .actions'); await new Promise((r) => setTimeout(r, 600))
-await p.evaluate(() => { document.querySelector('main.view').scrollTop = 1800 }); await new Promise((r) => setTimeout(r, 300))
-const before = await p.evaluate(() => { const n = [...document.querySelectorAll('article.note')].find((x) => x.getBoundingClientRect().top > 200 && x.getBoundingClientRect().top < 500); return { id: n.dataset.id, top: Math.round(n.getBoundingClientRect().top), st: document.querySelector('main.view').scrollTop } })
+// find a scroll position where some note has its top edge AND its buttons on screen (a note taller than the screen would make the test tool scroll to reach them, which says nothing about the app)
+const OK_NOTE = (x) => { const r = x.getBoundingClientRect(), a = x.querySelector('.actions')?.getBoundingClientRect(); return r.top > 150 && r.top < 500 && !!a && a.bottom < 700 }
+for (const y of [1800, 1500, 2100, 1200, 2400, 900, 2700, 600, 3000, 3300, 3600]) {
+  await p.evaluate((y) => { document.querySelector('main.view').scrollTop = y }, y); await new Promise((r) => setTimeout(r, 250))
+  if (await p.evaluate((src) => [...document.querySelectorAll('article.note')].some(new Function('return ' + src)()), OK_NOTE.toString())) break
+}
+const before = await p.evaluate((src) => { const n = [...document.querySelectorAll('article.note')].find(new Function('return ' + src)()); return { id: n.dataset.id, top: Math.round(n.getBoundingClientRect().top), st: document.querySelector('main.view').scrollTop } }, OK_NOTE.toString())
 await p.locator(`article.note[data-id^="${before.id.slice(0, 6)}"] button.react`).nth(1).click(); await new Promise((r) => setTimeout(r, 1500))
 const after = await p.evaluate((id) => { const n = document.querySelector(`article.note[data-id="${id}"]`); return { top: Math.round(n.getBoundingClientRect().top), st: document.querySelector('main.view').scrollTop } }, before.id)
 say(after.top === before.top && after.st === before.st, `reacting does not move the note (top ${before.top} -> ${after.top}, scroll ${before.st} -> ${after.st})`)
