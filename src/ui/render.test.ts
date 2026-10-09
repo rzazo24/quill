@@ -66,6 +66,24 @@ describe('folding', () => {
   })
 })
 
+describe('lists come in pages', () => {
+  it('shows 30 notes first, then more on request, and the button goes away with the last one', () => {
+    const items = Array.from({ length: 70 }, (_, i) => shown(ev(pk('a'), `note ${i}`)))
+    const el = renderList(items, v); document.body.append(el)
+    expect(el.querySelectorAll('article.note').length).toBe(30)
+    const btn = () => el.querySelector('button.more') as HTMLElement | null
+    expect(btn()!.textContent).toBe('Show more (40 left)')
+    btn()!.click(); expect(el.querySelectorAll('article.note').length).toBe(60); expect(btn()!.textContent).toBe('Show more (10 left)')
+    btn()!.click(); expect(el.querySelectorAll('article.note').length).toBe(70); expect(btn()).toBeNull()
+    expect([...el.querySelectorAll('.body')].map((n) => n.textContent)[69]).toBe('note 69') // order kept
+    el.remove()
+  })
+  it('a short list has no button; an empty one says so', () => {
+    expect(renderList([shown()], v).querySelector('button.more')).toBeNull()
+    expect(renderList([], v).textContent).toBe('Nothing here yet.')
+  })
+})
+
 describe('summary', () => {
   it('says what was hidden and by what; says "nothing hidden" when so', () => {
     const s = renderSummary({ shown: 23, hidden: 9, byRule: { 'muted-author': 4, 'outside-network': 5 } }, v, () => {})

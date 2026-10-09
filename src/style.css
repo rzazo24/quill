@@ -1,52 +1,85 @@
-:root {
-  --bg: #faf9f6; --fg: #1d1d1b; --muted: #6b6a66; --line: #dcdad3; --accent: #2b5fd9; --fold: #f0eee8; --warn: #a3331c;
-  color-scheme: light dark;
+/* Same family as the ephemeral chat and the relay's landing page: dark navy, teal accent, rounded cards. Mobile first: the base rules are for a phone,
+   the media query at the end only widens things. Nothing here loads anything: no fonts, no images. */
+:root { --bg:#0b0f16; --panel:#111823; --border:#1f2a3a; --text:#e6edf3; --muted:#93a1b1; --accent:#2dd4bf; --amber:#fbbf24; --red:#ff9aa5; --tab-h:58px }
+* { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: #2b3a50 transparent }
+html { color-scheme: dark; -webkit-text-size-adjust: 100% }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) calc(var(--tab-h) + env(safe-area-inset-bottom)) env(safe-area-inset-left) }
+a { color: var(--accent) }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+h2, h3 { margin: 0 }
+
+/* header and tab bar */
+.top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: rgba(11,15,22,.94); border-bottom: 1px solid var(--border) }
+.top h1 { margin: 0; font-size: 1.25rem; line-height: 1.2 } .top h1 a { color: var(--text); text-decoration: none }
+.tag { flex: 1; min-width: 0; color: var(--muted); font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.lang { display: flex; gap: 4px; margin-left: auto }
+.lang button { min-height: 32px; padding: 0 10px; font-size: .85rem; color: var(--muted) }
+.lang button[aria-pressed=true] { color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 700 }
+main.view { max-width: 680px; margin: 0 auto; padding: 12px 14px 24px; display: grid; gap: 12px; align-content: start }
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; justify-content: center; background: var(--panel); border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom) }
+.tabbar .tab { flex: 1; max-width: 226px; display: flex; align-items: center; justify-content: center; min-height: var(--tab-h); color: var(--muted); text-decoration: none; font-size: .9rem; font-weight: 600; border-top: 3px solid transparent }
+.tabbar .tab.on { color: var(--accent); border-top-color: var(--accent) }
+
+/* controls */
+button { font: inherit; cursor: pointer; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 0 14px; min-height: 44px }
+@media (hover: hover) { button:hover { border-color: var(--accent) } } /* no sticky hover after a tap on a touch screen */
+button.primary, button[type=submit] { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 700 }
+button.link { background: none; border: 0; padding: 0 4px; min-height: 32px; color: var(--accent); text-decoration: underline }
+button.danger { color: var(--red); border-color: #5a2230 }
+a.button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid var(--accent); border-radius: 8px; color: var(--accent); text-decoration: none; font-weight: 600 }
+input[type=text], textarea, select { font: inherit; font-size: 16px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; min-height: 44px; width: 100% }
+input[type=text]:focus, textarea:focus, select:focus { border-color: var(--accent); outline: none }
+input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent); vertical-align: middle }
+.card, .settings, .sign, .login { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px }
+.login, .settings, .sign { display: grid; gap: 10px } .sign:empty { display: none }
+.settings h2, .sign h2, .login h2 { font-size: 1.05rem } .login p, .settings p, .sign p { margin: 0 } .settings p, .login p { color: var(--muted) }
+.check { display: flex; align-items: center; gap: 10px; min-height: 36px }
+.meta, small { color: var(--muted); font-size: .85rem }
+.status, .empty, .hint { color: var(--muted); margin: 0 } .error { color: var(--red); margin: 0 } .hint a { text-decoration: none }
+h2.section { font-size: 1.05rem; margin-top: 8px } .foot { margin: 8px 0 0 }
+
+/* avatars: colour from the key, initials from the name; generated here, nothing is fetched */
+.avatar { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: none; user-select: none; font-weight: 700; font-size: .9rem; color: var(--text);
+  background: hsl(var(--h, 200) 45% 26%); border: 1px solid hsl(var(--h, 200) 45% 38%) }
+.avatar.lg { width: 56px; height: 56px; font-size: 1.15rem }
+.account { display: flex; align-items: center; gap: 14px } .account strong { font-size: 1.1rem }
+
+/* notes */
+.list { display: grid; gap: 8px }
+.note { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 10px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px }
+.note header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; font-size: .85rem; color: var(--muted) } .note header strong { color: var(--text); font-size: .95rem }
+.note .body { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 2px }
+.thread-link { font-size: .8rem }
+.ref { text-decoration: none; font-weight: 600 }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 8px }
+.actions button.link { font-size: .9rem; padding: 0 8px 0 0; text-decoration: none }
+.actions button.react { min-height: 36px; min-width: 36px; padding: 0; border-radius: 18px; font-size: 1rem }
+.folded { border: 1px dashed #2b3a50; border-radius: 12px }
+.folded > summary { padding: 11px 14px; min-height: 44px; color: var(--muted); cursor: pointer; font-size: .9rem }
+.folded .why { color: var(--amber); font-weight: 700 } .folded .who { opacity: .75 }
+.folded[open] > summary { border-bottom: 1px dashed #2b3a50 } .folded .note { border: 0; background: none; border-radius: 0 0 12px 12px }
+.summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 10px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; color: var(--muted); font-size: .85rem }
+.summary .counts strong { color: var(--text); font-weight: 600 } .summary button.link { min-height: 36px }
+.more { width: 100%; color: var(--accent); margin-top: 4px }
+.compose-start { width: 100%; text-align: left; color: var(--muted); background: var(--bg); min-height: 48px; padding: 0 14px }
+.back { display: inline-block; padding: 6px 0 } h3 { font-size: 1rem; color: var(--muted) }
+.reply { margin-left: 8px; padding-left: 10px; border-left: 2px solid var(--border); display: grid; gap: 8px; margin-top: 8px }
+
+/* writing and connecting */
+.signing-as { color: var(--muted); font-size: .9rem } .sign .meta { margin: 0 }
+.sign textarea { min-height: 110px; resize: vertical }
+.preview { margin: 0; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit }
+.replying { color: var(--muted); font-size: .9rem } .replying q { font-style: italic }
+.bunker { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--accent); border-radius: 10px; background: rgba(45,212,191,.05) }
+.bunker h3 { color: var(--text) } .by-link summary { cursor: pointer; color: var(--accent); min-height: 36px }
+.result ul { margin: 0; padding-left: 0; list-style: none; font-size: .9rem }
+.sign .toast { position: fixed; left: 0; right: 0; bottom: calc(var(--tab-h) + env(safe-area-inset-bottom)); z-index: 7; max-height: 45vh; overflow: auto; padding: 10px 14px; background: var(--panel);
+  border-top: 2px solid var(--accent); box-shadow: 0 -6px 16px rgba(0,0,0,.35); display: grid; gap: 6px }
+.sign .toast > * { max-width: 680px; margin: 0 auto; width: 100% }
+.login input { margin-top: 2px } .graph { font-size: .85rem }
+
+@media (min-width: 760px) {
+  main.view { padding-top: 20px } .tag { flex: 0 1 auto } .lang { margin-left: auto }
+  .tabbar { left: 50%; right: auto; width: 680px; transform: translateX(-50%); border: 1px solid var(--border); border-bottom: 0; border-radius: 12px 12px 0 0 }
 }
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #151514; --fg: #e8e6e0; --muted: #9a978f; --line: #33322f; --accent: #8ab0ff; --fold: #1f1e1c; --warn: #ff9f8a; }
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-a { color: var(--accent); }
-.top, main { max-width: 42rem; margin: 0 auto; padding: 0.75rem 1rem; }
-.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 1rem; border-bottom: 1px solid var(--line); }
-.top h1 { margin: 0; font-size: 1.4rem; } .top h1 a { color: inherit; text-decoration: none; }
-.tag { color: var(--muted); font-size: 0.85rem; }
-nav { display: flex; gap: 0.75rem; margin-left: auto; align-items: baseline; }
-.tab { text-decoration: none; color: var(--muted); } .tab.on { color: var(--fg); font-weight: 600; border-bottom: 2px solid var(--accent); }
-button, input, select, textarea { font: inherit; color: inherit; }
-button.link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; }
-input[type=text], textarea, select { background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 0.4rem 0.5rem; }
-input[type=text] { width: min(24rem, 100%); }
-button[type=submit] { padding: 0.4rem 0.9rem; border: 1px solid var(--accent); background: var(--accent); color: var(--bg); border-radius: 4px; cursor: pointer; }
-.summary { padding: 0.5rem 0; color: var(--muted); font-size: 0.9rem; border-bottom: 1px solid var(--line); }
-.note { padding: 0.75rem 0; border-bottom: 1px solid var(--line); }
-.note header { font-size: 0.9rem; color: var(--muted); } .note header strong { color: var(--fg); }
-.note .body { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 0.25rem; }
-.thread-link { font-size: 0.85rem; }
-.folded { margin: 0.4rem 0; padding: 0.4rem 0.6rem; background: var(--fold); border: 1px solid var(--line); border-radius: 4px; font-size: 0.9rem; }
-.folded > summary { cursor: pointer; color: var(--muted); } .folded .why { font-weight: 600; } .folded .who { opacity: 0.8; }
-.folded[open] > summary { margin-bottom: 0.4rem; } .folded .note { border-bottom: 0; padding-bottom: 0; }
-.reply { margin-left: 0; padding-left: 0.75rem; border-left: 2px solid var(--line); }
-.reply .reply { margin-left: 0.25rem; }
-.settings { margin: 0.75rem 0; padding: 0.75rem 1rem; border: 1px solid var(--line); border-radius: 6px; background: var(--fold); display: grid; gap: 0.5rem; }
-.settings h2 { margin: 0; font-size: 1.05rem; } .settings p { margin: 0; color: var(--muted); } .settings textarea { width: 100%; }
-.check { display: block; }
-.status, .empty { color: var(--muted); } .error { color: var(--warn); }
-.login { display: grid; gap: 0.6rem; margin-top: 1.5rem; } .login h2 { margin: 0; } .login p { margin: 0; color: var(--muted); }
-.ref { text-decoration: none; font-weight: 600; }
-.back { display: inline-block; margin: 0.5rem 0; }
-.sign { margin: 0.75rem 0; padding: 0.75rem 1rem; border: 1px solid var(--line); border-radius: 6px; background: var(--fold); display: grid; gap: 0.5rem; }
-.sign h2 { margin: 0; font-size: 1.05rem; } .sign p { margin: 0; } .sign .meta, .signing-as { color: var(--muted); font-size: 0.9rem; }
-.sign textarea { width: 100%; font: inherit; background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 0.5rem; }
-.sign ul { margin: 0; padding-left: 1rem; list-style: none; font-size: 0.9rem; }
-.preview { margin: 0; padding: 0.6rem; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
-.replying { color: var(--muted); font-size: 0.9rem; } .replying q { font-style: italic; }
-a.button, .sign button:not(.link), .actions button.react { display: inline-block; padding: 0.3rem 0.8rem; border: 1px solid var(--accent); border-radius: 4px; background: transparent; color: var(--accent); text-decoration: none; cursor: pointer; }
-.actions { margin-top: 0.25rem; font-size: 0.9rem; } .actions button.react { padding: 0 0.4rem; border-color: var(--line); }
-@media (hover: hover) { .actions button.react:hover { border-color: var(--accent); } }
-.sign .toast { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; max-height: 45vh; overflow: auto; padding: 0.6rem 1rem; background: var(--bg); border-top: 2px solid var(--accent); box-shadow: 0 -4px 12px rgba(0,0,0,0.15); display: grid; gap: 0.4rem; }
-.sign .toast > * { max-width: 42rem; margin: 0 auto; width: 100%; }
-main { padding-bottom: 6rem; }
-.connect h3 { margin: 0.5rem 0 0.25rem; font-size: 1rem; } .bunker { display: grid; gap: 0.5rem; padding: 0.6rem; border: 1px solid var(--accent); border-radius: 6px; }
-.by-link { margin-top: 0.5rem; } .by-link summary { cursor: pointer; color: var(--accent); }

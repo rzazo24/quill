@@ -5,7 +5,7 @@ import { hashtagTags, mentionTags, mergeTags, reactionTags, replyTags } from '..
 import { parseIdentity } from '../core/identity.js'
 import { mentionedKeys, shortNpub } from '../core/refs.js'
 import { judgeAll, tally, type Judged, type Settings } from '../core/verdict.js'
-import { loadFollowing, loadMentions, loadNames, loadThread, type Thread, type ThreadNode } from '../data/feed.js'
+import { loadFollowing, loadMentions, loadMine, loadNames, loadThread, type Thread, type ThreadNode } from '../data/feed.js'
 import { contextOf, loadSession, type Session } from '../data/session.js'
 import { DEFAULT_RELAYS, memo, type Fetcher } from '../net/fetcher.js'
 import { failedRelays, type Publisher } from '../net/publisher.js'
@@ -13,7 +13,7 @@ import { PipelineError, signAndPublish, type Published, type SignerApi, type Ste
 import { checkTemplate, MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
 import { detectLang, problemText, t, type Key, type Lang } from './i18n.js'
-import { nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
+import { avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type Review } from './sign-ui.js'
 import { parseLang, parseSettings, parseWords, safeGet, safeSet, type KV } from './store.js'
 
@@ -25,7 +25,7 @@ export interface Deps {
   readClipboard?: () => Promise<string>
 }
 
-type Route = { name: 'following' } | { name: 'mentions' } | { name: 'note'; id: string }
+type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'note'; id: string }
 export function parseRoute(hash: string): Route {
   const m = /^#\/note\/(.+)$/.exec(hash)
   if (m) {
@@ -37,7 +37,7 @@ export function parseRoute(hash: string): Route {
       if (d.type === 'nevent') return { name: 'note', id: d.data.id }
     } catch { /* not a note id */ }
   }
-  return hash === '#/mentions' ? { name: 'mentions' } : { name: 'following' }
+  return hash === '#/mentions' ? { name: 'mentions' } : hash === '#/me' ? { name: 'me' } : { name: 'following' }
 }
 
 export function startApp(root: HTMLElement, deps: Deps): void {
@@ -51,7 +51,6 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let me = ((): string | null => { const r = parseIdentity(safeGet(kv, 'me') ?? ''); return r.ok ? r.pubkey : null })()
   let session: Session | null = null
   let names = new Map<string, string>()
-  let showSettings = false
   let loginError: string | null = null
   let status: string | null = null
   let body: HTMLElement | null = null
@@ -103,10 +102,11 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         if (!th) content = h('p', { class: 'empty' }, t(lang, 'noNote'))
         else { await nameThem([...(th.root ? [th.root] : []), ...flat(th.replies)]); content = threadView(th) }
       } else {
-        const items = route.name === 'mentions' ? await loadMentions(fetcher, ctx(), settings) : await loadFollowing(fetcher, ctx(), settings)
+        const items = route.name === 'mentions' ? await loadMentions(fetcher, ctx(), settings) : route.name === 'me' ? await loadMine(fetcher, ctx(), settings) : await loadFollowing(fetcher, ctx(), settings)
         if (mine !== run) return
         await nameThem(items)
-        content = h('div', {}, renderSummary(tally(items), view(), toggleSettings), renderList(items, view()))
+        if (route.name === 'me' && !names.has(me)) for (const [k, n] of await loadNames(fetcher, [me])) names.set(k, n)
+        content = route.name === 'me' ? renderList(items, view()) : h('div', {}, renderSummary(tally(items), view(), toggleSettings), renderList(items, view()))
       }
     } catch { content = h('p', { class: 'empty' }, t(lang, 'noNote')) }
     if (mine !== run) return
@@ -126,7 +126,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     )
   }
 
-  function toggleSettings(): void { showSettings = !showSettings; draw() }
+  function toggleSettings(): void { deps.setHash('#/me') } // the filter settings live on the Me page
   function changeSettings(s: Settings): void { settings = s; safeSet(kv, 'settings', JSON.stringify(s)); void load() }
   function changeWords(text: string): void { words = parseWords(text); safeSet(kv, 'words', words.join('\n')); void load() }
 
@@ -238,12 +238,17 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     try { const again = await publisher.publish(result.event, failedRelays(result.outcomes)); result = { event: result.event, outcomes: { ...result.outcomes, ...again } } } finally { busy = false; step = null; draw() }
   }
 
+  function accountCard(): HTMLElement {
+    return h('section', { class: 'account card' }, avatarEl(me!, view(), 'lg'),
+      h('div', {}, h('strong', {}, nameOf(view(), me!)), h('div', { class: 'meta' }, shortNpub(me!))))
+  }
+
   function draw(): void {
     const route = parseRoute(deps.location.hash)
-    const tab = (name: 'following' | 'mentions', href: string) => h('a', { href, class: route.name === name ? 'tab on' : 'tab', ...(route.name === name ? { 'aria-current': 'page' } : {}) }, t(lang, name))
+    const tab = (name: 'following' | 'mentions' | 'me', href: string) => h('a', { href, class: route.name === name ? 'tab on' : 'tab', ...(route.name === name ? { 'aria-current': 'page' } : {}) }, t(lang, name))
     const input = h('input', { type: 'text', placeholder: t(lang, 'loginPlaceholder'), autocomplete: 'off', spellcheck: 'false', 'aria-label': t(lang, 'loginTitle') })
-    const loginForm = h('form', { class: 'login', onSubmit: (e: Event) => { e.preventDefault(); login(input.value) } },
-      h('h2', {}, t(lang, 'loginTitle')), h('p', {}, t(lang, 'loginHelp')), input, ' ', h('button', { type: 'submit' }, t(lang, 'loginButton')),
+    const loginForm = h('form', { class: 'login card', onSubmit: (e: Event) => { e.preventDefault(); login(input.value) } },
+      h('h2', {}, t(lang, 'loginTitle')), h('p', {}, t(lang, 'loginHelp')), input, ' ', h('button', { type: 'submit', class: 'primary' }, t(lang, 'loginButton')),
       loginError ? h('p', { class: 'error', role: 'alert' }, loginError) : null)
     const signArea = signer ? renderSignArea({
       signer: signer.state, who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, flash, composer, review, step, result, relays,
@@ -251,22 +256,20 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       openConnect, startLink, pasteBunker: () => void pasteBunker(), cancelConnect, bunker: (x) => void bunker(x), disconnect: () => { void signer.disconnect(); composer = review = result = null; flash = null; draw() }, copy: (x) => { deps.copy?.(x); say('info', t(lang, 'copied')); draw() },
       edit: (x) => { if (composer) composer.text = x }, review: doReview, publish: () => void publish(), back: () => { review = null; draw() }, cancelComposer: () => { composer = null; review = null; draw() },
       retry: () => void retry(), dismissResult: () => { result = null; draw() }, startNote, cancelSigning: () => signing?.abort(),
-    }, view(), true) : null
-    root.replaceChildren(
-      h('header', { class: 'top' },
-        h('h1', {}, h('a', { href: '#/' }, 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline')),
-        h('nav', {},
-          me ? tab('following', '#/') : null, me ? tab('mentions', '#/mentions') : null,
-          h('button', { type: 'button', class: 'link', onClick: () => { lang = lang === 'en' ? 'es' : 'en'; safeSet(kv, 'lang', lang); void load() } }, t(lang, 'language')),
-          me ? h('button', { type: 'button', class: 'link', onClick: () => { me = null; session = null; body = null; shownRoute = ''; safeSet(kv, 'me', null); void signer?.disconnect(); composer = review = result = null; flash = null; draw() } }, t(lang, 'signOut')) : null),
-      ),
-      h('main', {},
-        !me ? loginForm : null,
-        signArea,
-        me && showSettings ? renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view()) : null,
-        me && status ? h('p', { class: 'status', role: 'status' }, status) : null,
-        me && body ? body : null),
-    )
+    }, view(), true, !me || route.name === 'me' ? 'me' : 'feed') : null
+    const pills = h('div', { class: 'lang', role: 'group', 'aria-label': 'Language' }, ...(['en', 'es'] as const).map((l) =>
+      h('button', { type: 'button', 'aria-pressed': String(lang === l), onClick: () => { if (lang !== l) { lang = l; safeSet(kv, 'lang', lang); void load() } } }, l.toUpperCase())))
+    const statusEl = me && status ? h('p', { class: 'status', role: 'status' }, status) : null
+    const signOut = h('button', { type: 'button', class: 'danger', onClick: () => { me = null; session = null; body = null; shownRoute = ''; safeSet(kv, 'me', null); void signer?.disconnect(); composer = review = result = null; flash = null; deps.setHash(''); draw() } }, t(lang, 'signOut'))
+    const content: (HTMLElement | null)[] = !me ? [loginForm, signArea]
+      : route.name === 'me' ? [accountCard(), signArea, renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view()), h('h2', { class: 'section' }, t(lang, 'myNotes')), statusEl, body, h('p', { class: 'foot' }, signOut)]
+      : [signArea, statusEl, body]
+    const page: (HTMLElement | null)[] = [
+      h('header', { class: 'top' }, h('h1', {}, h('a', { href: '#/' }, 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline')), pills),
+      h('main', { class: 'view' }, ...content),
+      me ? h('nav', { class: 'tabbar' }, tab('following', '#/'), tab('mentions', '#/mentions'), tab('me', '#/me')) : null,
+    ]
+    root.replaceChildren(...page.filter((x): x is HTMLElement => x !== null))
   }
 
   deps.onHash(() => { void load() })

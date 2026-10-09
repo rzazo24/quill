@@ -2,6 +2,7 @@
 import type { Child } from './dom.js'
 import { h } from './dom.js'
 import { refs, shortNpub } from '../core/refs.js'
+import { avatarOf } from '../core/avatar.js'
 import { cleanText, segments } from '../core/text.js'
 import type { Judged, RuleId, Settings } from '../core/verdict.js'
 import type { ThreadNode } from '../data/feed.js'
@@ -24,16 +25,27 @@ export function renderContent(raw: string, v: View): DocumentFragment {
   return frag
 }
 
+/** A round picture made of colour and initials: nothing is loaded. The colour goes in through the style object (CSSOM), which the page's CSP allows. */
+export function avatarEl(pubkey: string, v: View, size: 'md' | 'lg' = 'md'): HTMLElement {
+  const a = avatarOf(pubkey, v.names.get(pubkey))
+  const el = h('span', { class: size === 'lg' ? 'avatar lg' : 'avatar', 'aria-hidden': 'true' }, a.letters)
+  el.style.setProperty('--h', String(a.hue))
+  return el
+}
+
 function card(j: Judged, v: View, extra: Child[] = []): HTMLElement {
   const { event } = j
   return h('article', { class: 'note', 'data-id': event.id },
-    h('header', {},
-      h('strong', {}, nameOf(v, event.pubkey)), ' ',
-      h('time', { datetime: new Date(event.created_at * 1000).toISOString() }, ago(v.lang, event.created_at, v.nowMs)), ' ',
-      h('a', { class: 'thread-link', href: `#/note/${event.id}` }, t(v.lang, 'thread')),
+    avatarEl(event.pubkey, v),
+    h('div', { class: 'note-main' },
+      h('header', {},
+        h('strong', {}, nameOf(v, event.pubkey)), ' ',
+        h('time', { datetime: new Date(event.created_at * 1000).toISOString() }, ago(v.lang, event.created_at, v.nowMs)), ' ',
+        h('a', { class: 'thread-link', href: `#/note/${event.id}` }, t(v.lang, 'thread')),
+      ),
+      h('div', { class: 'body' }, renderContent(event.content, v)),
+      ...extra, ...(v.actions?.(j) ?? []),
     ),
-    h('div', { class: 'body' }, renderContent(event.content, v)),
-    ...extra, ...(v.actions?.(j) ?? []),
   )
 }
 
@@ -46,8 +58,21 @@ export function renderJudged(j: Judged, v: View, extra: Child[] = []): HTMLEleme
   )
 }
 
+/** Notes come in pages: a phone should not build a hundred cards at once. */
+export const PAGE = 30
 export function renderList(items: Judged[], v: View): HTMLElement {
-  return h('section', { class: 'list' }, ...(items.length ? items.map((j) => renderJudged(j, v)) : [h('p', { class: 'empty' }, t(v.lang, 'empty'))]))
+  const box = h('section', { class: 'list' })
+  if (!items.length) { box.append(h('p', { class: 'empty' }, t(v.lang, 'empty'))); return box }
+  let shown = 0
+  const more = h('button', { type: 'button', class: 'more' }, '')
+  const add = () => {
+    for (const j of items.slice(shown, shown + PAGE)) box.insertBefore(renderJudged(j, v), more)
+    shown = Math.min(items.length, shown + PAGE)
+    if (shown >= items.length) more.remove(); else more.textContent = t(v.lang, 'showMore', { n: items.length - shown })
+  }
+  more.addEventListener('click', add)
+  box.append(more); add()
+  return box
 }
 
 export function renderTree(nodes: ThreadNode[], v: View, depth = 0): HTMLElement[] {
@@ -58,8 +83,9 @@ export function renderTree(nodes: ThreadNode[], v: View, depth = 0): HTMLElement
 export function renderSummary(tally: { shown: number; hidden: number; byRule: Partial<Record<RuleId, number>> }, v: View, onSettings: () => void): HTMLElement {
   const parts = Object.entries(tally.byRule).map(([rule, n]) => `${n} ${tallyLabel(v.lang, rule as RuleId)}`)
   return h('div', { class: 'summary', role: 'status' },
-    h('span', {}, tally.hidden ? t(v.lang, 'hiddenSummary', { shown: tally.shown, hidden: tally.hidden }) : t(v.lang, 'hiddenNothing')),
-    parts.length ? h('span', { class: 'parts' }, ` — ${parts.join(', ')}`) : null, ' ',
+    h('span', { class: 'counts' },
+      h('strong', {}, tally.hidden ? t(v.lang, 'hiddenSummary', { shown: tally.shown, hidden: tally.hidden }) : t(v.lang, 'hiddenNothing')),
+      parts.length ? h('span', { class: 'parts' }, ` — ${parts.join(', ')}`) : null),
     h('button', { type: 'button', class: 'link', onClick: onSettings }, t(v.lang, 'filterSettings')),
   )
 }

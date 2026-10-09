@@ -36,14 +36,16 @@ export interface SignUiHandlers {
 
 const excerpt = (e: NostrEvent) => cleanText(e.content, 140).replace(/\s+/g, ' ')
 
-export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, signerConfigured: boolean): HTMLElement | null {
+/** `where`: on the Me page (and the login screen) the connection itself is shown; on the reading pages only what is needed to write, or a hint to connect. */
+export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, signerConfigured: boolean, where: 'me' | 'feed' = 'me'): HTMLElement | null {
   if (!signerConfigured) return null
   const parts: (HTMLElement | null)[] = []
   const toast: (HTMLElement | null)[] = []
   if (s.flash) toast.push(h('p', { class: s.flash.kind === 'error' ? 'error' : 'status', role: s.flash.kind === 'error' ? 'alert' : 'status' }, s.flash.text))
-  if (s.signer === 'disconnected' && !s.connectOpen) parts.push(h('p', {}, h('button', { type: 'button', class: 'link', onClick: hd.openConnect }, t(v.lang, 'connectSigner'))))
-  if (s.connectOpen && s.signer !== 'connected') parts.push(renderConnect(s, hd, v))
-  if (s.signer === 'connected') parts.push(h('p', { class: 'signing-as' }, t(v.lang, 'signingAs', { who: s.who ?? '' }), ' ', h('button', { type: 'button', class: 'link', onClick: hd.disconnect }, t(v.lang, 'disconnectSigner'))))
+  if (where === 'feed' && s.signer !== 'connected') parts.push(h('p', { class: 'hint' }, h('a', { href: '#/me' }, t(v.lang, 'connectToWrite'))))
+  if (where === 'me' && s.signer === 'disconnected' && !s.connectOpen) parts.push(h('p', {}, h('button', { type: 'button', onClick: hd.openConnect }, t(v.lang, 'connectSigner'))))
+  if (where === 'me' && s.connectOpen && s.signer !== 'connected') parts.push(renderConnect(s, hd, v))
+  if (where === 'me' && s.signer === 'connected') parts.push(h('p', { class: 'signing-as' }, t(v.lang, 'signingAs', { who: s.who ?? '' }), ' ', h('button', { type: 'button', class: 'link', onClick: hd.disconnect }, t(v.lang, 'disconnectSigner'))))
   if (s.signer === 'connected') {
     if (s.step) toast.push(h('p', { class: 'status', role: 'status' }, t(v.lang, `step_${s.step}` as Parameters<typeof t>[1]), s.step === 'waiting' ? h('span', {}, ' ', h('button', { type: 'button', class: 'link', onClick: hd.cancelSigning }, t(v.lang, 'cancel'))) : null))
     else if (s.result) toast.push(renderResult(s.result, s.relays, hd, v))
@@ -78,7 +80,7 @@ function renderConnect(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement
 
 function renderComposer(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement {
   const c = s.composer
-  if (!c) return h('p', {}, h('button', { type: 'button', onClick: hd.startNote }, t(v.lang, 'newNote').replace('…', '')))
+  if (!c) return h('button', { type: 'button', class: 'compose-start', onClick: hd.startNote }, t(v.lang, 'newNote'))
   const area = h('textarea', { rows: '4', placeholder: t(v.lang, 'newNote'), 'aria-label': t(v.lang, c.mode === 'reply' ? 'reply' : 'newNote'), onInput: (e: Event) => { hd.edit((e.target as HTMLTextAreaElement).value); count.textContent = t(v.lang, 'chars', { n: [...(e.target as HTMLTextAreaElement).value].length, max: MAX_NOTE_CHARS }) } })
   area.value = c.text
   const count = h('small', {}, t(v.lang, 'chars', { n: [...c.text].length, max: MAX_NOTE_CHARS }))

@@ -22,6 +22,12 @@ export async function loadMentions(f: Fetcher, ctx: Context, settings: Settings 
   return judgeAll(events, ctx, settings)
 }
 
+/** Everything the reader has written: notes and replies, newest first. */
+export async function loadMine(f: Fetcher, ctx: Context, settings: Settings = DEFAULT_SETTINGS): Promise<Judged[]> {
+  const events = (await f.query({ kinds: [1], authors: [ctx.me], limit: FEED_LIMIT })).sort(byNewest)
+  return judgeAll(events, ctx, settings)
+}
+
 export interface ThreadNode { item: Judged; children: ThreadNode[] }
 export interface Thread { root: Judged | null; rootId: string; replies: ThreadNode[]; total: number }
 

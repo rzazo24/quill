@@ -21,7 +21,7 @@ function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string
   const location = { hash: '' }, listeners: (() => void)[] = []
   const mem = new Map(Object.entries(opts.stored ?? {}))
   startApp(root, {
-    fetcher: relays(opts.events ?? world, opts.delayMs), languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h },
+    fetcher: relays(opts.events ?? world, opts.delayMs), languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
     storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
   })
   const go = async (hash: string) => { location.hash = hash; listeners.forEach((l) => l()); await tick() }
@@ -76,18 +76,40 @@ describe('the app', () => {
     const a = boot({ stored: { me } }); await tick(80)
     await a.go('#/mentions'); await tick(60)
     expect(a.text()).toMatch(/No path from you/)
-    ;[...a.root.querySelectorAll('button')].find((b) => b.textContent === 'Español')!.click(); await tick(80)
+    ;[...a.root.querySelectorAll('button')].find((b) => b.textContent === 'ES')!.click(); await tick(80)
     expect(a.text()).toMatch(/No hay camino desde ti/); expect(a.text()).not.toMatch(/No path from you/)
     expect(a.mem.get('lang')).toBe('es')
   })
   it('turning a rule off re-judges: the stranger is no longer folded', async () => {
     const a = boot({ stored: { me } }); await tick(80); await a.go('#/mentions'); await tick(60)
     expect(a.root.querySelectorAll('details.folded').length).toBe(1)
-    ;[...a.root.querySelectorAll('button')].find((b) => b.textContent === 'Filter settings')!.click()
+    ;[...a.root.querySelectorAll('button')].find((b) => b.textContent === 'Filter settings')!.click(); await tick(80) // the summary's button takes you to the Me page, where the settings are
+    expect(a.root.querySelector('.settings')).not.toBeNull()
     const box = [...a.root.querySelectorAll('label.check')].find((l) => l.textContent?.includes('Outside your network'))!.querySelector('input')!
     box.checked = false; box.dispatchEvent(new Event('change')); await tick(80)
+    await a.go('#/mentions'); await tick(60)
     expect(a.root.querySelectorAll('details.folded').length).toBe(0)
     expect(JSON.parse(a.mem.get('settings')!).rules.outsideNetwork).toBe(false)
+  })
+  it('has three tabs at the bottom: Following, Mentions and Me; the current one is marked', async () => {
+    const a = boot({ stored: { me } }); await tick(80)
+    const tabs = () => [...a.root.querySelectorAll('nav.tabbar a')].map((x) => `${x.textContent}${x.getAttribute('aria-current') ? '*' : ''}`)
+    expect(tabs()).toEqual(['Following*', 'Mentions', 'Me'])
+    await a.go('#/mentions'); expect(tabs()).toEqual(['Following', 'Mentions*', 'Me'])
+    await a.go('#/me'); expect(tabs()).toEqual(['Following', 'Mentions', 'Me*'])
+    const login = boot({}); await tick(40); expect(login.root.querySelector('nav.tabbar')).toBeNull() // no tabs before you are logged in
+  })
+  it('the Me page shows who you are, your own notes (replies included), the settings and sign out', async () => {
+    const mineRoot = ev(me, 'a note I wrote', { created_at: 3000 }), mineReply = ev(me, 'a reply I wrote', { created_at: 4000, tags: [['e', 'e'.repeat(64), '', 'root']] })
+    const a = boot({ events: [...world, mineRoot, mineReply, ev(me, JSON.stringify({ name: 'Raúl' }), { kind: 0 })], stored: { me } }); await tick(80); await a.go('#/me'); await tick(60)
+    expect(a.text()).toContain('Raúl'); expect(a.root.querySelector('.account .avatar')!.textContent).toBe('RA')
+    expect(a.text()).toContain('My notes'); expect(a.text()).toContain('a note I wrote'); expect(a.text()).toContain('a reply I wrote')
+    expect(a.root.querySelector('.settings')).not.toBeNull(); expect(a.text()).toContain('Sign out')
+  })
+  it('every note has a generated avatar: colour from the key, initials from the name, nothing loaded', async () => {
+    const a = boot({ stored: { me } }); await tick(80)
+    const av = a.root.querySelector('article.note .avatar') as HTMLElement
+    expect(av.textContent).toMatch(/^[A-Z0-9]{2}$/); expect(av.style.getPropertyValue('--h')).toMatch(/^\d+$/); expect(a.root.querySelectorAll('img, [src]').length).toBe(0)
   })
   it('survives a hostile note, junk in storage, and relays that return nothing', async () => {
     const evil = ev(friend, '<img src=x onerror=alert(1)> <script>x</script>')
@@ -108,7 +130,7 @@ describe('the app', () => {
     expect(root.textContent).not.toContain('a pitch from a stranger')
   })
   it('signing out forgets you', async () => {
-    const a = boot({ stored: { me } }); await tick(80)
+    const a = boot({ stored: { me } }); await tick(80); await a.go('#/me')
     ;[...a.root.querySelectorAll('button')].find((b) => b.textContent === 'Sign out')!.click(); await tick(10)
     expect(a.text()).toContain('Read as…'); expect(a.mem.has('me')).toBe(false)
   })

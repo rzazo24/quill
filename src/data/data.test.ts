@@ -2,7 +2,7 @@ import type { Event, Filter } from 'nostr-tools'
 import { describe, expect, it } from 'vitest'
 import { ev, pk } from '../core/testutil.js'
 import { answers, accept, queryAuthors, type Fetcher } from '../net/fetcher.js'
-import { loadFollowing, loadMentions, loadNames, loadThread, buildTree } from './feed.js'
+import { loadFollowing, loadMentions, loadMine, loadNames, loadThread, buildTree } from './feed.js'
 import { buildGraph } from './graph.js'
 import { followsOf, mutesOf, nameOf, newestPerAuthor } from './lists.js'
 import { contextOf, loadSession } from './session.js'
@@ -105,6 +105,13 @@ describe('views', () => {
     const j = await loadFollowing(f, ctx)
     expect(j.map((x) => x.event.content).sort()).toEqual(['a root note from a friend', 'my own note here'])
     expect(j.every((x) => !x.verdict.hidden)).toBe(true)
+  })
+  it('mine: everything the reader wrote, replies included, newest first, never anyone else\'s', async () => {
+    const mine1 = ev(me, 'my first note', { created_at: 1000 }), mine2 = ev(me, 'my reply', { created_at: 2000, tags: [['e', 'e'.repeat(64), '', 'root']] })
+    const f = fake([...world, mine1, mine2, ev(a, 'a friend note'), ev(me, 'a reaction', { kind: 7, tags: [['e', 'e'.repeat(64)]] })])
+    const j = await loadMine(f, contextOf(await loadSession(f, me)))
+    expect(j.map((x) => x.event.content)).toEqual(['my reply', 'my first note'])
+    expect(j.every((x) => !x.verdict.hidden && x.verdict.rule === 'own')).toBe(true)
   })
   it('mentions: strangers outside the network are folded, with the rule that did it', async () => {
     const mention = (who: string, text: string) => ev(who, text, { tags: [['p', me]] })

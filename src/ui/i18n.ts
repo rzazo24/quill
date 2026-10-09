@@ -5,7 +5,7 @@ export type Lang = 'en' | 'es'
 
 const en = {
   tagline: 'Text only. Tells you why it hides things.',
-  following: 'Following', mentions: 'Mentions', signOut: 'Sign out', language: 'Español',
+  following: 'Following', mentions: 'Mentions', showMore: 'Show more ({n} left)', me: 'Me', myNotes: 'My notes', connectToWrite: 'Connect Clave to react, reply and write', signOut: 'Sign out', language: 'Español',
   loginTitle: 'Read as…', loginHelp: 'Paste an npub (or hex key). Quill only reads: it never asks for a private key to read.',
   loginPlaceholder: 'npub1…', loginButton: 'Read', loginBad: 'That does not look like an npub or a 64-character hex key.',
   loading: 'Loading…', loadingFollows: 'Reading who you follow…', loadingFeed: 'Loading notes…', empty: 'Nothing here yet.', noNote: 'Could not find that note on the relays.',
@@ -14,7 +14,7 @@ const en = {
   show: 'show', hide: 'hide', hiddenBy: 'Hidden', byLabel: 'by',
   settingsTitle: 'Filter settings', settingsHelp: 'Every rule can be switched off. Nothing is deleted: hidden notes stay one tap away.',
   ruleRepeated: 'Repeated text', ruleBurst: 'Bursts of notes', ruleLinks: 'Link-only accounts', ruleNetwork: 'Outside your network',
-  distance: 'Network reach', distance1: 'People you follow', distance2: 'People you follow and the people they follow',
+  distance: 'Network reach', distance1: 'People you follow', distance2: 'Follows and their follows',
   mutedWords: 'Muted words (this device)', mutedWordsHelp: 'One per line.', graphInfo: 'Follow graph: {answered} of {total} follow lists loaded.',
   graphOff: 'The follow graph did not load enough, so "outside your network" is off.',
   tally_muted_author: 'muted accounts', tally_muted_word: 'muted words', tally_repeated_text: 'repeated text', tally_burst: 'bursts', tally_link_only: 'link-only', tally_outside_network: 'outside your network',
@@ -45,7 +45,7 @@ export type Key = keyof typeof en
 
 const es: Record<Key, string> = {
   tagline: 'Solo texto. Te dice por qué oculta cosas.',
-  following: 'Siguiendo', mentions: 'Menciones', signOut: 'Salir', language: 'English',
+  following: 'Siguiendo', mentions: 'Menciones', showMore: 'Mostrar más (quedan {n})', me: 'Yo', myNotes: 'Mis notas', connectToWrite: 'Conecta Clave para reaccionar, responder y escribir', signOut: 'Salir', language: 'English',
   loginTitle: 'Leer como…', loginHelp: 'Pega un npub (o clave hex). Quill solo lee: para leer nunca pide una clave privada.',
   loginPlaceholder: 'npub1…', loginButton: 'Leer', loginBad: 'Eso no parece un npub ni una clave hex de 64 caracteres.',
   loading: 'Cargando…', loadingFollows: 'Leyendo a quién sigues…', loadingFeed: 'Cargando notas…', empty: 'Aún no hay nada.', noNote: 'No se encontró esa nota en los relés.',
@@ -54,7 +54,7 @@ const es: Record<Key, string> = {
   show: 'ver', hide: 'ocultar', hiddenBy: 'Oculta', byLabel: 'por',
   settingsTitle: 'Ajustes del filtro', settingsHelp: 'Cada regla se puede apagar. No se borra nada: lo oculto queda a un toque.',
   ruleRepeated: 'Texto repetido', ruleBurst: 'Ráfagas de notas', ruleLinks: 'Cuentas que solo ponen enlaces', ruleNetwork: 'Fuera de tu red',
-  distance: 'Alcance de tu red', distance1: 'Gente que sigues', distance2: 'Gente que sigues y la que ellos siguen',
+  distance: 'Alcance de tu red', distance1: 'Gente que sigues', distance2: 'Tus seguidos y los suyos',
   mutedWords: 'Palabras silenciadas (este dispositivo)', mutedWordsHelp: 'Una por línea.', graphInfo: 'Grafo de seguimiento: {answered} de {total} listas cargadas.',
   graphOff: 'El grafo de seguimiento no cargó lo bastante, así que «fuera de tu red» está desactivado.',
   tally_muted_author: 'cuentas silenciadas', tally_muted_word: 'palabras silenciadas', tally_repeated_text: 'texto repetido', tally_burst: 'ráfagas', tally_link_only: 'solo enlaces', tally_outside_network: 'fuera de tu red',
