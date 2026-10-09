@@ -28,7 +28,10 @@ main.view { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior
   grid-template-columns: minmax(0, var(--col)); justify-content: center; scrollbar-gutter: stable both-edges }
 .tabbar { flex: none; width: min(100%, var(--col)); margin: 0 auto; position: relative; z-index: 6; display: flex; justify-content: center; background: var(--panel); border-top: 1px solid var(--border); padding-bottom: calc(env(safe-area-inset-bottom) * .5) }
 .tabbar .tab { flex: 1; max-width: 226px; display: flex; align-items: center; justify-content: center; min-height: var(--tab-h); color: var(--muted); text-decoration: none; font-size: .85rem; font-weight: 600; border-top: 3px solid transparent }
-.tabbar .tab.on { color: var(--accent); border-top-color: var(--accent) }
+.tabbar .tab.on { color: var(--tc); border-top-color: var(--tc); background: var(--tcbg) }
+/* the tabs wear the app's green: tinted icon, and the open one lit with a line on top */
+.tab { --tc: var(--accent); --tcbg: rgba(45,212,191,.10) }
+.tabbar .tab { gap: 6px } .tabbar .tab svg { flex: none; color: var(--tc); opacity: .65 } .tabbar .tab.on svg { opacity: 1 }
 
 /* controls */
 /* ONE button look for everything you can press, the one of the language switch: soft rectangle, thin outline, hover outline in the accent colour */
@@ -132,7 +135,7 @@ button.icon { display: inline-grid; place-items: center; min-height: 36px; min-w
 
 /* in-app notifications: a number on the Mentions tab, new notes marked, and who reacted to your notes */
 .tab { position: relative }
-.tab .badge { display: inline-block; min-width: 18px; margin-left: 6px; padding: 1px 5px; border-radius: 9px; background: var(--accent); color: #04211d; font-size: 11px; font-weight: 700; line-height: 16px; text-align: center }
+.tab .badge { position: absolute; top: 1px; right: 5px; min-width: 16px; box-sizing: border-box; padding: 0 4px; border-radius: 8px; background: var(--accent); color: #04211d; font-size: 10px; font-weight: 800; line-height: 14px; text-align: center } /* in the corner of its tab: it takes no room, so the three tabs stay equal */
 .note.new { border-left: 3px solid var(--accent) }
 .note.new::before { content: attr(data-new); display: inline-block; margin-bottom: 4px; padding: 0 7px; border-radius: 8px; background: rgba(45,212,191,.18); color: var(--accent); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em }
 .new-line { margin: 0; color: var(--accent) }
