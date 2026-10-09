@@ -7,7 +7,9 @@ import type { Published, Step } from '../sign/pipeline.js'
 import { MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
 import { t } from './i18n.js'
+import { icon } from './icons.js'
 import { nameOf, type View } from './render.js'
+import { normReaction, type Mine } from '../data/engaged.js'
 
 export const REACTIONS = ['+', '❤️', '🤙', '😂', '🙏']
 
@@ -120,10 +122,18 @@ function renderResult(r: Published, relays: string[], hd: SignUiHandlers, v: Vie
   )
 }
 
-/** One-tap reactions under a note, only while a signer is connected. */
-export function reactionBar(target: NostrEvent, onReact: (emoji: string) => void, onReply: () => void, v: View): HTMLElement {
+/** One-tap reactions under a note, only while a signer is connected. What the reader already did to the note is marked: the reactions given (also ones from other
+ *  apps, with emoji this bar does not offer) and whether they replied. */
+export function reactionBar(target: NostrEvent, onReact: (emoji: string) => void, onReply: () => void, v: View, mine: Mine = { reactions: new Set(), replied: false }): HTMLElement {
+  const offered = REACTIONS.map((e) => normReaction(e))
+  const extra = [...mine.reactions].filter((c) => !offered.includes(c)) // given from elsewhere, e.g. 🔥: shown too, so the bar tells the truth
+  const chip = (content: string, label: string) => {
+    const given = mine.reactions.has(normReaction(content))
+    return h('button', { type: 'button', class: given ? 'react on' : 'react', 'aria-pressed': String(given), 'aria-label': given ? t(v.lang, 'reactedWith', { emoji: label }) : `${t(v.lang, 'react')} ${label}`, title: given ? t(v.lang, 'reactedWith', { emoji: label }) : t(v.lang, 'react'), onClick: () => onReact(content) }, label)
+  }
   return h('div', { class: 'actions' },
-    h('button', { type: 'button', class: 'link', onClick: onReply }, t(v.lang, 'reply')), ' ',
-    ...REACTIONS.map((e) => h('button', { type: 'button', class: 'react', 'aria-label': `${t(v.lang, 'react')} ${e}`, title: t(v.lang, 'react'), onClick: () => onReact(e) }, e === '+' ? '👍' : e)),
+    h('button', { type: 'button', class: mine.replied ? 'link on' : 'link', onClick: onReply }, ...(mine.replied ? [icon('check', 14), t(v.lang, 'replied')] : [t(v.lang, 'reply')])),
+    ...REACTIONS.map((e) => chip(e, e === '+' ? '👍' : e)),
+    ...extra.map((c) => chip(c, c)),
   )
 }

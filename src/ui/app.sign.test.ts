@@ -53,12 +53,12 @@ const publisherFake = (outcomes: Record<string, string> = { 'wss://r1.example': 
   return { p, sent }
 }
 
-function boot(o: { signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; stored?: Record<string, string>; clipboard?: string | Error } = {}) {
+function boot(o: { events?: Event[]; signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; stored?: Record<string, string>; clipboard?: string | Error } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = [], mem = new Map(Object.entries(o.stored ?? { me }))
   const pub = o.pub ?? publisherFake()
   startApp(root, {
-    fetcher: relays(world), languages: ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) }, relays: ['wss://r1.example', 'wss://r2.example'], nowMs: () => 1_700_000_000_000,
+    fetcher: relays(o.events ?? world), languages: ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) }, relays: ['wss://r1.example', 'wss://r2.example'], nowMs: () => 1_700_000_000_000,
     storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
     readClipboard: async () => { if (o.clipboard instanceof Error) throw o.clipboard; return o.clipboard ?? '' },
     ...(o.signer ? { signer: o.signer.s, publisher: pub.p } : {}),
@@ -157,6 +157,47 @@ describe('reacting, one tap', () => {
   })
 })
 
+describe('what you already did to a note is marked', () => {
+  const bar = (a: ReturnType<typeof boot>) => a.root.querySelector('.actions') as HTMLElement
+  const lit = (a: ReturnType<typeof boot>) => [...bar(a).querySelectorAll('button.react.on')].map((b) => b.textContent)
+  it('reactions and replies already on the relays (from here or from another app) are marked when the page opens', async () => {
+    const mineReaction = ev(me, '❤️', { kind: 7, tags: [['e', post.id], ['p', friend], ['k', '1']] })
+    const fromElsewhere = ev(me, '🔥', { kind: 7, tags: [['e', post.id], ['p', friend]] }) // an emoji this bar does not offer
+    const myReply = ev(me, 'I answered this', { tags: [['e', post.id, '', 'root']] })
+    const sg = fakeSigner(); const a = boot({ events: [...world, mineReaction, fromElsewhere, myReply], signer: sg }); await tick(100); await connectClave(a, sg)
+    expect(lit(a)).toEqual(['❤️', '🔥']) // the ❤️ in its place; the 🔥 added at the end, lit
+    expect(bar(a).querySelector('button.link.on')!.textContent).toBe('Replied'); expect(bar(a).querySelector('button.link.on svg.icon')).not.toBeNull()
+    expect(bar(a).querySelector('button.react.on')!.getAttribute('aria-pressed')).toBe('true')
+    expect(bar(a).querySelector('button[aria-label="React 👍"]')!.getAttribute('aria-pressed')).toBe('false') // the others are not
+  })
+  it('nothing is marked on a note you did nothing to', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)
+    expect(lit(a)).toEqual([]); expect(bar(a).querySelector('button.link.on')).toBeNull(); expect(bar(a).textContent).toContain('Reply')
+  })
+  it('a reaction given here is marked at once; tapping it again does NOT sign a second time', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)
+    ;(a.root.querySelector('button[aria-label="React ❤️"]') as HTMLElement).click(); await tick(120)
+    expect(a.pub.sent).toHaveLength(1); expect(lit(a)).toEqual(['❤️'])
+    ;(bar(a).querySelector('button.react.on') as HTMLElement).click(); await tick(120)
+    expect(a.pub.sent).toHaveLength(1); expect(sg.log.filter((l) => l.startsWith('sign'))).toHaveLength(1) // nothing new asked of the signer
+    expect(a.text()).toContain('You already reacted with ❤️ to this note.')
+    ;(a.root.querySelector('button[aria-label="React 🙏"]') as HTMLElement).click(); await tick(120) // a different reaction is allowed
+    expect(a.pub.sent).toHaveLength(2); expect(lit(a)).toEqual(['❤️', '🙏'])
+  })
+  it('a failed reaction is not marked (nothing was published)', async () => {
+    const sg = fakeSigner({ signError: 'user rejected the request' }); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)
+    ;(a.root.querySelector('button[aria-label="React ❤️"]') as HTMLElement).click(); await tick(120)
+    expect(lit(a)).toEqual([])
+  })
+  it('after you publish a reply, that note shows as replied', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)
+    await click(a.root, 'Reply'); const ta = a.root.querySelector('textarea') as HTMLTextAreaElement; ta.value = 'my answer'; ta.dispatchEvent(new Event('input'))
+    await click(a.root, 'Review'); await click(a.root, 'Publish'); await tick(120)
+    expect(a.pub.sent).toHaveLength(1); await a.go('#/'); await tick(80)
+    expect(bar(a).querySelector('button.link.on')!.textContent).toBe('Replied')
+  })
+})
+
 describe('tapping again while Clave has not answered', () => {
   it('a new tap replaces the old wait (so opening Clave and tapping again works): one request cancelled, one published', async () => {
     const sg = fakeSigner({ hangFirst: true }); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)
@@ -232,7 +273,7 @@ describe('writing a reply', () => {
   it('relays that failed can be retried without signing again', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg, pub: publisherFake({ 'wss://r1.example': 'ok', 'wss://r2.example': 'no answer from the relay' }) })
     await tick(100); await connectClave(a, sg)
-    ;(a.root.querySelector('button[aria-label="React +"]') as HTMLElement).click(); await tick(80)
+    ;(a.root.querySelector('button[aria-label="React 👍"]') as HTMLElement).click(); await tick(80)
     expect(a.text()).toContain('Published to 1 of 2 relays'); expect(a.text()).toContain('no answer from the relay')
     await click(a.root, 'Retry the failed relays'); await tick(40)
     expect(a.pub.sent).toHaveLength(2); expect(a.pub.sent[1]!.only).toEqual(['wss://r2.example']); expect(a.pub.sent[1]!.event.id).toBe(a.pub.sent[0]!.event.id)

@@ -6,6 +6,7 @@ import { parseIdentity } from '../core/identity.js'
 import { mentionedKeys, shortNpub } from '../core/refs.js'
 import { judgeAll, tally, type Judged, type Settings } from '../core/verdict.js'
 import { loadFollowing, loadMentions, loadMine, loadNames, loadThread, type Thread, type ThreadNode } from '../data/feed.js'
+import { Engagement, loadEngagement, normReaction } from '../data/engaged.js'
 import { contextOf, loadSession, type Session } from '../data/session.js'
 import { DEFAULT_RELAYS, memo, type Fetcher } from '../net/fetcher.js'
 import { failedRelays, type Publisher } from '../net/publisher.js'
@@ -76,10 +77,14 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let signing: AbortController | null = null // lets the user stop waiting for the signer
   let current: Promise<boolean> | null = null // the action in progress
   let lastLoadAt = 0
+  let engagement = new Engagement() // what the reader already did to each note
   let scrollToTop = false // set when a different view is shown
   let updateReady = false
 
-  const actions = (j: Judged) => (signer?.state === 'connected' ? [reactionBar(j.event, (emoji) => void react(j.event, emoji), () => startReply(j.event), view())] : [])
+  const barFor = (e: NostrEvent) => reactionBar(e, (emoji) => void react(e, emoji), () => startReply(e), view(), engagement.of(e.id))
+  const actions = (j: Judged) => (signer?.state === 'connected' ? [barFor(j.event)] : [])
+  /** The lists are built once and reused between redraws, so a bar already on screen keeps what it showed: redo the bar(s) of this note in place. */
+  const rebar = (e: NostrEvent) => { for (const old of root.querySelectorAll(`article.note[data-id="${e.id}"] .actions`)) old.replaceWith(barFor(e)) }
   const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.() })
   const ctx = () => contextOf(session!, { mutedWords: words, mutedKeys: [] })
   const who = () => (signer?.pubkey ? nameOf(view(), signer.pubkey) : '')
@@ -88,6 +93,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (session || !me) return !!session
     status = t(lang, 'loadingFollows'); draw()
     try { session = await loadSession(fetcher, me) } catch { status = null; return false }
+    engagement = await loadEngagement(fetcher, me).catch(() => new Engagement()) // a failure only means nothing is marked
     return true
   }
 
@@ -241,14 +247,16 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
   async function publish(): Promise<void> {
     if (!review) return
-    const ok = await send(review.template)
-    if (ok) { review = null; composer = null; void load() }
+    const replyingTo = review.target, ok = await send(review.template)
+    if (ok) { if (replyingTo) { engagement.addReply(replyingTo.id); rebar(replyingTo) } review = null; composer = null; void load() }
   }
   async function react(target: NostrEvent, emoji: string): Promise<void> {
     const template: Template = { kind: 7, content: emoji, tags: reactionTags(target), created_at: Math.floor((deps.nowMs?.() ?? Date.now()) / 1000) }
     const problem = checkTemplate(template)
     if (problem) { say('error', problemText(lang, problem)); return draw() }
-    if (await send(template)) say('info', `${emoji === '+' ? '👍' : emoji} → ${nameOf(view(), target.pubkey)}`)
+    // the same reaction twice would only be a duplicate post: say so instead of asking the signer again
+    if (engagement.of(target.id).reactions.has(normReaction(emoji))) { say('info', t(lang, 'alreadyReacted', { emoji: emoji === '+' ? '👍' : emoji })); return draw() }
+    if (await send(template)) { engagement.addReaction(target.id, emoji); rebar(target); say('info', `${emoji === '+' ? '👍' : emoji} → ${nameOf(view(), target.pubkey)}`) }
     draw()
   }
   async function retry(): Promise<void> {

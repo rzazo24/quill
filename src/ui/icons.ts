@@ -6,6 +6,8 @@ const NS = 'http://www.w3.org/2000/svg'
 const PATHS = {
   /** a speech bubble: a conversation */
   thread: ['M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.2-4.7A8 8 0 1 1 21 12Z'],
+  /** a tick: done */
+  check: ['M5 12.5l4.5 4.5L19 7.5'],
   /** a chevron pointing left: go back */
   back: ['M15 18l-6-6 6-6'],
   /** two arrows chasing each other */

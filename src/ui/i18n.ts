@@ -6,6 +6,7 @@ export type Lang = 'en' | 'es'
 const en = {
   tagline: 'Text only. Tells you why it hides things.',
   updateAvailable: 'A new version of Quill is available.', updateNow: 'Update',
+  replied: 'Replied', alreadyReacted: 'You already reacted with {emoji} to this note.', reactedWith: 'You reacted with {emoji}',
   refresh: 'Refresh', installTitle: 'Install Quill', installHint: 'Tap Share, then "Add to Home Screen". The installed app keeps its own data: you will log in and connect Clave again there.',
   following: 'Following', mentions: 'Mentions', showMore: 'Show more ({n} left)', me: 'Me', myNotes: 'My notes', connectToWrite: 'Connect Clave to react, reply and write', signOut: 'Sign out', language: 'Español',
   loginTitle: 'Read as…', loginHelp: 'Paste an npub (or hex key). Quill only reads: it never asks for a private key to read.',
@@ -48,6 +49,7 @@ export type Key = keyof typeof en
 const es: Record<Key, string> = {
   tagline: 'Solo texto. Te dice por qué oculta cosas.',
   updateAvailable: 'Hay una nueva versión de Quill.', updateNow: 'Actualizar',
+  replied: 'Respondida', alreadyReacted: 'Ya has reaccionado con {emoji} a esta nota.', reactedWith: 'Reaccionaste con {emoji}',
   refresh: 'Actualizar', installTitle: 'Instalar Quill', installHint: 'Pulsa Compartir y luego «Añadir a pantalla de inicio». La app instalada guarda sus propios datos: tendrás que volver a entrar y a conectar Clave allí.',
   following: 'Siguiendo', mentions: 'Menciones', showMore: 'Mostrar más (quedan {n})', me: 'Yo', myNotes: 'Mis notas', connectToWrite: 'Conecta Clave para reaccionar, responder y escribir', signOut: 'Salir', language: 'English',
   loginTitle: 'Leer como…', loginHelp: 'Pega un npub (o clave hex). Quill solo lee: para leer nunca pide una clave privada.',

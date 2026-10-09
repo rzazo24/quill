@@ -118,3 +118,7 @@ button.icon { display: inline-grid; place-items: center; min-height: 36px; min-w
 .bunker form { display: grid; gap: 8px } .bunker p { margin: 0 } .by-link { display: grid; gap: 8px; margin: 0 }
 .bunker button, .by-link button, .by-link a.button, .connect > p > button { width: 100% }
 .sign.hint-only { background: none; border: 0; padding: 0 }
+
+/* what you already did to a note: the reaction you gave is lit, the reply shows a tick */
+.actions button.react.on { background: rgba(45,212,191,.18); border-color: var(--accent) }
+.actions button.link.on { color: var(--accent); border-color: var(--accent); display: inline-flex; align-items: center; gap: 5px }
