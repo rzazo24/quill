@@ -153,7 +153,7 @@ describe('writing a reply', () => {
   })
   it('while waiting for Clave there is a Cancel button: it stops the wait, publishes nothing, keeps the draft', async () => {
     const sg = fakeSigner({ hang: true }); const a = await toReview(sg); await click(a.root, 'Publish')
-    expect(a.text()).toMatch(/Waiting for Clave\. Open it on screen/); expect(sg.log.filter((l) => l.startsWith('sign'))).toHaveLength(1) // ONE request
+    expect(a.text()).toMatch(/Waiting for Clave… If it takes long, open Clave or tap its notification/); expect(sg.log.filter((l) => l.startsWith('sign'))).toHaveLength(1) // ONE request
     await click(a.root, 'Cancel'); await tick(30)
     expect(a.text()).toContain('Cancelled. Nothing was published.'); expect(a.pub.sent).toEqual([]); expect(a.root.querySelector('pre.preview')).not.toBeNull()
   })

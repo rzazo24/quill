@@ -38,7 +38,7 @@ describe.skipIf(!bin)('Signer with a pretend Clave through a real relay', () => 
     const { signer, fake, store } = await connected()
     expect(signer.state).toBe('connected'); expect(signer.pubkey).toBe(fake.userPk)
     const saved = JSON.parse(store.m.get('signer')!)
-    expect(saved.signerPubkey).toBe(fake.signerPk); expect(Object.keys(saved).sort()).toEqual(['clientSecret', 'relays', 'signerPubkey'])
+    expect(saved.signerPubkey).toBe(fake.signerPk); expect(Object.keys(saved).sort()).toEqual(['clientSecret', 'relays', 'signerPubkey', 'userPubkey'])
     expect(JSON.stringify([...store.m.values()])).not.toContain(Buffer.from(fake.userSk).toString('hex')) // the user's private key never reaches the app
   }, 30_000)
 
@@ -124,6 +124,27 @@ describe.skipIf(!bin)('Signer with a pretend Clave through a real relay', () => 
     const fake = new FakeSigner({ delayMs: 20 }); fakes.push(fake)
     const again = s.startConnect(); await fake.scan(again.uri)
     expect(await again.done).toBe(true); expect(s.pubkey).toBe(fake.userPk)
+  }, 30_000)
+
+  it('resuming a session saved by this version is instant and asks the signer NOTHING; the first signature still works', async () => {
+    const { fake, store } = await connected()
+    const saved = JSON.parse(store.m.get('signer')!); expect(saved.userPubkey).toBe(fake.userPk)
+    const asked = fake.seen.length; fake.behaviour.silentAboutIdentity = true // even a signer that would not tell us who it is
+    const again = mem(); again.m.set('signer', store.m.get('signer')!)
+    const page2 = new Signer({ kv: again.kv, relays: [relay.url] }); signers.push(page2)
+    const t0 = Date.now(); expect(await page2.resume()).toBe(true)
+    expect(Date.now() - t0).toBeLessThan(500); expect(page2.state).toBe('connected'); expect(page2.pubkey).toBe(fake.userPk)
+    expect(fake.seen.length).toBe(asked) // nothing was sent
+    expect((await page2.sign(note('first after reload'), 8000)).event.content).toBe('first after reload')
+  }, 30_000)
+
+  it('a wrong saved key cannot make Quill publish as someone else: the signature is refused', async () => {
+    const { fake, store } = await connected()
+    const forged = JSON.parse(store.m.get('signer')!); forged.userPubkey = getPublicKey(generateSecretKey())
+    const again = mem(); again.m.set('signer', JSON.stringify(forged))
+    const page2 = new Signer({ kv: again.kv, relays: [relay.url] }); signers.push(page2)
+    expect(await page2.resume()).toBe(true); expect(page2.pubkey).not.toBe(fake.userPk)
+    await expect(page2.sign(note(), 8000)).rejects.toThrow(/not signed by the connected key|differs from what was asked/)
   }, 30_000)
 
   it('resume with nobody answering gives up with a clear error and leaves the saved session intact', async () => {

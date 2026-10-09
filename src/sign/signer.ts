@@ -13,7 +13,7 @@ export const SIGNER_RELAYS = ['wss://relay.powr.build', 'wss://relay.hivescope.x
 export const CLAVE_LINK = 'https://clave.casa/connect/?uri='
 
 export type State = 'disconnected' | 'connecting' | 'connected'
-interface Saved { clientSecret: string; signerPubkey?: string; relays?: string[] }
+interface Saved { clientSecret: string; signerPubkey?: string; relays?: string[]; /** The key the signer signs as, learned when connecting: lets a reload resume without asking the signer anything. */ userPubkey?: string }
 
 const HEX64 = /^[0-9a-f]{64}$/
 /** Time to scan the link, approve in Clave and come back: scanning from a computer with a phone takes a while. */
@@ -99,7 +99,7 @@ export class Signer {
     const pubkey = await withTimeout(b.getPublicKey(), this.t.identityMs, 'the signer (which key it signs as). Keep the signer app open on screen while connecting')
     if (!HEX64.test(pubkey)) throw new Error('the signer sent something that is not a public key')
     this.pubkey = pubkey
-    this.save({ clientSecret: secretHex, signerPubkey: b.bp.pubkey, relays: b.bp.relays })
+    this.save({ clientSecret: secretHex, signerPubkey: b.bp.pubkey, relays: b.bp.relays, userPubkey: pubkey })
     this.set('connected')
   }
 
@@ -152,13 +152,22 @@ export class Signer {
   }
 
   /**
-   * Resumes the saved session. A phone signer is often suspended until the user opens it, so this keeps asking for a couple of minutes.
-   * The saved session is left alone when it fails.
+   * Resumes the saved session. When the key the signer signs as was saved (it is, since connecting), this is instant and sends NOTHING: a phone signer in
+   * the background cannot answer, and asking it on every page load would only pile up notifications and block signing. Whether the signer is there is
+   * found out by the first signature, which verifies the author anyway (a wrong saved key can never make Quill publish as someone else).
+   * Sessions saved by older versions have no such key: those ask the signer, and keep asking for a couple of minutes while the user opens it. The saved
+   * session is left alone when it fails.
    */
   async resume(): Promise<boolean> {
     if (this.state === 'connected') return true
     const saved = this.load()
     if (!saved?.signerPubkey || !saved.relays?.length) return false
+    if (saved.userPubkey && HEX64.test(saved.userPubkey) && HEX64.test(saved.signerPubkey)) {
+      this.bunker = BunkerSigner.fromBunker(hexToBytes(saved.clientSecret), { pubkey: saved.signerPubkey, relays: saved.relays, secret: null }, this.params())
+      this.pubkey = saved.userPubkey
+      this.set('connected')
+      return true
+    }
     const end = this.now() + this.t.resumeMs
     this.set('connecting')
     try {

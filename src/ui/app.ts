@@ -152,7 +152,11 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   signer?.onChange(() => { if (signer.state === 'connected') void checkIdentity(); else draw() })
-  if (signer && me && signer.hasSavedSession()) { say('info', t(lang, 'resuming')); void signer.resume().then((ok) => { if (!ok) flash = null; draw() }) }
+  if (signer && me && signer.hasSavedSession()) {
+    const resumed = signer.resume() // instant for sessions saved by this version; older ones ask the signer, which can take a while
+    if (signer.state === 'connecting') say('info', t(lang, 'resuming'))
+    void resumed.then((ok) => { if (!ok) flash = null; draw() })
+  }
 
   function openConnect(): void {
     if (!signer) return
