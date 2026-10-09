@@ -1,0 +1,22 @@
+{
+  "name": "quill",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "A tiny text-only Nostr client that tells you why it hides things.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "test": "vitest run",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "nostr-tools": "^2.25.2"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^4.1.11"
+  }
+}
