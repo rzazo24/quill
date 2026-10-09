@@ -229,4 +229,5 @@ button.icon.on { color: var(--accent); border-color: var(--accent); background: 
 /* the refresh button turns while notes are loading (there is no "Loading…" line any more) */
 button.icon.spinning svg { animation: spin .9s linear infinite }
 @keyframes spin { to { transform: rotate(360deg) } }
-@media (prefers-reduced-motion: reduce) { button.icon.spinning svg { animation: pulse 1.2s ease-in-out infinite } @keyframes pulse { 50% { opacity: .35 } } }
+/* with "reduce motion" it still turns (a loading indicator is not the motion that setting is about), only slower */
+@media (prefers-reduced-motion: reduce) { button.icon.spinning svg { animation-duration: 2s } }
