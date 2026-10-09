@@ -7,7 +7,7 @@ import type { Judged, RuleId, Settings } from '../core/verdict.js'
 import type { ThreadNode } from '../data/feed.js'
 import { ago, reason, t, tallyLabel, type Lang } from './i18n.js'
 
-export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number }
+export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; actions?: (j: Judged) => Child[] }
 
 export const nameOf = (v: View, pubkey: string): string => v.names.get(pubkey) ?? shortNpub(pubkey)
 
@@ -33,7 +33,7 @@ function card(j: Judged, v: View, extra: Child[] = []): HTMLElement {
       h('a', { class: 'thread-link', href: `#/note/${event.id}` }, t(v.lang, 'thread')),
     ),
     h('div', { class: 'body' }, renderContent(event.content, v)),
-    ...extra,
+    ...extra, ...(v.actions?.(j) ?? []),
   )
 }
 

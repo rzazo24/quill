@@ -2,7 +2,7 @@
 
 A tiny **text-only** Nostr client that **tells you why it hides things**.
 
-> Status: early. You can read (following, mentions, threads) with a filter that explains itself. Publishing, replying and reacting (signing with a NIP-46 signer) come next.
+> Status: early. You can read (following, mentions, threads) with a filter that explains itself, and write, reply and react by signing with Clave (NIP-46). Notifications, per-author relays (NIP-65) and a PWA come next.
 
 ## Three promises
 
@@ -29,6 +29,15 @@ Principles: behaviour is evidence, **missing data is not** (a key without a prof
 Paste an npub: Quill reads your follows, mutes (public part) and the follow graph two hops out from the relays, then shows **Following**, **Mentions** (where the filter earns its keep) and any **thread**. Hidden notes are folded under a sentence such as *"Hidden: No path from you to this account within 2 hops"*; tap to open. A summary line counts what each rule hid, and *Filter settings* switches rules off live. English and Spanish.
 
 Enforced by the browser, not just by the code: the production page ships a Content-Security-Policy that allows only its own script and style and `wss://` connections. Third-party text is never turned into markup (no `innerHTML` anywhere).
+
+## Writing: Quill never sees your private key
+
+*Connect Clave* shows a link to open in Clave (or paste a `bunker://` address). Clave holds the key and signs; Quill keeps only an app key, saved in this browser, that identifies it to Clave. The connection asks for `sign_event` of kinds 1 and 7 only.
+
+- **React** under a note: one tap. **Reply** and **new note**: a review screen shows the exact text, kind, tags and relays before anything is asked of Clave.
+- Before asking you to approve, Quill checks that Clave is awake (so you are not left waiting on a sleeping phone), then verifies what comes back: valid signature, your key, and exactly the kind, content and tags that were asked for (a signer that adds a hidden mention is refused). Then it publishes to the relays and shows the result **per relay**, with a retry for the ones that failed that does not need a new signature.
+- Quill's own policy only ever signs notes (≤ 1000 characters) and reactions, at most 20 signatures per hour, whatever trust level you give it in Clave. **Suggested trust level for Quill in Clave: medium** (it auto-approves kinds 1, 6 and 7, which is all Quill needs); full also approves deletions, follow lists and relay lists, which Quill never asks for.
+- A signer for a different account than the one you are reading as is refused and disconnected.
 
 ## Develop
 

@@ -1,17 +1,27 @@
-// The app: a login, two lists (following, mentions) and a thread view, all read-only. State lives here; everything else is a function of it.
-import { nip19 } from 'nostr-tools'
+// The app: a login, two lists (following, mentions), a thread view, and — when a signer is configured — writing, replying and reacting through the
+// user's remote signer. State lives here; everything else is a function of it.
+import { nip19, type Event as NostrEvent } from 'nostr-tools'
+import { hashtagTags, mentionTags, mergeTags, reactionTags, replyTags } from '../core/compose.js'
 import { parseIdentity } from '../core/identity.js'
-import { mentionedKeys } from '../core/refs.js'
+import { mentionedKeys, shortNpub } from '../core/refs.js'
 import { judgeAll, tally, type Judged, type Settings } from '../core/verdict.js'
 import { loadFollowing, loadMentions, loadNames, loadThread, type Thread, type ThreadNode } from '../data/feed.js'
 import { contextOf, loadSession, type Session } from '../data/session.js'
-import { memo, type Fetcher } from '../net/fetcher.js'
+import { DEFAULT_RELAYS, memo, type Fetcher } from '../net/fetcher.js'
+import { failedRelays, type Publisher } from '../net/publisher.js'
+import { PipelineError, signAndPublish, type Published, type SignerApi, type Step } from '../sign/pipeline.js'
+import { checkTemplate, MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
-import { detectLang, t, type Lang } from './i18n.js'
-import { renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
+import { detectLang, problemText, t, type Key, type Lang } from './i18n.js'
+import { nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
+import { reactionBar, renderSignArea, type Composer, type Flash, type Review } from './sign-ui.js'
 import { parseLang, parseSettings, parseWords, safeGet, safeSet, type KV } from './store.js'
 
-export interface Deps { fetcher: Fetcher; storage?: KV; languages?: readonly string[]; location: Pick<Location, 'hash'>; onHash: (cb: () => void) => void; setHash: (h: string) => void }
+export interface Deps {
+  fetcher: Fetcher; storage?: KV; languages?: readonly string[]; location: Pick<Location, 'hash'>; onHash: (cb: () => void) => void; setHash: (h: string) => void
+  /** Without these the app is read-only. */
+  signer?: SignerApi; publisher?: Publisher; relays?: string[]; copy?: (text: string) => void; nowMs?: () => number
+}
 
 type Route = { name: 'following' } | { name: 'mentions' } | { name: 'note'; id: string }
 export function parseRoute(hash: string): Route {
@@ -31,6 +41,8 @@ export function parseRoute(hash: string): Route {
 export function startApp(root: HTMLElement, deps: Deps): void {
   const fetcher = memo(deps.fetcher)
   const kv = deps.storage
+  const { signer, publisher } = deps
+  const relays = deps.relays ?? DEFAULT_RELAYS
   let lang: Lang = parseLang(safeGet(kv, 'lang')) ?? detectLang(deps.languages)
   let settings: Settings = parseSettings(safeGet(kv, 'settings'))
   let words: string[] = parseWords(safeGet(kv, 'words'))
@@ -43,9 +55,20 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let body: HTMLElement | null = null
   let run = 0 // a newer navigation makes older loads stop touching the page
   let shownRoute = '' // which view `body` belongs to: old content must not stay on screen under a new tab
+  // signing
+  let connect: { uri: string; claveLink: string } | null = null
+  let connectOpen = false
+  let flash: Flash | null = null
+  let composer: Composer | null = null
+  let review: Review | null = null
+  let step: Step | null = null
+  let result: Published | null = null
+  let busy = false // one signature at a time
 
-  const view = (): View => ({ lang, names })
+  const actions = (j: Judged) => (signer?.state === 'connected' ? [reactionBar(j.event, (emoji) => void react(j.event, emoji), () => startReply(j.event), view())] : [])
+  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.() })
   const ctx = () => contextOf(session!, { mutedWords: words, mutedKeys: [] })
+  const who = () => (signer?.pubkey ? nameOf(view(), signer.pubkey) : '')
 
   async function ensureSession(): Promise<boolean> {
     if (session || !me) return !!session
@@ -55,7 +78,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   async function nameThem(items: Judged[]): Promise<void> {
-    const keys = items.flatMap((j) => [j.event.pubkey, ...mentionedKeys(j.event.content)]).filter((k) => !names.has(k))
+    const keys = [...items.flatMap((j) => [j.event.pubkey, ...mentionedKeys(j.event.content)]), ...(signer?.pubkey ? [signer.pubkey] : [])].filter((k) => !names.has(k))
     if (!keys.length) return
     for (const [k, n] of await loadNames(fetcher, keys)) names.set(k, n)
   }
@@ -100,7 +123,6 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   function toggleSettings(): void { showSettings = !showSettings; draw() }
-
   function changeSettings(s: Settings): void { settings = s; safeSet(kv, 'settings', JSON.stringify(s)); void load() }
   function changeWords(text: string): void { words = parseWords(text); safeSet(kv, 'words', words.join('\n')); void load() }
 
@@ -112,6 +134,87 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     void load()
   }
 
+  // ---- signing ----
+  const say = (kind: Flash['kind'], text: string) => { flash = { kind, text } }
+
+  /** The signer's key and the account being read must be the same one; with nobody logged in yet, the signer's key is who you are. */
+  async function checkIdentity(): Promise<void> {
+    if (!signer || signer.state !== 'connected' || !signer.pubkey) return
+    if (me && me !== signer.pubkey) {
+      const other = shortNpub(signer.pubkey)
+      await signer.disconnect(); connect = null; connectOpen = false
+      say('error', t(lang, 'wrongAccount', { who: other })); return draw()
+    }
+    flash = null; connectOpen = false; connect = null
+    if (!me) { me = signer.pubkey; safeSet(kv, 'me', me); session = null; body = null; shownRoute = '' }
+    void load()
+  }
+
+  signer?.onChange(() => { if (signer.state === 'connected') void checkIdentity(); else draw() })
+  if (signer && me && signer.hasSavedSession()) { say('info', t(lang, 'resuming')); void signer.resume().then((ok) => { if (!ok) flash = null; draw() }) }
+
+  function openConnect(): void {
+    if (!signer) return
+    connectOpen = true; flash = null
+    const c = signer.startConnect(); connect = { uri: c.uri, claveLink: c.claveLink }
+    void c.done.then((ok) => { if (!ok && signer.lastError) say('error', t(lang, 'connectFailed', { why: signer.lastError })); draw() })
+    draw()
+  }
+  function cancelConnect(): void { connectOpen = false; connect = null; void signer?.disconnect(); draw() }
+  async function bunker(text: string): Promise<void> {
+    if (!signer) return
+    flash = null; draw()
+    if (!(await signer.connectBunker(text)) && signer.lastError) { say('error', t(lang, 'connectFailed', { why: signer.lastError })); draw() }
+  }
+
+  const sayPipelineError = (e: unknown): void => {
+    if (e instanceof PipelineError) say('error', t(lang, e.code === 'rate' ? 'e_rate' : e.code === 'no-signer' ? 'e_no_signer' : e.code === 'asleep' ? 'e_asleep' : 'e_not_signed', { why: e.message }))
+    else say('error', t(lang, 'e_not_signed', { why: e instanceof Error ? e.message : String(e) }))
+  }
+
+  async function send(template: Template): Promise<boolean> {
+    if (!signer || !publisher || busy) return false
+    busy = true; flash = null; result = null; draw()
+    try {
+      result = await signAndPublish({ signer, publisher, kv, now: deps.nowMs }, template, (s) => { step = s; draw() })
+      step = null; fetcher.clear()
+      return true
+    } catch (e) { step = null; sayPipelineError(e); return false } finally { busy = false; draw() }
+  }
+
+  function templateFor(text: string, target?: NostrEvent): Template {
+    const auto = mergeTags(mentionTags(text), hashtagTags(text))
+    return { kind: 1, content: text, tags: target ? mergeTags(replyTags(target), auto) : auto, created_at: Math.floor((deps.nowMs?.() ?? Date.now()) / 1000) }
+  }
+
+  function startReply(target: NostrEvent): void { composer = { mode: 'reply', target, text: '' }; review = null; result = null; flash = null; draw(); root.querySelector('textarea')?.focus() }
+  function startNote(): void { composer = { mode: 'note', text: '' }; draw(); root.querySelector('textarea')?.focus() }
+  function doReview(): void {
+    if (!composer) return
+    let template: Template
+    try { template = templateFor(composer.text, composer.target) } catch { return say('error', t(lang, 'p_tags')), draw() }
+    const problem = checkTemplate(template)
+    if (problem) { say('error', problemText(lang, problem, { max: MAX_NOTE_CHARS })); return draw() }
+    flash = null; review = { template, target: composer.target, mentions: template.tags.filter((x) => x[0] === 'p').length }; draw()
+  }
+  async function publish(): Promise<void> {
+    if (!review) return
+    const ok = await send(review.template)
+    if (ok) { review = null; composer = null; void load() }
+  }
+  async function react(target: NostrEvent, emoji: string): Promise<void> {
+    const template: Template = { kind: 7, content: emoji, tags: reactionTags(target), created_at: Math.floor((deps.nowMs?.() ?? Date.now()) / 1000) }
+    const problem = checkTemplate(template)
+    if (problem) { say('error', problemText(lang, problem)); return draw() }
+    if (await send(template)) say('info', `${emoji === '+' ? '👍' : emoji} → ${nameOf(view(), target.pubkey)}`)
+    draw()
+  }
+  async function retry(): Promise<void> {
+    if (!result || !publisher || busy) return
+    busy = true; step = 'sending'; draw()
+    try { const again = await publisher.publish(result.event, failedRelays(result.outcomes)); result = { event: result.event, outcomes: { ...result.outcomes, ...again } } } finally { busy = false; step = null; draw() }
+  }
+
   function draw(): void {
     const route = parseRoute(deps.location.hash)
     const tab = (name: 'following' | 'mentions', href: string) => h('a', { href, class: route.name === name ? 'tab on' : 'tab', ...(route.name === name ? { 'aria-current': 'page' } : {}) }, t(lang, name))
@@ -119,16 +222,24 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const loginForm = h('form', { class: 'login', onSubmit: (e: Event) => { e.preventDefault(); login(input.value) } },
       h('h2', {}, t(lang, 'loginTitle')), h('p', {}, t(lang, 'loginHelp')), input, ' ', h('button', { type: 'submit' }, t(lang, 'loginButton')),
       loginError ? h('p', { class: 'error', role: 'alert' }, loginError) : null)
+    const signArea = signer ? renderSignArea({
+      signer: signer.state, who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, flash, composer, review, step, result, relays,
+    }, {
+      openConnect, cancelConnect, bunker: (x) => void bunker(x), disconnect: () => { void signer.disconnect(); composer = review = result = null; flash = null; draw() }, copy: (x) => { deps.copy?.(x); say('info', t(lang, 'copied')); draw() },
+      edit: (x) => { if (composer) composer.text = x }, review: doReview, publish: () => void publish(), back: () => { review = null; draw() }, cancelComposer: () => { composer = null; review = null; draw() },
+      retry: () => void retry(), dismissResult: () => { result = null; draw() }, startNote,
+    }, view(), true) : null
     root.replaceChildren(
       h('header', { class: 'top' },
         h('h1', {}, h('a', { href: '#/' }, 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline')),
         h('nav', {},
           me ? tab('following', '#/') : null, me ? tab('mentions', '#/mentions') : null,
           h('button', { type: 'button', class: 'link', onClick: () => { lang = lang === 'en' ? 'es' : 'en'; safeSet(kv, 'lang', lang); void load() } }, t(lang, 'language')),
-          me ? h('button', { type: 'button', class: 'link', onClick: () => { me = null; session = null; body = null; shownRoute = ''; safeSet(kv, 'me', null); draw() } }, t(lang, 'signOut')) : null),
+          me ? h('button', { type: 'button', class: 'link', onClick: () => { me = null; session = null; body = null; shownRoute = ''; safeSet(kv, 'me', null); void signer?.disconnect(); composer = review = result = null; flash = null; draw() } }, t(lang, 'signOut')) : null),
       ),
       h('main', {},
         !me ? loginForm : null,
+        signArea,
         me && showSettings ? renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view()) : null,
         me && status ? h('p', { class: 'status', role: 'status' }, status) : null,
         me && body ? body : null),
@@ -139,3 +250,4 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   draw()
   void load()
 }
+export type { Key }

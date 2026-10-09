@@ -29,6 +29,13 @@ try {
   const notes = await page.locator('.note').count()
   notes > 10 ? ok(`following feed: ${notes} notes`) : fail(`few notes: ${notes}`)
 
+  // signing UI: the link for Clave appears, and nothing is signed or published (we never approve it)
+  await page.click('button:has-text("Connect Clave")')
+  const href = await page.locator('a.button').getAttribute('href')
+  ;/^https:\/\/clave\.casa\/connect\/\?uri=nostrconnect/.test(href ?? '') ? ok('Connect Clave offers a clave.casa link') : fail('no Clave link: ' + href)
+  ;(await page.locator('.sign').innerText()).includes('Waiting for Clave') ? ok('and says it is waiting for Clave') : fail('no waiting message')
+  await page.screenshot({ path: '.e2e/2b-connect.png' })
+  await page.click('.connect button:has-text("Cancel")')
   await page.click('a.tab:has-text("Mentions")'); await page.waitForSelector('.summary:has-text("shown")', { timeout: 40000 })
   const summary = await page.locator('.summary').innerText()
   ok('mentions summary: ' + summary.replace(/\s+/g, ' '))

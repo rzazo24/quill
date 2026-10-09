@@ -36,3 +36,12 @@ button[type=submit] { padding: 0.4rem 0.9rem; border: 1px solid var(--accent); b
 .login { display: grid; gap: 0.6rem; margin-top: 1.5rem; } .login h2 { margin: 0; } .login p { margin: 0; color: var(--muted); }
 .ref { text-decoration: none; font-weight: 600; }
 .back { display: inline-block; margin: 0.5rem 0; }
+.sign { margin: 0.75rem 0; padding: 0.75rem 1rem; border: 1px solid var(--line); border-radius: 6px; background: var(--fold); display: grid; gap: 0.5rem; }
+.sign h2 { margin: 0; font-size: 1.05rem; } .sign p { margin: 0; } .sign .meta, .signing-as { color: var(--muted); font-size: 0.9rem; }
+.sign textarea { width: 100%; font: inherit; background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 0.5rem; }
+.sign ul { margin: 0; padding-left: 1rem; list-style: none; font-size: 0.9rem; }
+.preview { margin: 0; padding: 0.6rem; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.replying { color: var(--muted); font-size: 0.9rem; } .replying q { font-style: italic; }
+a.button, .sign button:not(.link), .actions button.react { display: inline-block; padding: 0.3rem 0.8rem; border: 1px solid var(--accent); border-radius: 4px; background: transparent; color: var(--accent); text-decoration: none; cursor: pointer; }
+.actions { margin-top: 0.25rem; font-size: 0.9rem; } .actions button.react { padding: 0 0.4rem; border-color: var(--line); }
+@media (hover: hover) { .actions button.react:hover { border-color: var(--accent); } }

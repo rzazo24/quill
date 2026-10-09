@@ -26,6 +26,18 @@ const en = {
   r_outside_network: 'This account is more than {max} hops from you in the follow graph.',
   r_outside_network_none: 'No path from you to this account within {max} hops.',
   now: 'now', openLink: 'link',
+  connectSigner: 'Connect Clave', connectTitle: 'Sign with Clave', signingAs: 'Signing as {who}', disconnectSigner: 'Disconnect',
+  connectHelp: 'Quill never sees your private key: Clave signs, and you approve each request there. Open this link on the phone where Clave is installed.',
+  openClave: 'Open in Clave', copyLink: 'Copy link', copied: 'Copied', bunkerLabel: 'or paste a bunker:// address', bunkerButton: 'Connect',
+  connectWaiting: 'Waiting for Clave. Keep it open on screen and approve the connection.', resuming: 'Reconnecting to Clave… keep it open on screen.',
+  connectFailed: 'Could not connect: {why}', wrongAccount: 'That signer belongs to another account ({who}), not the one you are reading as. It was disconnected.',
+  newNote: 'Write a note…', replyingTo: 'Replying to {who}', review: 'Review', cancel: 'Cancel', backEdit: 'Back', publish: 'Publish', reply: 'Reply', react: 'React',
+  chars: '{n} / {max}', previewTitle: 'You are about to publish as {who}', previewPublic: 'It is public. Deleting it later is only a request that relays may ignore.',
+  previewRelays: 'Sent to {n} relays', previewReplyTo: 'In reply to {who}', previewMentions: 'Notifies {n} people',
+  p_kind: 'Quill only signs notes and reactions.', p_empty: 'The note is empty.', p_too_long: 'The note is too long (limit {max} characters).', p_reaction: 'That is not a valid reaction.', p_tags: 'The note has invalid tags.', p_reaction_target: 'A reaction needs a note to react to.',
+  step_checking: 'Checking that Clave is awake…', step_waiting: 'Waiting for Clave. Keep it open on screen and approve if it asks.', step_sending: 'Sending to the relays…',
+  e_rate: 'Too many signatures in the last hour. Try again later.', e_no_signer: 'Connect Clave first.', e_asleep: 'Clave did not answer. Open it on screen (or tap its blank notification) and try again. Nothing was signed.', e_not_signed: 'Clave did not sign: {why}. Nothing was published.',
+  published: 'Published to {ok} of {total} relays', publishedNone: 'Signed, but no relay accepted it', retryFailed: 'Retry the failed relays', done: 'Done', dismiss: 'Close',
 }
 export type Key = keyof typeof en
 
@@ -52,6 +64,18 @@ const es: Record<Key, string> = {
   r_outside_network: 'Esta cuenta está a más de {max} saltos de ti en el grafo de seguimiento.',
   r_outside_network_none: 'No hay camino desde ti hasta esta cuenta en {max} saltos.',
   now: 'ahora', openLink: 'enlace',
+  connectSigner: 'Conectar Clave', connectTitle: 'Firmar con Clave', signingAs: 'Firmando como {who}', disconnectSigner: 'Desconectar',
+  connectHelp: 'Quill nunca ve tu clave privada: firma Clave y tú apruebas cada petición allí. Abre este enlace en el móvil donde tienes Clave.',
+  openClave: 'Abrir en Clave', copyLink: 'Copiar enlace', copied: 'Copiado', bunkerLabel: 'o pega una dirección bunker://', bunkerButton: 'Conectar',
+  connectWaiting: 'Esperando a Clave. Tenla abierta en pantalla y aprueba la conexión.', resuming: 'Reconectando con Clave… tenla abierta en pantalla.',
+  connectFailed: 'No se pudo conectar: {why}', wrongAccount: 'Ese firmador es de otra cuenta ({who}), no de la que estás leyendo. Se desconectó.',
+  newNote: 'Escribe una nota…', replyingTo: 'Respondiendo a {who}', review: 'Revisar', cancel: 'Cancelar', backEdit: 'Volver', publish: 'Publicar', reply: 'Responder', react: 'Reaccionar',
+  chars: '{n} / {max}', previewTitle: 'Vas a publicar como {who}', previewPublic: 'Es público. Borrarlo después es solo una petición que los relés pueden ignorar.',
+  previewRelays: 'Se envía a {n} relés', previewReplyTo: 'En respuesta a {who}', previewMentions: 'Avisa a {n} personas',
+  p_kind: 'Quill solo firma notas y reacciones.', p_empty: 'La nota está vacía.', p_too_long: 'La nota es demasiado larga (límite {max} caracteres).', p_reaction: 'Esa reacción no es válida.', p_tags: 'La nota tiene etiquetas no válidas.', p_reaction_target: 'Una reacción necesita una nota a la que reaccionar.',
+  step_checking: 'Comprobando que Clave está despierta…', step_waiting: 'Esperando a Clave. Tenla abierta en pantalla y aprueba si lo pide.', step_sending: 'Enviando a los relés…',
+  e_rate: 'Demasiadas firmas en la última hora. Inténtalo más tarde.', e_no_signer: 'Conecta primero Clave.', e_asleep: 'Clave no contestó. Ábrela en pantalla (o pulsa su notificación en blanco) e inténtalo de nuevo. No se firmó nada.', e_not_signed: 'Clave no firmó: {why}. No se publicó nada.',
+  published: 'Publicado en {ok} de {total} relés', publishedNone: 'Firmado, pero ningún relé lo aceptó', retryFailed: 'Reintentar los relés que fallaron', done: 'Hecho', dismiss: 'Cerrar',
 }
 
 const dict: Record<Lang, Record<Key, string>> = { en, es }
@@ -83,3 +107,6 @@ export function ago(lang: Lang, unix: number, nowMs = Date.now()): string {
 export function detectLang(languages: readonly string[] | undefined): Lang {
   return (languages ?? []).some((l) => l.toLowerCase().startsWith('es')) ? 'es' : 'en'
 }
+
+import type { Problem } from '../sign/policy.js'
+export const problemText = (lang: Lang, p: Problem, params: Record<string, string | number> = {}): string => t(lang, `p_${p.replace(/-/g, '_')}` as Key, params)

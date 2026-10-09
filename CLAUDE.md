@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Quill: a text-only, light Nostr client whose filter explains every decision. Vite + TypeScript, static, no backend. Name chosen by the user (2026-10-09). Status: reading works (login by npub, Following, Mentions, thread, filter settings, EN/ES). Not yet: publishing/replying/reacting (NIP-46), notifications, NIP-65 outbox relays, PWA.
+Quill: a text-only, light Nostr client whose filter explains every decision. Vite + TypeScript, static, no backend. Name chosen by the user (2026-10-09). Status: reading works (login by npub, Following, Mentions, thread, filter settings, EN/ES) and writing through a NIP-46 signer (Clave): note, reply, one-tap reaction. Not yet: notifications, NIP-65 outbox relays, PWA. NOT yet tried against the user's real Clave.
 
 ## Commands
 
@@ -28,6 +28,14 @@ npm run build                 # tsc -b && vite build
 ## Layout
 
 `src/core` pure logic (text, NIP-10 threads, refs, identity, the filter) · `src/data` loading (follows, graph, mutes, feeds, threads) over an injected `Fetcher` · `src/net/fetcher.ts` the only code that talks to relays: drops events with a bad signature or that do not answer the filter, `memo` caches per page · `src/ui` DOM only through `h()`/`textContent` (no `innerHTML`), `app.ts` holds the state. The build ships a CSP meta tag (own script/style + `wss:` only); `frame-ancestors` has to be a response header from the web server.
+
+## Signing rules that must not erode
+
+- The user's private key never enters Quill (no nsec field anywhere; `parseIdentity` refuses an nsec on sight and does not echo it). Quill keeps only an app key (localStorage `signer`) and the signer's key/relays.
+- `src/sign/policy.ts` is the only list of what may be signed: kinds 1 and 7, tag names e/p/t/k/a, limits. `Signer.sign` applies it BEFORE asking and then verifies what came back (signature, author = connected key, kind/content/tags identical, created_at within 5 min). Never relax these because the user's Clave is on medium/full trust: that is exactly when Quill's own checks are the only ones.
+- Reactions are one tap on purpose; notes and replies always go through the review screen that shows the exact event. Keep it that way.
+- A signer whose key differs from the account being read is disconnected, never used.
+- Test with `test/support/fake-signer.ts` (speaks real NIP-46 through the real khatru relay binary; skipped without it). Add a tamper case for every new thing that is verified.
 
 ## Process
 
