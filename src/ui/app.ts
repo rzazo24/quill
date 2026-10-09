@@ -39,7 +39,7 @@ export interface Deps {
   onPoll?: (cb: () => void) => void
 }
 
-type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'settings' } | { name: 'note'; id: string }
+type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'note'; id: string }
 export function parseRoute(hash: string): Route {
   const m = /^#\/note\/(.+)$/.exec(hash)
   if (m) {
@@ -51,7 +51,7 @@ export function parseRoute(hash: string): Route {
       if (d.type === 'nevent') return { name: 'note', id: d.data.id }
     } catch { /* not a note id */ }
   }
-  return hash === '#/mentions' ? { name: 'mentions' } : hash === '#/me' ? { name: 'me' } : hash === '#/settings' ? { name: 'settings' } : { name: 'following' }
+  return hash === '#/mentions' ? { name: 'mentions' } : hash === '#/me' ? { name: 'me' } : hash === '#/settings' ? { name: 'settings' } : hash === '#/settings/filter' ? { name: 'settings', focus: 'filter' } : { name: 'following' }
 }
 
 export function startApp(root: HTMLElement, deps: Deps): void {
@@ -225,7 +225,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     )
   }
 
-  function toggleSettings(): void { deps.setHash('#/settings') } // the filter settings live in Settings
+  function toggleSettings(): void { deps.setHash('#/settings/filter') } // the filter settings live in Settings
   function changeSettings(s: Settings): void { settings = s; safeSet(kv, 'settings', JSON.stringify(s)); void load() }
   function changeFont(f: FontSize): void { font = f; safeSet(kv, 'font', f); applyFont(); draw() }
   /** A new relay list: stored, handed to the network code, and everything is read again from it. */
@@ -419,6 +419,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     root.replaceChildren(...page.filter((x): x is HTMLElement => x !== null))
     const main = root.querySelector('main.view')
     if (main) main.scrollTop = scrollToTop ? 0 : kept
+    // coming from "Filter settings": land on the filter section, not at the top of Settings
+    if (scrollToTop && route.name === 'settings' && route.focus === 'filter') root.querySelector('.settings')?.scrollIntoView({ block: 'start' })
     scrollToTop = false
   }
 

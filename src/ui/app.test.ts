@@ -299,7 +299,13 @@ describe('the settings cog', () => {
   it('the filter summary button leads to the same Settings page', async () => {
     const a = boot({ stored: { me } }); await tick(80); await a.go('#/mentions'); await tick(80)
     ;(a.root.querySelector('.summary button, button.summary-settings') ?? [...a.root.querySelectorAll('button')].find((b) => b.textContent === 'Filter settings')!).dispatchEvent(new Event('click')); await tick(80)
-    expect(a.root.querySelector('.settings')).not.toBeNull()
+    expect(a.root.querySelector('.settings')).not.toBeNull(); expect(a.root.querySelector('.prefs')).not.toBeNull() // the same page, text size and relays included
+  })
+  it('and it lands on the filter section instead of the top of the page', async () => {
+    const a = boot({ stored: { me } }); await tick(80); await a.go('#/mentions'); await tick(80)
+    const calls: Element[] = []; const orig = Element.prototype.scrollIntoView; Element.prototype.scrollIntoView = function (this: Element) { calls.push(this) }
+    try { await a.go('#/settings/filter'); await tick(80) } finally { Element.prototype.scrollIntoView = orig }
+    expect(calls.map((c) => c.className)).toContain('settings'); expect(parseRoute('#/settings/filter')).toEqual({ name: 'settings', focus: 'filter' }); expect(parseRoute('#/settings')).toEqual({ name: 'settings' })
   })
 })
 
