@@ -1,9 +1,10 @@
 // The layout is an app shell: the page never scrolls, only <main> does, so iPhone Safari never shows/hides its toolbar and pushes the tab bar around.
 // This checks it in a real (phone-sized) browser against `npm run build`, with a pretend saved Clave connection so the note buttons exist (it points to an
-// unreachable relay: nothing is sent anywhere). Usage: node test/e2e-shell.mjs <npub hex>   (default: the author's)
+// unreachable relay: nothing is sent anywhere). Usage: node test/e2e-shell.mjs <public key in hex>
 import { chromium } from 'playwright'
 import { spawn } from 'node:child_process'
-const ME = process.argv[2] ?? '67a69f6937afaa0ab6604c833b1010da2b12ce9c714c59342c16f68c098375f1'
+const ME = process.argv[2] // the public key (hex) of any account that follows some people
+if (!/^[0-9a-f]{64}$/i.test(ME ?? '')) { console.error('usage: node ' + process.argv[1] + ' <public key in hex>'); process.exit(2) }
 const srv = spawn('node', ['node_modules/vite/bin/vite.js', 'preview', '--port', '4173', '--strictPort'], { stdio: 'ignore' })
 for (let i = 0; i < 40; i++) { try { if ((await fetch('http://localhost:4173/')).ok) break } catch {} await new Promise((r) => setTimeout(r, 250)) }
 const b = await chromium.launch(); const ctx = await b.newContext({ viewport: { width: 390, height: 800 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }); const p = await ctx.newPage()

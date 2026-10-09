@@ -1,8 +1,9 @@
 // Desktop alignment: header, feed and tab bar must share the same column even when the browser shows a classic scrollbar (Playwright hides scrollbars by
-// default, which once hid a 10-15px misalignment). Usage: node test/e2e-align.mjs <npub hex> (needs `npm run build`)
+// default, which once hid a 10-15px misalignment). Usage: node test/e2e-align.mjs <public key in hex> (needs `npm run build`)
 import { chromium } from 'playwright'
 import { spawn } from 'node:child_process'
-const ME = process.argv[2] ?? '67a69f6937afaa0ab6604c833b1010da2b12ce9c714c59342c16f68c098375f1'
+const ME = process.argv[2] // the public key (hex) of any account that follows some people
+if (!/^[0-9a-f]{64}$/i.test(ME ?? '')) { console.error('usage: node ' + process.argv[1] + ' <public key in hex>'); process.exit(2) }
 const srv = spawn('node', ['node_modules/vite/bin/vite.js', 'preview', '--port', '4173', '--strictPort'], { stdio: 'ignore' })
 for (let i = 0; i < 40; i++) { try { if ((await fetch('http://localhost:4173/')).ok) break } catch {} await new Promise((r) => setTimeout(r, 250)) }
 // Playwright hides scrollbars by default; a desktop browser shows classic ones (about 15px) that take room from the content
