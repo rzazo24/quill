@@ -22,10 +22,7 @@ describe('the web app manifest', () => {
   it('its colours are the app\'s own: the page background, the meta theme colour', () => {
     const css = text('src/style.css'), html = text('index.html')
     expect(css).toContain(`--bg:${manifest.background_color}`)
-    // No theme_color in the manifest on purpose (experiment, 2026-10-09): current Chrome on Android paints the installed app's navigation bar with it, and a
-    // thin light line showed there on a phone. The page's own <meta name="theme-color"> still colours the status bar.
-    expect(manifest.theme_color).toBeUndefined()
-    expect(html).toContain(`name="theme-color" content="${manifest.background_color}"`)
+    expect(html).toContain(`name="theme-color" content="${manifest.theme_color}"`); expect(manifest.theme_color).toBe(manifest.background_color)
   })
 })
 
