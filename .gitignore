@@ -1,3 +1,6 @@
 node_modules
 dist
 *.tsbuildinfo
+.probe
+.e2e
+.e2e.log

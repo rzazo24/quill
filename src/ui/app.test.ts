@@ -1,0 +1,115 @@
+// @vitest-environment happy-dom
+import { nip19, type Event, type Filter } from 'nostr-tools'
+import { afterEach, describe, expect, it } from 'vitest'
+import { ev, pk } from '../core/testutil.js'
+import { answers, type Fetcher } from '../net/fetcher.js'
+import { parseRoute, startApp } from './app.js'
+
+const me = pk('1'), friend = pk('a'), far = pk('f')
+const list = (owner: string, kind: number, tags: string[][]) => ev(owner, '', { kind, tags })
+const world: Event[] = [
+  list(me, 3, [['p', friend]]), list(friend, 3, []),
+  ev(friend, 'a post from my friend'), ev(friend, 'hello', { kind: 0, content: JSON.stringify({ name: 'Ana' }) }),
+  ev(far, 'a pitch from a stranger', { tags: [['p', me]] }),
+]
+const relays = (events: Event[], delayMs = 0): Fetcher => ({ query: async (f: Filter) => { if (delayMs) await new Promise((r) => setTimeout(r, delayMs)); return events.filter((e) => answers(f, e)) } })
+const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms))
+const roots: HTMLElement[] = []
+
+function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[] } = {}) {
+  const root = document.createElement('div'); document.body.append(root); roots.push(root)
+  const location = { hash: '' }, listeners: (() => void)[] = []
+  const mem = new Map(Object.entries(opts.stored ?? {}))
+  startApp(root, {
+    fetcher: relays(opts.events ?? world, opts.delayMs), languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h },
+    storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
+  })
+  const go = async (hash: string) => { location.hash = hash; listeners.forEach((l) => l()); await tick() }
+  return { root, go, mem, text: () => root.textContent ?? '' }
+}
+afterEach(() => { roots.forEach((r) => r.remove()); roots.length = 0 })
+
+describe('routes', () => {
+  it('parses the hash, including note ids in hex, note1 and nevent1', () => {
+    const id = 'c'.repeat(64)
+    expect(parseRoute('')).toEqual({ name: 'following' }); expect(parseRoute('#/mentions')).toEqual({ name: 'mentions' }); expect(parseRoute('#/nonsense')).toEqual({ name: 'following' })
+    expect(parseRoute('#/note/' + id)).toEqual({ name: 'note', id })
+    expect(parseRoute('#/note/' + nip19.noteEncode(id))).toEqual({ name: 'note', id })
+    expect(parseRoute('#/note/' + nip19.neventEncode({ id }))).toEqual({ name: 'note', id })
+    expect(parseRoute('#/note/garbage')).toEqual({ name: 'following' })
+  })
+})
+
+describe('the app', () => {
+  it('starts at the login, refuses junk and private keys, and never stores them', async () => {
+    const a = boot()
+    expect(a.text()).toContain('Read as…')
+    const input = a.root.querySelector('input')!, form = a.root.querySelector('form')!
+    for (const bad of ['hello', 'nsec1' + 'q'.repeat(58)]) {
+      input.value = bad; form.dispatchEvent(new Event('submit', { cancelable: true })); await tick(5)
+      expect(a.root.querySelector('.error')).not.toBeNull()
+    }
+    expect(a.mem.size).toBe(0)
+  })
+  it('logs in with an npub, shows the feed, remembers who you are', async () => {
+    const a = boot()
+    a.root.querySelector('input')!.value = nip19.npubEncode(me)
+    a.root.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true })); await tick(80)
+    expect(a.text()).toContain('a post from my friend'); expect(a.text()).toContain('Ana')
+    expect(a.mem.get('me')).toBe(me)
+  })
+  it('starts straight on the feed when it remembers you, in the browser\'s language', async () => {
+    const a = boot({ stored: { me }, languages: ['es-ES'] }); await tick(80)
+    expect(a.text()).toContain('Siguiendo'); expect(a.text()).toContain('a post from my friend')
+  })
+  it('switching tab does not leave the old tab\'s notes on screen while the new one loads', async () => {
+    const a = boot({ stored: { me }, delayMs: 40 }); await tick(400)
+    expect(a.text()).toContain('a post from my friend')
+    await a.go('#/mentions')
+    expect(a.text()).not.toContain('a post from my friend')
+    await tick(400)
+    expect(a.text()).toContain('a pitch from a stranger') // folded, but present
+    expect(a.root.querySelectorAll('details.folded').length).toBe(1)
+    expect(a.text()).toContain('1 outside your network')
+  })
+  it('changing language redraws the content already on screen', async () => {
+    const a = boot({ stored: { me } }); await tick(80)
+    await a.go('#/mentions'); await tick(60)
+    expect(a.text()).toMatch(/No path from you/)
+    ;[...a.root.querySelectorAll('button')].find((b) => b.textContent === 'Español')!.click(); await tick(80)
+    expect(a.text()).toMatch(/No hay camino desde ti/); expect(a.text()).not.toMatch(/No path from you/)
+    expect(a.mem.get('lang')).toBe('es')
+  })
+  it('turning a rule off re-judges: the stranger is no longer folded', async () => {
+    const a = boot({ stored: { me } }); await tick(80); await a.go('#/mentions'); await tick(60)
+    expect(a.root.querySelectorAll('details.folded').length).toBe(1)
+    ;[...a.root.querySelectorAll('button')].find((b) => b.textContent === 'Filter settings')!.click()
+    const box = [...a.root.querySelectorAll('label.check')].find((l) => l.textContent?.includes('Outside your network'))!.querySelector('input')!
+    box.checked = false; box.dispatchEvent(new Event('change')); await tick(80)
+    expect(a.root.querySelectorAll('details.folded').length).toBe(0)
+    expect(JSON.parse(a.mem.get('settings')!).rules.outsideNetwork).toBe(false)
+  })
+  it('survives a hostile note, junk in storage, and relays that return nothing', async () => {
+    const evil = ev(friend, '<img src=x onerror=alert(1)> <script>x</script>')
+    const a = boot({ events: [...world, evil], stored: { me, settings: '{"rules":42,"maxDistance":"x"}', lang: 'zz', words: '\n\n  ' } }); await tick(80)
+    expect(a.root.querySelectorAll('img, script, [onerror]').length).toBe(0); expect(a.text()).toContain('<img src=x')
+    const b = boot({ events: [], stored: { me } }); await tick(80)
+    expect(b.text()).toContain('Nothing here yet')
+  })
+  it('a slow answer for a tab you already left does not overwrite the tab you are on', async () => {
+    const root = document.createElement('div'); document.body.append(root); roots.push(root)
+    const location = { hash: '' }, listeners: (() => void)[] = []
+    const slowMentions: Fetcher = { query: async (f) => { if (f['#p']) await new Promise((r) => setTimeout(r, 200)); return world.filter((e) => answers(f, e)) } }
+    startApp(root, { fetcher: slowMentions, languages: ['en'], location, onHash: (cb) => listeners.push(cb), setHash: () => {}, storage: { getItem: (k) => (k === 'me' ? me : null), setItem: () => {}, removeItem: () => {} } })
+    await tick(80)
+    location.hash = '#/mentions'; listeners.forEach((l) => l()); await tick(20)
+    location.hash = '#/'; listeners.forEach((l) => l()); await tick(400) // the mentions answer arrives meanwhile
+    expect(root.textContent).toContain('a post from my friend')
+    expect(root.textContent).not.toContain('a pitch from a stranger')
+  })
+  it('signing out forgets you', async () => {
+    const a = boot({ stored: { me } }); await tick(80)
+    ;[...a.root.querySelectorAll('button')].find((b) => b.textContent === 'Sign out')!.click(); await tick(10)
+    expect(a.text()).toContain('Read as…'); expect(a.mem.has('me')).toBe(false)
+  })
+})

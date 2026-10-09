@@ -2,7 +2,7 @@
 
 A tiny **text-only** Nostr client that **tells you why it hides things**.
 
-> Status: early. The core (safe text, threads, the filter) is done and tested; the interface is next.
+> Status: early. You can read (following, mentions, threads) with a filter that explains itself. Publishing, replying and reacting (signing with a NIP-46 signer) come next.
 
 ## Three promises
 
@@ -24,6 +24,12 @@ Every note gets a *verdict* (`src/core/verdict.ts`): shown or hidden, by which r
 
 Principles: behaviour is evidence, **missing data is not** (a key without a profile, or a follow graph that has not loaded yet, never hides anything by itself); people you chose are never hidden by behaviour; a short greeting repeated by many keys is a greeting, not spam. Each rule can be switched off.
 
+## What it does today
+
+Paste an npub: Quill reads your follows, mutes (public part) and the follow graph two hops out from the relays, then shows **Following**, **Mentions** (where the filter earns its keep) and any **thread**. Hidden notes are folded under a sentence such as *"Hidden: No path from you to this account within 2 hops"*; tap to open. A summary line counts what each rule hid, and *Filter settings* switches rules off live. English and Spanish.
+
+Enforced by the browser, not just by the code: the production page ships a Content-Security-Policy that allows only its own script and style and `wss://` connections. Third-party text is never turned into markup (no `innerHTML` anywhere).
+
 ## Develop
 
 ```bash
@@ -31,6 +37,8 @@ npm install
 npm test        # unit tests of the core
 npm run build   # type-check + production build
 npm run dev
+npm run probe -- <npub>        # data layer against the real relays, prints what the filter would do
+node test/e2e.mjs <npub>       # real browser (Playwright) against `npm run build` output; screenshots in .e2e/
 ```
 
 ## Prior art

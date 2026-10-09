@@ -1,2 +1,13 @@
-// The interface comes in phase 1b. For now Quill is its core (src/core): text safety, NIP-10 threads and the filter that explains itself.
-document.getElementById('app')!.textContent = 'Quill — under construction.'
+import './style.css'
+import { poolFetcher } from './net/fetcher.js'
+import { startApp } from './ui/app.js'
+
+const storage = ((): Storage | undefined => { try { return window.localStorage } catch { return undefined } })()
+startApp(document.getElementById('app')!, {
+  fetcher: poolFetcher(),
+  storage,
+  languages: navigator.languages,
+  location,
+  onHash: (cb) => addEventListener('hashchange', cb),
+  setHash: (h) => { location.hash = h },
+})
