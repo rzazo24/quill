@@ -12,7 +12,7 @@ const en: HelpSection[] = [
 • Nothing is hidden silently: every hidden note says which rule hid it, and one tap shows it.` },
   { id: 'read', title: 'Reading', body: `Sign in with your npub. There are three tabs:
 
-• Following: notes of the people you follow (not their replies).
+• Following: notes of the people you follow (not their replies) and what they repost, marked “Ana reposted”. A repost does not vouch for the note: the filter judges it by its own author. You can switch reposts off in Settings.
 • Mentions: replies and mentions from anyone. This is where the filter works hardest.
 • Me: your account, your Clave connection, your own notes and sign out.
 
@@ -66,7 +66,7 @@ const es: HelpSection[] = [
 • Nada se oculta en silencio: cada nota oculta dice qué regla la ocultó, y con un toque se muestra.` },
   { id: 'read', title: 'Leer', body: `Entra con tu npub. Hay tres pestañas:
 
-• Siguiendo: notas de la gente que sigues (sin sus respuestas).
+• Siguiendo: notas de la gente que sigues (sin sus respuestas) y lo que comparten, marcado «Ana compartió». Un repost no avala la nota: el filtro la juzga por su propio autor. Puedes desactivar los reposts en Ajustes.
 • Menciones: respuestas y menciones de cualquiera. Aquí es donde más trabaja el filtro.
 • Yo: tu cuenta, tu conexión con Clave, tus propias notas y cerrar sesión.
 

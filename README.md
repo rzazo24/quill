@@ -28,7 +28,7 @@ Principles: behaviour is evidence, **missing data is not** (a key without a prof
 
 ## What it does
 
-- **Following**, **Mentions** (where the filter earns its keep), **Me** (your account, your Clave connection, the filter settings, your own notes) and any **thread**.
+- **Following** (with what the people you follow repost, judged by the filter like everything else), **Mentions** (where the filter earns its keep), **Me** (your account, your Clave connection, the filter settings, your own notes) and any **thread**.
 - **In-app notifications**: a number on *Mentions*, new notes marked, and a list of who reacted to your notes.
 - **React** with one tap; what you already reacted to or replied to is marked; **reply** and **write a note** through a review screen that shows the exact text, kind, tags and relays before anything is asked of your signer.
 - **Help**: a page with folding sections (the filter, writing with Clave, settings, install), behind the ? button, in both languages.

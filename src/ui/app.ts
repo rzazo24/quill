@@ -19,7 +19,7 @@ import { detectLang, problemText, t, type Key, type Lang } from './i18n.js'
 import { renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type Review } from './sign-ui.js'
 import { installHint, type Env } from './install.js'
-import { parseFont, parseLang, parseSettings, parseWords, safeGet, safeSet, type FontSize, type KV } from './store.js'
+import { parseFont, parseLang, parseReposts, parseSettings, parseWords, safeGet, safeSet, type FontSize, type KV } from './store.js'
 import { addRelay, parseRelays, removeRelay } from '../net/relays.js'
 import { listState, loadPublishedRelays, relayListTemplate } from '../data/relaylist.js'
 
@@ -62,6 +62,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const defaultRelays = deps.relays ?? DEFAULT_RELAYS
   let relays = parseRelays(safeGet(kv, 'relays')) ?? defaultRelays
   let font: FontSize = parseFont(safeGet(kv, 'font'))
+  let showReposts = parseReposts(safeGet(kv, 'reposts'))
   let relayError: string | null = null
   const probes = new Map<string, 'testing' | 'up' | 'down'>()
   let published: string[] | null | undefined // the relay list on Nostr: undefined = not read (yet), null = none
@@ -149,7 +150,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   async function nameThem(items: Judged[]): Promise<void> {
-    const keys = [...items.flatMap((j) => [j.event.pubkey, ...mentionedKeys(j.event.content)]), ...(signer?.pubkey ? [signer.pubkey] : [])].filter((k) => !names.has(k))
+    const keys = [...items.flatMap((j) => [j.event.pubkey, ...(j.repostedBy ?? []), ...mentionedKeys(j.event.content)]), ...(signer?.pubkey ? [signer.pubkey] : [])].filter((k) => !names.has(k))
     if (!keys.length) return
     for (const [k, n] of await loadNames(fetcher, keys)) names.set(k, n)
   }
@@ -176,7 +177,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
           if (seenAt === null) loadSeen()
           act = await loadActivity(fetcher, ctx(), settings)
         }
-        const items = act ? act.notes : route.name === 'me' ? await loadMine(fetcher, ctx(), settings) : await loadFollowing(fetcher, ctx(), settings)
+        const items = act ? act.notes : route.name === 'me' ? await loadMine(fetcher, ctx(), settings) : await loadFollowing(fetcher, ctx(), settings, { reposts: showReposts })
         if (mine !== run) return
         await nameThem(act ? [...items, ...act.reactions] : items)
         if (route.name === 'me' && !names.has(me)) for (const [k, n] of await loadNames(fetcher, [me])) names.set(k, n)
@@ -235,6 +236,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
 
   function toggleSettings(): void { deps.setHash('#/settings/filter') } // the filter settings live in Settings
   function changeSettings(s: Settings): void { settings = s; safeSet(kv, 'settings', JSON.stringify(s)); void load() }
+  function changeReposts(on: boolean): void { showReposts = on; safeSet(kv, 'reposts', on ? null : '0'); void load() }
   function changeFont(f: FontSize): void { font = f; safeSet(kv, 'font', f); applyFont(); draw() }
   /** A new relay list: stored, handed to the network code, and everything is read again from it. */
   function changeRelays(list: string[]): void {
@@ -417,7 +419,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const helpPage = renderHelp(view(), helpOpen, (id, isOpen) => { if (isOpen) helpOpen.add(id); else helpOpen.delete(id) })
     const content: (HTMLElement | null)[] = route.name === 'help' ? [signArea, helpPage]
       : !me ? [loginForm, signArea]
-      : route.name === 'settings' ? [signArea, renderPrefs({ font, relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
+      : route.name === 'settings' ? [signArea, renderPrefs({ font, reposts: showReposts, onReposts: changeReposts, relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
         onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
       : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), statusEl, body, h('p', { class: 'foot' }, signOut)]

@@ -384,3 +384,35 @@ describe('quoted notes show where you came from', () => {
     expect(a.root.querySelector('.quoted-from')).toBeNull(); expect(a.text()).toContain('the note being quoted')
   })
 })
+
+describe('reposts of the people you follow', () => {
+  const original = ev(far, 'a note worth sharing', { created_at: 2000 })
+  const rp = ev(friend, JSON.stringify(original), { kind: 6, created_at: 1_900_000_000, tags: [['e', original.id], ['p', far]] })
+  const rp2 = ev(me, '', { kind: 6, created_at: 1_900_000_100, tags: [['e', original.id], ['p', far]] })
+  const feed = [...world, original, rp]
+  it('Following shows them, marked with who reposted, at the time of the repost', async () => {
+    const a = boot({ events: feed, stored: { me } }); await tick(150)
+    const note = [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('a note worth sharing'))!
+    expect(note.querySelector('.reposted')!.textContent).toBe('Ana reposted'); expect(note.querySelector('.reposted svg')).not.toBeNull()
+    const order = [...a.root.querySelectorAll('article.note, details.folded')].map((n) => n.textContent!); expect(order.findIndex((t) => t.includes('a note worth sharing'))).toBeLessThan(order.findIndex((t) => t.includes('a post from my friend')))
+  })
+  it('several reposters are one card: "Ana and 1 more reposted"', async () => {
+    const a = boot({ events: [...feed, rp2], stored: { me } }); await tick(150)
+    const notes = [...a.root.querySelectorAll('article.note')].filter((n) => n.textContent!.includes('a note worth sharing')); expect(notes).toHaveLength(1)
+    expect(notes[0]!.querySelector('.reposted')!.textContent).toMatch(/and 1 more reposted$/)
+  })
+  it('the filter still judges the note by its author: a stranger\'s reposted note is folded with the reason', async () => {
+    const a = boot({ events: feed, stored: { me } }); await tick(150)
+    expect(a.root.querySelector('details.folded')!.textContent).toContain('No path from you'); expect(a.root.querySelector('details.folded .reposted')!.textContent).toBe('Ana reposted')
+  })
+  it('can be switched off in Settings; the choice is remembered and the feed is rebuilt without them', async () => {
+    const a = boot({ events: feed, stored: { me } }); await tick(150); expect(a.text()).toContain('a note worth sharing')
+    await a.go('#/settings'); await tick(100); const box = [...a.root.querySelectorAll('.prefs label.check input')].find((i) => i.parentElement!.textContent!.includes('repost')) as HTMLInputElement
+    expect(box.checked).toBe(true); box.checked = false; box.dispatchEvent(new Event('change')); await tick(100)
+    expect(a.mem.get('reposts')).toBe('0'); await a.go('#/'); await tick(150); expect(a.text()).not.toContain('a note worth sharing'); expect(a.root.querySelector('.reposted')).toBeNull()
+    const again = boot({ events: feed, stored: { me, reposts: '0' } }); await tick(150); expect(again.text()).not.toContain('a note worth sharing')
+  })
+  it('reposts are only on Following, not in Mentions or Me', async () => {
+    const a = boot({ events: feed, stored: { me } }); await tick(100); await a.go('#/mentions'); await tick(150); expect(a.root.querySelector('.reposted')).toBeNull()
+  })
+})

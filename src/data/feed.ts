@@ -4,16 +4,22 @@ import { isReply, threadRefs } from '../core/thread.js'
 import { analyse, judge, judgeAll, type Context, type Judged, type Settings, DEFAULT_SETTINGS } from '../core/verdict.js'
 import { newestPerAuthor, nameOf } from './lists.js'
 import { queryAuthors, type Fetcher } from '../net/fetcher.js'
+import { fetchOriginals, loadRepostRefs, mergeFeed } from './reposts.js'
 
 export const FEED_LIMIT = 100
 const byNewest = (a: Event, b: Event) => b.created_at - a.created_at || (a.id < b.id ? -1 : 1)
 
-/** Root notes (not replies) of the people you follow and of you, newest first. */
-export async function loadFollowing(f: Fetcher, ctx: Context, settings: Settings = DEFAULT_SETTINGS): Promise<Judged[]> {
+/** Root notes (not replies) of the people you follow and of you, newest first; with `reposts`, also what they reposted (each note once, marked with who reposted it).
+ *  A reposted note is judged by the filter like any other, by ITS author: a repost does not vouch for it. */
+export async function loadFollowing(f: Fetcher, ctx: Context, settings: Settings = DEFAULT_SETTINGS, opts: { reposts?: boolean } = {}): Promise<Judged[]> {
   const authors = [...new Set([ctx.me, ...ctx.follows])]
   const events = await queryAuthors(f, { kinds: [1], limit: FEED_LIMIT }, authors)
   const roots = events.filter((e) => !isReply(e)).sort(byNewest).slice(0, FEED_LIMIT)
-  return judgeAll(roots, ctx, settings)
+  if (!opts.reposts) return judgeAll(roots, ctx, settings)
+  const refs = (await loadRepostRefs(f, authors, FEED_LIMIT).catch(() => [])).filter((r) => !ctx.muted.has(r.reposter))
+  const items = mergeFeed(roots, refs, await fetchOriginals(f, refs).catch(() => new Map()), FEED_LIMIT)
+  const by = new Map(items.map((i) => [i.event.id, i.repostedBy]))
+  return judgeAll(items.map((i) => i.event), ctx, settings).map((j) => ({ ...j, ...(by.get(j.event.id)?.length ? { repostedBy: by.get(j.event.id)! } : {}) }))
 }
 
 /** Notes that tag you (replies and mentions) from anyone: this is where the filter has work to do. */

@@ -30,6 +30,9 @@ export type FontSize = 'small' | 'normal' | 'large' | 'xlarge'
 export const FONT_SIZES: readonly FontSize[] = ['small', 'normal', 'large', 'xlarge']
 export const parseFont = (raw: string | null): FontSize => (FONT_SIZES as readonly string[]).includes(raw ?? '') ? (raw as FontSize) : 'normal'
 
+/** Reposts are shown unless the reader switched them off. */
+export const parseReposts = (raw: string | null): boolean => raw !== '0'
+
 export const parseLang = (raw: string | null): Lang | null => (raw === 'en' || raw === 'es' ? raw : null)
 
 export function parseWords(raw: string | null): string[] {

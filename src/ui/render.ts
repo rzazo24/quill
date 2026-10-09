@@ -49,6 +49,7 @@ function card(j: Judged, v: View, extra: Child[] = []): HTMLElement {
   return h('article', { class: v.isNew?.(event) ? 'note new' : 'note', 'data-id': event.id, ...(v.isNew?.(event) ? { 'data-new': t(v.lang, 'newMark') } : {}) },
     avatarEl(event.pubkey, v),
     h('div', { class: 'note-main' },
+      j.repostedBy?.length ? h('p', { class: 'reposted' }, icon('repost', 14), j.repostedBy.length > 1 ? t(v.lang, 'repostedMany', { who: nameOf(v, j.repostedBy[0]!), n: j.repostedBy.length - 1 }) : t(v.lang, 'repostedOne', { who: nameOf(v, j.repostedBy[0]!) })) : null,
       h('header', {},
         // name and time run together and may wrap onto two lines; the thread button stays at the top right, always
         h('span', { class: 'byline' },
@@ -139,7 +140,7 @@ export function renderHelp(v: View, open: ReadonlySet<string>, onToggle: (id: st
 export const SOURCE_URL = 'https://github.com/rzazo24/quill'
 
 export interface PrefsProps {
-  font: FontSize; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
+  font: FontSize; reposts: boolean; onReposts: (on: boolean) => void; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
   /** The list published on Nostr compared with this one, and what can be done about it. */
   list: { state: ListState; publishedCount: number; canSign: boolean; confirming: boolean }
   onAskPublish: () => void; onCancelPublish: () => void; onPublish: () => void; onUsePublished: () => void
@@ -154,6 +155,7 @@ export function renderPrefs(p: PrefsProps, v: View): HTMLElement {
     h('h3', {}, t(v.lang, 'fontTitle')),
     h('div', { class: 'seg', role: 'group', 'aria-label': t(v.lang, 'fontTitle') }, ...FONT_SIZES.map((f) =>
       h('button', { type: 'button', class: `size-${f}`, 'aria-pressed': String(p.font === f), onClick: () => { if (p.font !== f) p.onFont(f) } }, t(v.lang, `font_${f}` as Parameters<typeof t>[1])))),
+    h('label', { class: 'check' }, h('input', { type: 'checkbox', ...(p.reposts ? { checked: true } : {}), onChange: (e: Event) => p.onReposts((e.target as HTMLInputElement).checked) }), t(v.lang, 'showReposts')),
     h('h3', {}, t(v.lang, 'relaysTitle')), h('p', { class: 'meta' }, t(v.lang, 'relaysHelp')),
     h('ul', { class: 'relay-list' }, ...p.relays.map((u) => h('li', {},
       h('span', { class: 'url' }, u.replace(/^wss:\/\//, '')),
