@@ -20,6 +20,7 @@ let code = 0
 try {
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded', timeout: 20000 })
   await page.click('button:has-text("Connect Clave")') // opens the panel (the bunker:// address comes first)
+  await page.click('.by-link summary') // "Use a link instead" starts closed
   await page.click('.by-link button:has-text("Connect Clave")') // the link way
   const href = (await page.locator('a.button').getAttribute('href')) ?? ''
   const uri = decodeURIComponent(href.replace(/^.*\?uri=/, ''))
