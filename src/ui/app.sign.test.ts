@@ -347,3 +347,31 @@ describe('adopting the published relay list happens once', () => {
     expect([...second.root.querySelectorAll('.relay-list .url')].map((x) => x.textContent)).toEqual(['x.example', 'y.example'])
   })
 })
+
+describe('the write button', () => {
+  const fab = (a: ReturnType<typeof boot>) => a.root.querySelector('button.fab') as HTMLButtonElement | null
+  it('is a round button over the page, only with a signer connected, and nothing is left at the top of the feed', async () => {
+    const out = boot({ signer: fakeSigner() }); await tick(100); expect(fab(out)).toBeNull() // not connected: nothing to write with
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg); await a.go('#/'); await tick(80)
+    expect(fab(a)).not.toBeNull(); expect(fab(a)!.getAttribute('aria-label')).toBe('Write a note'); expect(fab(a)!.querySelector('svg')).not.toBeNull(); expect(fab(a)!.textContent).toBe('')
+    expect(a.root.querySelector('main.view .compose-start')).toBeNull(); expect(a.root.querySelector('.sheet')).toBeNull()
+  })
+  it('is on the reading pages and Me, not on Settings or Help', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)
+    for (const [hash, shown] of [['#/', true], ['#/mentions', true], ['#/me', true], ['#/settings', false], ['#/help', false]] as const) { await a.go(hash); await tick(80); expect(fab(a) !== null, hash).toBe(shown) }
+  })
+  it('opens the writing panel on top of the page; Cancel closes it and the button comes back', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg); await a.go('#/'); await tick(80)
+    fab(a)!.click(); await tick(60)
+    const sheet = a.root.querySelector('.sheet')!; expect(sheet.querySelector('textarea')).not.toBeNull(); expect(sheet.querySelector('.composer')).not.toBeNull(); expect(fab(a)).toBeNull()
+    expect(document.activeElement).toBe(sheet.querySelector('textarea'))
+    await click(a.root, 'Cancel'); expect(a.root.querySelector('.sheet')).toBeNull(); expect(fab(a)).not.toBeNull()
+  })
+  it('writing, the review step and replying all happen in the panel', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg); await a.go('#/'); await tick(80)
+    fab(a)!.click(); await tick(60); const ta = a.root.querySelector('.sheet textarea') as HTMLTextAreaElement; ta.value = 'hello from the button'; ta.dispatchEvent(new Event('input'))
+    await click(a.root, 'Review'); expect(a.root.querySelector('.sheet .review')).not.toBeNull(); expect(a.root.querySelector('.sheet .preview')!.textContent).toBe('hello from the button')
+    await click(a.root, 'Publish'); await tick(120); expect(a.pub.sent).toHaveLength(1); expect(a.pub.sent[0]!.event.content).toBe('hello from the button'); expect(a.root.querySelector('.sheet')).toBeNull()
+    await click(a.root, 'Reply'); expect(a.root.querySelector('.sheet .composer .replying')).not.toBeNull(); expect(fab(a)).toBeNull()
+  })
+})

@@ -80,7 +80,6 @@ h2.section { font-size: 1.05rem; margin-top: 8px } .foot { margin: 8px 0 0 }
 .summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 10px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; color: var(--muted); font-size: .85rem }
 .summary .counts strong { color: var(--text); font-weight: 600 }
 .more { width: 100%; margin-top: 4px }
-.compose-start { width: 100%; text-align: left; color: var(--muted); background: var(--bg); min-height: 48px; padding: 0 14px }
 .back { display: inline-flex; align-items: center; gap: 6px; justify-self: start; min-height: 36px; padding: 0 12px; background: var(--btn); border: 1px solid var(--border); border-radius: 8px; color: var(--text); text-decoration: none; font-size: .9rem } h3 { font-size: 1rem; color: var(--muted) }
 .reply { margin-left: 8px; padding-left: 10px; border-left: 2px solid var(--border); display: grid; gap: 8px; margin-top: 8px }
 
@@ -182,3 +181,8 @@ button.icon.on { color: var(--accent); border-color: var(--accent); background: 
 /* the note a quoted-note button was tapped from, above the note it opened */
 .quoted-from { display: grid; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid var(--border) }
 .quoted-from > .meta { margin: 0 }
+
+/* write: a round button over the page, and the panel it opens */
+.fab { position: fixed; z-index: 6; right: max(16px, calc((100% - var(--col)) / 2 + 16px)); bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) * .5 + 16px); width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: var(--accent); border-color: var(--accent); color: #04211d; box-shadow: 0 4px 16px rgba(0,0,0,.5) }
+.sheet { position: fixed; inset: 0; z-index: 9; display: flex; align-items: flex-start; justify-content: center; padding: calc(env(safe-area-inset-top) + 56px) 16px 16px; background: rgba(5,8,12,.72); overflow: auto }
+.sheet > * { width: min(100%, var(--col)); box-sizing: border-box; padding: 14px; border-radius: 14px; background: var(--panel); border: 1px solid var(--border); max-height: 100%; overflow: auto }

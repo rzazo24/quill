@@ -42,7 +42,7 @@ export interface SignUiHandlers {
 const excerpt = (e: NostrEvent) => cleanText(e.content, 140).replace(/\s+/g, ' ')
 
 /** `where`: on the Me page (and the login screen) the connection itself is shown; on the reading pages only what is needed to write, or a hint to connect. */
-export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, signerConfigured: boolean, where: 'me' | 'feed' = 'me'): HTMLElement | null {
+export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, signerConfigured: boolean, where: 'me' | 'feed' = 'me', fab = false): HTMLElement | null {
   if (!signerConfigured) return null
   const parts: (HTMLElement | null)[] = []
   const toast: (HTMLElement | null)[] = []
@@ -57,8 +57,9 @@ export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, sign
     // while the signer works: a popup that stays as long as the wait lasts (it does not fade) and goes away when it is over
     if (s.step) parts.push(h('div', { class: 'popup stay', role: 'status' }, h('span', {}, t(v.lang, `step_${s.step}` as Parameters<typeof t>[1])), s.step === 'waiting' ? h('button', { type: 'button', class: 'link', onClick: hd.cancelSigning }, t(v.lang, 'cancel')) : null))
     else if (s.result) toast.push(renderResult(s.result, s.relays, hd, v))
-    else if (s.review) parts.push(renderReview(s, hd, v))
-    else parts.push(renderComposer(s, hd, v))
+    else if (s.review) parts.push(sheet(renderReview(s, hd, v)))
+    else if (s.composer) parts.push(sheet(renderComposer(s, hd, v)))
+    else if (fab) parts.push(h('button', { type: 'button', class: 'fab', 'aria-label': t(v.lang, 'newNote').replace(/…$/, ''), title: t(v.lang, 'newNote').replace(/…$/, ''), onClick: hd.startNote }, icon('pen', 24)))
   }
   // what is happening shows at the bottom of the screen, where it is seen wherever the reader has scrolled to
   if (toast.some(Boolean)) parts.push(h('div', { class: 'toast' }, ...toast))
@@ -88,9 +89,12 @@ function renderConnect(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement
   )
 }
 
+/** Writing happens on top of the page, not in the middle of it: a panel at the top of the screen over a dimmed background, so the keyboard never covers it and the feed keeps its place. */
+const sheet = (inner: HTMLElement): HTMLElement => h('div', { class: 'sheet' }, inner)
+
 function renderComposer(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement {
   const c = s.composer
-  if (!c) return h('button', { type: 'button', class: 'compose-start', onClick: hd.startNote }, t(v.lang, 'newNote'))
+  if (!c) return h('div', {})
   const area = h('textarea', { rows: '4', placeholder: t(v.lang, 'newNote'), 'aria-label': t(v.lang, c.mode === 'reply' ? 'reply' : 'newNote'), onInput: (e: Event) => { hd.edit((e.target as HTMLTextAreaElement).value); count.textContent = t(v.lang, 'chars', { n: [...(e.target as HTMLTextAreaElement).value].length, max: MAX_NOTE_CHARS }) } })
   area.value = c.text
   const count = h('small', {}, t(v.lang, 'chars', { n: [...c.text].length, max: MAX_NOTE_CHARS }))

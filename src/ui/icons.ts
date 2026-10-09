@@ -10,6 +10,8 @@ const PATHS = {
   check: ['M5 12.5l4.5 4.5L19 7.5'],
   /** a chevron pointing left: go back */
   back: ['M15 18l-6-6 6-6'],
+  /** a pencil: write */
+  pen: ['M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3Z'],
   /** a circle with a question mark: help */
   help: ['M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z', 'M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3', 'M12 17h.01'],
   /** a cog: settings */
