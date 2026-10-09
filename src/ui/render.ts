@@ -18,16 +18,16 @@ export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: 
 export const nameOf = (v: View, pubkey: string): string => v.names.get(pubkey) ?? shortNpub(pubkey)
 
 /** The text of a note: plain text, readable references to people and notes, and links shown in full. Never markup. */
-/** The way to a thread, the same everywhere: in a note's header and when a note quotes another. */
-export function threadChip(href: string, v: View): HTMLElement {
-  return h('a', { class: 'thread-link', href }, icon('thread', 14), t(v.lang, 'thread'))
+/** The way to a thread: "Thread" in a note's header (this note's conversation) and "Quoted note" where the text points at another note, so the two are never confused. */
+export function threadChip(href: string, v: View, label: 'thread' | 'quotedNote' = 'thread'): HTMLElement {
+  return h('a', { class: 'thread-link', href }, icon('thread', 14), t(v.lang, label))
 }
 
 export function renderContent(raw: string, v: View): DocumentFragment {
   const frag = document.createDocumentFragment()
   for (const part of refs(cleanText(raw, 4000))) {
     if (part.type === 'person') frag.append(h('a', { class: 'ref', href: '#/mentions' }, '@' + nameOf(v, part.pubkey)))
-    else if (part.type === 'note') frag.append(threadChip(`#/note/${part.id}`, v))
+    else if (part.type === 'note') frag.append(threadChip(`#/note/${part.id}`, v, 'quotedNote'))
     else for (const seg of segments(part.value)) {
       frag.append(seg.type === 'link' ? h('a', { class: 'ext', href: seg.href, rel: 'noopener noreferrer nofollow', target: '_blank' }, seg.value) : seg.value)
     }

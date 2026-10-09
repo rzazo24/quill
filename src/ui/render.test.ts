@@ -43,19 +43,19 @@ describe('references', () => {
     const refs = [...el.querySelectorAll('a.ref, a.thread-link')].map((a) => [a.textContent, a.getAttribute('href')])
     expect(refs[0]).toEqual(['@Ana', '#/mentions'])
     expect(refs[1]![0]).toMatch(/^@npub1/)
-    expect([refs[2]![0]!.trim(), refs[2]![1]]).toEqual(['Thread', '#/note/' + 'e'.repeat(64)])
+    expect([refs[2]![0]!.trim(), refs[2]![1]]).toEqual(['Quoted note', '#/note/' + 'e'.repeat(64)])
   })
 })
 
 describe('the thread button looks the same everywhere', () => {
   const chipOf = (el: Element) => el.querySelector('a.thread-link')!
-  it('the header chip and the chip for a quoted note are the same component: same markup, same icon, only the address differs', () => {
+  it('the header chip and the chip for a quoted note are the same component (same markup and icon) but not the same words, so the two are never confused', () => {
     const quoting = renderJudged(shown(ev(pk('a'), `see nostr:${nip19.noteEncode('e'.repeat(64))}`)), v)
     const headerChip = quoting.querySelector('header a.thread-link')!, inlineChip = quoting.querySelector('.body a.thread-link')!
     expect(headerChip).not.toBeNull(); expect(inlineChip).not.toBeNull()
-    const strip = (c: Element) => c.outerHTML.replace(/href="[^"]*"/, 'href=""')
+    const strip = (c: Element) => c.outerHTML.replace(/href="[^"]*"/, 'href=""').replace(/(<\/svg>).*(<\/a>)/, '$1$2')
     expect(strip(inlineChip)).toBe(strip(headerChip))
-    expect(headerChip.querySelector('svg.icon path')).not.toBeNull(); expect(headerChip.textContent).toBe('Thread')
+    expect(headerChip.querySelector('svg.icon path')).not.toBeNull(); expect(headerChip.textContent).toBe('Thread'); expect(inlineChip.textContent).toBe('Quoted note')
     expect(quoting.textContent).not.toContain('↪') // no text arrow standing in for an icon
   })
   it('in a card the header is always [name and time][thread button], however long the name, and the name is never cut', () => {
