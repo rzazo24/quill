@@ -493,3 +493,16 @@ describe('the loading message takes no room', () => {
     await tick(1500); expect(a.root.querySelector('.status.loading')).toBeNull(); expect(a.text()).toContain('a post from my friend')
   })
 })
+
+describe('the refresh button while loading', () => {
+  const refresh = (a: ReturnType<typeof boot>) => a.root.querySelector('header.top button[aria-label="Refresh"]') as HTMLButtonElement
+  it('turns (and says it is busy) while the notes load, and stops when they are there', async () => {
+    const a = boot({ stored: { me }, delayMs: 60 }); await tick(30)
+    expect(refresh(a).classList.contains('spinning')).toBe(true); expect(refresh(a).getAttribute('aria-busy')).toBe('true')
+    await tick(1500); expect(a.text()).toContain('a post from my friend'); expect(refresh(a).classList.contains('spinning')).toBe(false); expect(refresh(a).hasAttribute('aria-busy')).toBe(false)
+  })
+  it('turns again when it is pressed, and still reads everything again', async () => {
+    const a = boot({ stored: { me }, delayMs: 40 }); await tick(1200); const before = a.calls.n
+    refresh(a).click(); await tick(20); expect(refresh(a).classList.contains('spinning')).toBe(true); await tick(1200); expect(refresh(a).classList.contains('spinning')).toBe(false); expect(a.calls.n).toBeGreaterThan(before)
+  })
+})
