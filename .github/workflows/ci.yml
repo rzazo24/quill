@@ -1,0 +1,32 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # The signer tests run against a real relay, built from its repository (default branch).
+      - uses: actions/checkout@v7
+        with:
+          repository: rzazo24/nostr-relay-khatru
+          path: relay
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: relay/go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Build the relay
+        working-directory: relay
+        run: CGO_ENABLED=1 go build -o "$GITHUB_WORKSPACE/relay-bin" .
+      - run: npm ci
+      - name: Type-check and build
+        run: npm run build
+      - name: Test
+        run: npm test
+        env:
+          RELAY_BIN: ${{ github.workspace }}/relay-bin
