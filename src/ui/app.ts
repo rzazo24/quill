@@ -5,7 +5,7 @@ import { hashtagTags, mentionTags, mergeTags, reactionTags, replyTags } from '..
 import { parseIdentity } from '../core/identity.js'
 import { mentionedKeys, shortNpub } from '../core/refs.js'
 import { judgeAll, tally, type Judged, type Settings } from '../core/verdict.js'
-import { loadFollowing, loadMentions, loadMine, loadNames, loadThread, type Thread, type ThreadNode } from '../data/feed.js'
+import { loadFollowing, loadMentions, loadMine, loadNames, loadNote, loadThread, type Thread, type ThreadNode } from '../data/feed.js'
 import { Engagement, loadEngagement, normReaction } from '../data/engaged.js'
 import { countNew, groupReactions, loadActivity, type Activity } from '../data/activity.js'
 import { contextOf, loadSession, type Session } from '../data/session.js'
@@ -39,16 +39,17 @@ export interface Deps {
   onPoll?: (cb: () => void) => void
 }
 
-type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'help' } | { name: 'note'; id: string }
+type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'help' } | { name: 'note'; id: string; from?: string }
 export function parseRoute(hash: string): Route {
-  const m = /^#\/note\/(.+)$/.exec(hash)
+  const m = /^#\/note\/([^?]+)(?:\?from=([^&]*))?$/i.exec(hash)
   if (m) {
-    const raw = m[1]!
-    if (/^[0-9a-f]{64}$/i.test(raw)) return { name: 'note', id: raw.toLowerCase() }
+    const raw = m[1]!, from = /^[0-9a-f]{64}$/i.test(m[2] ?? '') ? m[2]!.toLowerCase() : undefined // the note this one was opened from (a quoted-note chip), if any
+    const note = (id: string): Route => ({ name: 'note', id, ...(from && from !== id ? { from } : {}) })
+    if (/^[0-9a-f]{64}$/i.test(raw)) return note(raw.toLowerCase())
     try {
       const d = nip19.decode(raw)
-      if (d.type === 'note') return { name: 'note', id: d.data }
-      if (d.type === 'nevent') return { name: 'note', id: d.data.id }
+      if (d.type === 'note') return note(d.data)
+      if (d.type === 'nevent') return note(d.data.id)
     } catch { /* not a note id */ }
   }
   return hash === '#/mentions' ? { name: 'mentions' } : hash === '#/me' ? { name: 'me' } : hash === '#/help' ? { name: 'help' } : hash === '#/settings' ? { name: 'settings' } : hash === '#/settings/filter' ? { name: 'settings', focus: 'filter' } : { name: 'following' }
@@ -164,10 +165,10 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     let content: HTMLElement
     try {
       if (route.name === 'note') {
-        const th = await loadThread(fetcher, route.id, ctx(), settings)
+        const [th, source] = await Promise.all([loadThread(fetcher, route.id, ctx(), settings), route.from ? loadNote(fetcher, route.from, ctx(), settings).catch(() => null) : Promise.resolve(null)])
         if (mine !== run) return
-        if (!th) content = h('p', { class: 'empty' }, t(lang, 'noNote'))
-        else { await nameThem([...(th.root ? [th.root] : []), ...flat(th.replies)]); content = threadView(th) }
+        if (!th) content = h('div', { class: 'stack' }, sourceCard(source), h('p', { class: 'empty' }, t(lang, 'noNote')))
+        else { await nameThem([...(th.root ? [th.root] : []), ...flat(th.replies), ...(source ? [source] : [])]); content = threadView(th, source) }
       } else {
         let act: Activity | null = null
         if (route.name === 'mentions') {
@@ -215,10 +216,15 @@ export function startApp(root: HTMLElement, deps: Deps): void {
 
   const flat = (nodes: ThreadNode[]): Judged[] => nodes.flatMap((n) => [n.item, ...flat(n.children)])
 
-  function threadView(th: Thread): HTMLElement {
+  /** Where you came from: the note whose "Quoted note" button was tapped. */
+  function sourceCard(source: Judged | null): HTMLElement | null {
+    return source ? h('section', { class: 'quoted-from' }, h('p', { class: 'meta' }, t(lang, 'quotedFrom')), renderJudged(source, view())) : null
+  }
+  function threadView(th: Thread, source: Judged | null = null): HTMLElement {
     const all = [...(th.root ? [th.root] : []), ...flat(th.replies)]
     return h('div', { class: 'stack' },
       h('a', { class: 'back', href: '#/' }, icon('back', 16), t(lang, 'back')),
+      sourceCard(source),
       renderSummary(tally(all), view(), toggleSettings),
       th.root ? renderJudged(th.root, view()) : null,
       h('h3', {}, `${th.total} ${t(lang, 'replies')}`),

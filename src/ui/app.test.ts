@@ -38,6 +38,9 @@ describe('routes', () => {
     expect(parseRoute('#/note/' + nip19.noteEncode(id))).toEqual({ name: 'note', id })
     expect(parseRoute('#/note/' + nip19.neventEncode({ id }))).toEqual({ name: 'note', id })
     expect(parseRoute('#/note/garbage')).toEqual({ name: 'following' })
+    const from = 'd'.repeat(64)
+    expect(parseRoute(`#/note/${id}?from=${from}`)).toEqual({ name: 'note', id, from }); expect(parseRoute(`#/note/${nip19.noteEncode(id)}?from=${from.toUpperCase()}`)).toEqual({ name: 'note', id, from })
+    expect(parseRoute(`#/note/${id}?from=garbage`)).toEqual({ name: 'note', id }); expect(parseRoute(`#/note/${id}?from=${id}`)).toEqual({ name: 'note', id }) // a bad or self reference is ignored, the note still opens
   })
 })
 
@@ -352,5 +355,32 @@ describe('the logo', () => {
       expect(link.textContent).toBe('Quill'); expect(link.querySelector('svg.logo')).not.toBeNull(); expect(link.querySelector('svg.logo')!.getAttribute('aria-hidden')).toBe('true'); expect(a.root.querySelectorAll('img').length).toBe(0)
       expect(link.querySelectorAll('svg.logo path')).toHaveLength(3); expect(link.firstElementChild!.tagName.toLowerCase()).toBe('svg') // before the name
     }
+  })
+})
+
+describe('quoted notes show where you came from', () => {
+  const quoted = ev(far, 'the note being quoted', { created_at: 2000 })
+  const quoting = ev(friend, `look at this nostr:${nip19.noteEncode(quoted.id)} please`, { created_at: 3000 })
+  const feed = (extra: Event[] = []) => [...world, quoted, quoting, ...extra]
+  it('the Quoted note button opens that note AND shows the note it was tapped from, above it', async () => {
+    const a = boot({ events: feed(), stored: { me } }); await tick(150)
+    const chip = [...a.root.querySelectorAll('article.note a.thread-link')].find((c) => c.textContent === 'Quoted note') as HTMLAnchorElement
+    expect(chip.getAttribute('href')).toBe(`#/note/${quoted.id}?from=${quoting.id}`)
+    await a.go(chip.getAttribute('href')!); await tick(150)
+    const source = a.root.querySelector('.quoted-from')!
+    expect(source.textContent).toContain('Quoted from this note:'); expect(source.textContent).toContain('look at this'); expect(a.text()).toContain('the note being quoted')
+    expect(a.text().indexOf('Quoted from this note')).toBeLessThan(a.text().indexOf('the note being quoted')) // the source first, then the opened note
+  })
+  it('a note opened without a source shows no such card', async () => {
+    const a = boot({ events: feed(), stored: { me } }); await tick(100); await a.go(`#/note/${quoted.id}`); await tick(150)
+    expect(a.root.querySelector('.quoted-from')).toBeNull(); expect(a.text()).toContain('the note being quoted')
+  })
+  it('if the quoted note cannot be found, the source is still shown with the message', async () => {
+    const a = boot({ events: [...world, quoting], stored: { me } }); await tick(100); await a.go(`#/note/${quoted.id}?from=${quoting.id}`); await tick(150)
+    expect(a.root.querySelector('.quoted-from')!.textContent).toContain('look at this'); expect(a.text()).toContain('Could not find that note')
+  })
+  it('a source that does not exist is simply left out', async () => {
+    const a = boot({ events: feed(), stored: { me } }); await tick(100); await a.go(`#/note/${quoted.id}?from=${'9'.repeat(64)}`); await tick(150)
+    expect(a.root.querySelector('.quoted-from')).toBeNull(); expect(a.text()).toContain('the note being quoted')
   })
 })

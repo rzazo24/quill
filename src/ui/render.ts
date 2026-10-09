@@ -23,11 +23,12 @@ export function threadChip(href: string, v: View, label: 'thread' | 'quotedNote'
   return h('a', { class: 'thread-link', href }, icon('thread', 14), t(v.lang, label))
 }
 
-export function renderContent(raw: string, v: View): DocumentFragment {
+/** `fromId`: the note this text belongs to; a quoted-note chip carries it so the page it opens can show where you came from. */
+export function renderContent(raw: string, v: View, fromId?: string): DocumentFragment {
   const frag = document.createDocumentFragment()
   for (const part of refs(cleanText(raw, 4000))) {
     if (part.type === 'person') frag.append(h('a', { class: 'ref', href: '#/mentions' }, '@' + nameOf(v, part.pubkey)))
-    else if (part.type === 'note') frag.append(threadChip(`#/note/${part.id}`, v, 'quotedNote'))
+    else if (part.type === 'note') frag.append(threadChip(`#/note/${part.id}${fromId && fromId !== part.id ? `?from=${fromId}` : ''}`, v, 'quotedNote'))
     else for (const seg of segments(part.value)) {
       frag.append(seg.type === 'link' ? h('a', { class: 'ext', href: seg.href, rel: 'noopener noreferrer nofollow', target: '_blank' }, seg.value) : seg.value)
     }
@@ -55,7 +56,7 @@ function card(j: Judged, v: View, extra: Child[] = []): HTMLElement {
           h('time', { datetime: new Date(event.created_at * 1000).toISOString() }, ago(v.lang, event.created_at, v.nowMs))),
         threadChip(`#/note/${event.id}`, v),
       ),
-      h('div', { class: 'body' }, renderContent(event.content, v)),
+      h('div', { class: 'body' }, renderContent(event.content, v, event.id)),
       ...extra, ...(v.actions?.(j) ?? []),
     ),
   )

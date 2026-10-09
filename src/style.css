@@ -177,3 +177,7 @@ button.icon.on { color: var(--accent); border-color: var(--accent); background: 
 /* the quill next to the name */
 .top h1 a.wordmark { display: inline-flex; align-items: center; gap: 8px }
 .wordmark .logo { flex: none }
+
+/* the note a quoted-note button was tapped from, above the note it opened */
+.quoted-from { display: grid; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid var(--border) }
+.quoted-from > .meta { margin: 0 }

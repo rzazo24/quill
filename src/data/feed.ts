@@ -73,6 +73,12 @@ export async function loadThread(f: Fetcher, id: string, ctx: Context, settings:
   }
 }
 
+/** One note, judged on its own (for "quoted from this note"). Null when no relay has it. */
+export async function loadNote(f: Fetcher, id: string, ctx: Context, settings: Settings = DEFAULT_SETTINGS): Promise<Judged | null> {
+  const [event] = await f.query({ ids: [id], kinds: [1], limit: 1 })
+  return event ? { event, verdict: judge(event, ctx, analyse([event]), settings) } : null
+}
+
 /** Display names for the keys on screen. Missing profiles simply have no name. */
 export async function loadNames(f: Fetcher, pubkeys: string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>()
