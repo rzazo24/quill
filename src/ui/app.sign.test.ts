@@ -387,3 +387,13 @@ describe('no empty card when everything floats', () => {
     await click(a.root, 'Cancel'); await a.go('#/me'); await tick(80); expect(area(a)!.className).toBe('sign') // "signing as …" is inside: a real card
   })
 })
+
+describe('the connection status on Me', () => {
+  it('is a status row: a dot, "Clave connected" with who it signs as, and Disconnect on the right as a careful (danger) button', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg); await a.go('#/me'); await tick(80)
+    const row = a.root.querySelector('.signing-as')!
+    expect([...row.children].map((c) => c.className)).toEqual(['dot', 'who', 'danger']); expect(row.querySelector('strong')!.textContent).toBe('Clave connected'); expect(row.querySelector('.who span')!.textContent).toContain('Signing as')
+    expect(row.lastElementChild!.textContent).toBe('Disconnect'); expect(row.querySelector('.dot')!.getAttribute('aria-hidden')).toBe('true')
+    ;(row.lastElementChild as HTMLElement).click(); await tick(80); expect(sg.log).toContain('disconnect'); expect(a.root.querySelector('.signing-as')).toBeNull()
+  })
+})

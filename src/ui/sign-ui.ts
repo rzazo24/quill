@@ -52,7 +52,10 @@ export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, sign
   if (where === 'feed' && s.signer !== 'connected') parts.push(h('p', { class: 'hint' }, h('a', { href: '#/me' }, t(v.lang, 'connectToWrite'))))
   if (where === 'me' && s.signer === 'disconnected' && !s.connectOpen) parts.push(h('p', {}, h('button', { type: 'button', onClick: hd.openConnect }, t(v.lang, 'connectSigner'))))
   if (where === 'me' && s.connectOpen && s.signer !== 'connected') parts.push(renderConnect(s, hd, v))
-  if (where === 'me' && s.signer === 'connected') parts.push(h('p', { class: 'signing-as' }, t(v.lang, 'signingAs', { who: s.who ?? '' }), ' ', h('button', { type: 'button', class: 'link', onClick: hd.disconnect }, t(v.lang, 'disconnectSigner'))))
+  if (where === 'me' && s.signer === 'connected') parts.push(h('div', { class: 'signing-as' },
+    h('span', { class: 'dot', 'aria-hidden': 'true' }),
+    h('div', { class: 'who' }, h('strong', {}, t(v.lang, 'signerConnected')), h('span', {}, t(v.lang, 'signingAs', { who: s.who ?? '' }))),
+    h('button', { type: 'button', class: 'danger', onClick: hd.disconnect }, t(v.lang, 'disconnectSigner'))))
   if (s.signer === 'connected') {
     // while the signer works: a popup that stays as long as the wait lasts (it does not fade) and goes away when it is over
     if (s.step) parts.push(h('div', { class: 'popup stay', role: 'status' }, h('span', {}, t(v.lang, `step_${s.step}` as Parameters<typeof t>[1])), s.step === 'waiting' ? h('button', { type: 'button', class: 'link', onClick: hd.cancelSigning }, t(v.lang, 'cancel')) : null))
