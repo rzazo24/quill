@@ -49,6 +49,9 @@ await p.goto('http://localhost:4173/', { waitUntil: 'domcontentloaded' }); await
 // "Loading…" is for screen readers only: it is not drawn
 { const box = await p.evaluate(() => { const s = document.createElement('p'); s.className = 'status loading'; s.innerHTML = '<span>Loading</span>'; document.querySelector('header.top').append(s); const r = s.getBoundingClientRect(); s.remove(); return [Math.round(r.width), Math.round(r.height)] })
   say(box[0] <= 1 && box[1] <= 1, `the loading message has no visible box (${box.join(' x ')} px)`) }
+// every button of the header (refresh, EN, ES, settings, help) is the same height
+{ const hs = await p.evaluate(() => [...document.querySelectorAll('header.top button')].map((b) => Math.round(b.getBoundingClientRect().height * 10) / 10))
+  say(hs.length >= 5 && new Set(hs).size === 1, `the header buttons are all the same height (${hs.join(', ')} px)`) }
 // the header: the logo and the name are at the same height as the buttons (the centre of what you see, not of a text line with room under it)
 await p.goto('http://localhost:4173/', { waitUntil: 'domcontentloaded' }); await p.waitForSelector('header.top svg.logo')
 const hd = await p.evaluate(() => { const mid = (r) => (r.top + r.bottom) / 2, rg = document.createRange(); rg.selectNodeContents([...document.querySelector('.wordmark').childNodes].find((x) => x.nodeType === 3)); return { logo: mid(document.querySelector('.wordmark .logo').getBoundingClientRect()), name: mid(rg.getBoundingClientRect()), button: mid(document.querySelector('header.top button.icon').getBoundingClientRect()) } })
