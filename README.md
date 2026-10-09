@@ -29,13 +29,14 @@ Principles: behaviour is evidence, **missing data is not** (a key without a prof
 ## What it does
 
 - **Following**, **Mentions** (where the filter earns its keep), **Me** (your account, your Clave connection, the filter settings, your own notes) and any **thread**.
-- **React** with one tap; **reply** and **write a note** through a review screen that shows the exact text, kind, tags and relays before anything is asked of your signer.
+- **In-app notifications**: a number on *Mentions*, new notes marked, and a list of who reacted to your notes.
+- **React** with one tap; what you already reacted to or replied to is marked; **reply** and **write a note** through a review screen that shows the exact text, kind, tags and relays before anything is asked of your signer.
 - English and Spanish; dark theme; mobile first, and fine on a desktop.
 - Installable as an app on iPhone and Android.
 
 ### What it does not do (on purpose, or not yet)
 
-No direct messages, zaps, search, lists, media or long-form articles. The relay list is fixed (six public relays), not read per author (NIP-65). No system notifications (they would need a service worker and push). No offline mode: the notes come live from the relays, so a cached copy would only show an empty shell.
+No direct messages, zaps, search, lists, media or long-form articles. The relay list is fixed (six public relays), not read per author (NIP-65). No system notifications (they would need a service worker and push); instead, while the app is open it looks once a minute and shows a number on *Mentions* for what is new since your last visit (replies, mentions and reactions to your notes; whatever the filter would hide is not counted, it is listed apart). No offline mode: the notes come live from the relays, so a cached copy would only show an empty shell.
 
 ## Writing: Quill never sees your private key
 

@@ -3,13 +3,14 @@ import type { Child } from './dom.js'
 import { h } from './dom.js'
 import { refs, shortNpub } from '../core/refs.js'
 import { avatarOf } from '../core/avatar.js'
+import { showReaction, type ReactionGroup } from '../data/activity.js'
 import { icon } from './icons.js'
 import { cleanText, segments } from '../core/text.js'
 import type { Judged, RuleId, Settings } from '../core/verdict.js'
 import type { ThreadNode } from '../data/feed.js'
 import { ago, reason, t, tallyLabel, type Lang } from './i18n.js'
 
-export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; actions?: (j: Judged) => Child[] }
+export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; actions?: (j: Judged) => Child[]; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
 
 export const nameOf = (v: View, pubkey: string): string => v.names.get(pubkey) ?? shortNpub(pubkey)
 
@@ -41,7 +42,7 @@ export function avatarEl(pubkey: string, v: View, size: 'md' | 'lg' = 'md'): HTM
 
 function card(j: Judged, v: View, extra: Child[] = []): HTMLElement {
   const { event } = j
-  return h('article', { class: 'note', 'data-id': event.id },
+  return h('article', { class: v.isNew?.(event) ? 'note new' : 'note', 'data-id': event.id, ...(v.isNew?.(event) ? { 'data-new': t(v.lang, 'newMark') } : {}) },
     avatarEl(event.pubkey, v),
     h('div', { class: 'note-main' },
       h('header', {},
@@ -96,6 +97,22 @@ export function renderSummary(tally: { shown: number; hidden: number; byRule: Pa
       parts.length ? h('span', { class: 'parts' }, ` — ${parts.join(', ')}`) : null),
     h('button', { type: 'button', class: 'link', onClick: onSettings }, t(v.lang, 'filterSettings')),
   )
+}
+
+/** "Reactions to your notes": one line per note, who reacted and with what; a line is marked when something in it is new. */
+export function renderReactionGroups(groups: ReactionGroup[], v: View): HTMLElement | null {
+  if (!groups.length) return null
+  return h('section', { class: 'reacted card' },
+    h('h2', {}, t(v.lang, 'reactionsTitle')),
+    h('ul', {}, ...groups.slice(0, 5).map((g) => {
+      const who = nameOf(v, g.by[0]!)
+      const said = g.by.length > 1 ? t(v.lang, 'reactedMany', { who, n: g.by.length - 1 }) : t(v.lang, 'reactedOne', { who })
+      return h('li', {},
+        h('a', { href: `#/note/${g.target.id}`, class: g.fresh ? 'reaction-line fresh' : 'reaction-line' },
+          h('span', { class: 'emojis', 'aria-hidden': 'true' }, g.emojis.join(' ')),
+          h('span', { class: 'what' }, h('strong', {}, said), h('q', {}, cleanText(g.target.content, 90).replace(/\s+/g, ' '))),
+          g.fresh ? h('span', { class: 'dot', 'aria-label': t(v.lang, 'newMark') }) : null))
+    })))
 }
 
 export interface SettingsPanelProps {

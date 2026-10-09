@@ -20,6 +20,7 @@ startApp(document.getElementById('app')!, {
   readClipboard: () => navigator.clipboard.readText(),
   checkVersion: async () => { try { const r = await fetch('/version.json', { cache: 'no-store' }); return isNewer(await r.json(), __BUILD__) } catch { return false } },
   onTick: (cb) => { setInterval(cb, 10 * 60_000) },
+  onPoll: (cb) => { setInterval(() => { if (document.visibilityState === 'visible') cb() }, 60_000) },
   reload: () => location.reload(),
   env: detectEnv(navigator as Navigator & { standalone?: boolean }, matchMedia('(display-mode: standalone)').matches),
   onVisible: (cb) => document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') cb() }),

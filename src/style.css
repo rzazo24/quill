@@ -122,3 +122,17 @@ button.icon { display: inline-grid; place-items: center; min-height: 36px; min-w
 /* what you already did to a note: the reaction you gave is lit, the reply shows a tick */
 .actions button.react.on { background: rgba(45,212,191,.18); border-color: var(--accent) }
 .actions button.link.on { color: var(--accent); border-color: var(--accent); display: inline-flex; align-items: center; gap: 5px }
+
+/* in-app notifications: a number on the Mentions tab, new notes marked, and who reacted to your notes */
+.tab { position: relative }
+.tab .badge { display: inline-block; min-width: 18px; margin-left: 6px; padding: 1px 5px; border-radius: 9px; background: var(--accent); color: #04211d; font-size: 11px; font-weight: 700; line-height: 16px; text-align: center }
+.note.new { border-left: 3px solid var(--accent) }
+.note.new::before { content: attr(data-new); display: inline-block; margin-bottom: 4px; padding: 0 7px; border-radius: 8px; background: rgba(45,212,191,.18); color: var(--accent); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em }
+.new-line { margin: 0; color: var(--accent) }
+.reacted h2 { margin: 0 0 8px; font-size: 14px }
+.reacted ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
+.reaction-line { display: flex; align-items: center; gap: 10px; padding: 6px 4px; color: inherit; text-decoration: none; border-radius: 8px }
+.reaction-line .emojis { font-size: 18px; flex: none }
+.reaction-line .what { display: grid; min-width: 0; flex: 1 }
+.reaction-line .what q { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; quotes: none }
+.reaction-line .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none }

@@ -19,14 +19,14 @@ const roots: HTMLElement[] = []
 function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean } } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
-  const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, base = relays(opts.events ?? world, opts.delayMs), calls = { n: 0 }
+  const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, base = relays(opts.events ?? world, opts.delayMs), calls = { n: 0 }
   startApp(root, {
-    fetcher: { query: (f) => { calls.n++; return base.query(f) } }, env: opts.env, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), reload: () => { reloads.n++ },
+    fetcher: { query: (f) => { calls.n++; return base.query(f) } }, env: opts.env, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), reload: () => { reloads.n++ },
     checkVersion: opts.newer ? async () => { asked.n++; return opts.newer!.value } : undefined, languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
     storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
   })
   const go = async (hash: string) => { location.hash = hash; listeners.forEach((l) => l()); await tick() }
-  return { root, go, mem, calls, reloads, asked, tick: () => ticks.forEach((t) => t()), comeBack: () => visible.forEach((v) => v()), text: () => root.textContent ?? '' }
+  return { root, go, mem, calls, reloads, asked, tick: () => ticks.forEach((t) => t()), poll: () => polls.forEach((t) => t()), comeBack: () => visible.forEach((v) => v()), text: () => root.textContent ?? '' }
 }
 afterEach(() => { roots.forEach((r) => r.remove()); roots.length = 0 })
 
@@ -183,5 +183,54 @@ describe('the app', () => {
     const a = boot({ stored: { me } }); await tick(80); await a.go('#/me')
     ;[...a.root.querySelectorAll('button')].find((b) => b.textContent === 'Sign out')!.click(); await tick(10)
     expect(a.text()).toContain('Read as…'); expect(a.mem.has('me')).toBe(false)
+  })
+})
+
+describe('notifications inside the app', () => {
+  const NOW = 10_000
+  const myNote = ev(me, 'my note', { created_at: 100 })
+  const base = (): Event[] => [list(me, 3, [['p', friend]]), list(friend, 3, []), ev(friend, 'hi', { kind: 0, content: JSON.stringify({ name: 'Ana' }) }), myNote]
+  const reply = (who: string, text: string, at: number) => ev(who, text, { created_at: at, tags: [['e', myNote.id, '', 'root'], ['p', me]] })
+  const react = (who: string, at: number, content = '❤️') => ev(who, content, { kind: 7, created_at: at, tags: [['e', myNote.id], ['p', me]] })
+  const badge = (a: ReturnType<typeof boot>) => a.root.querySelector('.tabbar .badge')?.textContent ?? null
+  const start = (events: Event[], seen: number | null = 5000) => boot({ events, clock: { now: NOW * 1000 }, stored: { me, ...(seen ? { [`seen:${me}`]: String(seen)} : {}) } })
+
+  it('shows a number on Mentions for what is new since the last visit, counting replies, mentions and reactions the filter lets through', async () => {
+    const a = start([...base(), reply(friend, 'new reply', 6000), reply(friend, 'old reply', 4000), react(friend, 6100)]); await tick(150)
+    expect(badge(a)).toBe('2') // the new reply + the reaction (the old reply is not new)
+  })
+  it('nothing the filter hides is counted', async () => {
+    const a = start([...base(), reply(far, 'buy my thing now', 6000), react(far, 6000, '🔥')]); await tick(150)
+    expect(badge(a)).toBeNull()
+  })
+  it('the number is capped at 9+', async () => {
+    const many = Array.from({ length: 12 }, (_, i) => reply(friend, `reply number ${i}`, 6000 + i)); const a = start([...base(), ...many]); await tick(150)
+    expect(badge(a)).toBe('9+')
+  })
+  it('the very first run does not greet with a pile: it starts counting from now', async () => {
+    const a = start([...base(), reply(friend, 'something older', 6000)], null); await tick(150)
+    expect(badge(a)).toBeNull(); expect(a.mem.get(`seen:${me}`)).toBe(String(NOW))
+  })
+  it('the periodic look picks up a new arrival, and opening Mentions clears the number and remembers the visit', async () => {
+    const events = [...base()]; const a = start(events); await tick(150); expect(badge(a)).toBeNull()
+    events.push(reply(friend, 'a fresh one', 9000)); a.poll(); await tick(150); expect(badge(a)).toBe('1')
+    await a.go('#/mentions'); await tick(150)
+    expect(badge(a)).toBeNull(); expect(a.mem.get(`seen:${me}`)).toBe(String(NOW))
+    expect(a.root.querySelector('article.note.new')?.textContent).toContain('a fresh one') // marked as new while you are looking at it
+  })
+  it('the Mentions view lists who reacted to your notes, and marks notes already seen as not new', async () => {
+    const a = start([...base(), react(friend, 6100, '🔥'), reply(friend, 'seen before', 4000)]); await tick(150); await a.go('#/mentions'); await tick(150)
+    const block = a.root.querySelector('.reacted')!; expect(block.textContent).toContain('Reactions to your notes'); expect(block.textContent).toContain('Ana reacted to your note'); expect(block.textContent).toContain('my note')
+    expect(block.querySelector('a.reaction-line.fresh')).not.toBeNull(); expect(block.querySelector('.emojis')!.textContent).toBe('🔥')
+    expect(block.querySelector('a')!.getAttribute('href')).toBe(`#/note/${myNote.id}`)
+    const seen = [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('seen before'))!; expect(seen.classList.contains('new')).toBe(false)
+  })
+  it('the line above the list says how many are new and how many new ones the filter hid', async () => {
+    const a = start([...base(), reply(friend, 'new reply', 6000), reply(far, 'buy my thing now', 6000)]); await tick(150); await a.go('#/mentions'); await tick(150)
+    expect(a.root.querySelector('.new-line')!.textContent).toBe('1 new · hidden by the filter: 1')
+  })
+  it('no number when you are reading as somebody who has nothing new, and no look is made while Mentions is open', async () => {
+    const a = start(base()); await tick(150); await a.go('#/mentions'); await tick(150)
+    const before = a.calls.n; a.poll(); await tick(60); expect(a.calls.n).toBe(before); expect(badge(a)).toBeNull(); expect(a.root.querySelector('.reacted')).toBeNull()
   })
 })

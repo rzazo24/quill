@@ -7,6 +7,7 @@ import { mentionedKeys, shortNpub } from '../core/refs.js'
 import { judgeAll, tally, type Judged, type Settings } from '../core/verdict.js'
 import { loadFollowing, loadMentions, loadMine, loadNames, loadThread, type Thread, type ThreadNode } from '../data/feed.js'
 import { Engagement, loadEngagement, normReaction } from '../data/engaged.js'
+import { countNew, groupReactions, loadActivity, type Activity } from '../data/activity.js'
 import { contextOf, loadSession, type Session } from '../data/session.js'
 import { DEFAULT_RELAYS, memo, type Fetcher } from '../net/fetcher.js'
 import { failedRelays, type Publisher } from '../net/publisher.js'
@@ -15,7 +16,7 @@ import { checkTemplate, MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
 import { icon } from './icons.js'
 import { detectLang, problemText, t, type Key, type Lang } from './i18n.js'
-import { avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
+import { renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type Review } from './sign-ui.js'
 import { installHint, type Env } from './install.js'
 import { parseLang, parseSettings, parseWords, safeGet, safeSet, type KV } from './store.js'
@@ -30,6 +31,8 @@ export interface Deps {
   env?: Env; onVisible?: (cb: () => void) => void
   /** Is there a newer build of the app on the server? Asked at start, whenever the app comes back to the foreground and on every `onTick`. */
   checkVersion?: () => Promise<boolean>; onTick?: (cb: () => void) => void; reload?: () => void
+  /** Called about once a minute while the page is visible: looks for new replies, mentions and reactions. */
+  onPoll?: (cb: () => void) => void
 }
 
 type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'note'; id: string }
@@ -80,12 +83,20 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let engagement = new Engagement() // what the reader already did to each note
   let scrollToTop = false // set when a different view is shown
   let updateReady = false
+  // activity around my notes: what is new since the last time the Mentions tab was open
+  const seenKey = () => `seen:${me}`
+  let seenAt: number | null = null // unix seconds of the last visit to Mentions
+  let markFrom: number | null = null // while Mentions is open: notes newer than this are marked as new
+  let badge = 0
+  const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
+  const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
+  const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
 
   const barFor = (e: NostrEvent) => reactionBar(e, (emoji) => void react(e, emoji), () => startReply(e), view(), engagement.of(e.id))
   const actions = (j: Judged) => (signer?.state === 'connected' ? [barFor(j.event)] : [])
   /** The lists are built once and reused between redraws, so a bar already on screen keeps what it showed: redo the bar(s) of this note in place. */
   const rebar = (e: NostrEvent) => { for (const old of root.querySelectorAll(`article.note[data-id="${e.id}"] .actions`)) old.replaceWith(barFor(e)) }
-  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.() })
+  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
   const ctx = () => contextOf(session!, { mutedWords: words, mutedKeys: [] })
   const who = () => (signer?.pubkey ? nameOf(view(), signer.pubkey) : '')
 
@@ -109,7 +120,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (!(await ensureSession()) || mine !== run) return
     const route = parseRoute(deps.location.hash)
     const key = JSON.stringify(route)
-    if (key !== shownRoute) { body = null; shownRoute = key; scrollToTop = true }
+    if (key !== shownRoute) { body = null; shownRoute = key; scrollToTop = true; if (route.name !== 'mentions') markFrom = null }
     status = t(lang, 'loadingFeed'); draw()
     let content: HTMLElement
     try {
@@ -119,15 +130,40 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         if (!th) content = h('p', { class: 'empty' }, t(lang, 'noNote'))
         else { await nameThem([...(th.root ? [th.root] : []), ...flat(th.replies)]); content = threadView(th) }
       } else {
-        const items = route.name === 'mentions' ? await loadMentions(fetcher, ctx(), settings) : route.name === 'me' ? await loadMine(fetcher, ctx(), settings) : await loadFollowing(fetcher, ctx(), settings)
+        let act: Activity | null = null
+        if (route.name === 'mentions') {
+          if (seenAt === null) loadSeen()
+          act = await loadActivity(fetcher, ctx(), settings)
+        }
+        const items = act ? act.notes : route.name === 'me' ? await loadMine(fetcher, ctx(), settings) : await loadFollowing(fetcher, ctx(), settings)
         if (mine !== run) return
-        await nameThem(items)
+        await nameThem(act ? [...items, ...act.reactions] : items)
         if (route.name === 'me' && !names.has(me)) for (const [k, n] of await loadNames(fetcher, [me])) names.set(k, n)
-        content = route.name === 'me' ? renderList(items, view()) : h('div', { class: 'stack' }, renderSummary(tally(items), view(), toggleSettings), renderList(items, view()))
+        if (act) {
+          if (markFrom === null) markFrom = seenAt ?? nowSec() // first ever visit: nothing is "new"
+          const fresh = countNew(act, markFrom)
+          markSeen()
+          const block = renderReactionGroups(groupReactions(act, markFrom), view())
+          const line = fresh.shown || fresh.hidden ? h('p', { class: 'meta new-line', role: 'status' }, [fresh.shown ? t(lang, 'newItems', { n: fresh.shown }) : '', fresh.hidden ? t(lang, 'newHidden', { n: fresh.hidden }) : ''].filter(Boolean).join(' · ')) : null
+          content = h('div', { class: 'stack' }, renderSummary(tally(items), view(), toggleSettings), line, block, renderList(items, view()))
+        } else content = route.name === 'me' ? renderList(items, view()) : h('div', { class: 'stack' }, renderSummary(tally(items), view(), toggleSettings), renderList(items, view()))
       }
     } catch { content = h('p', { class: 'empty' }, t(lang, 'noNote')) }
     if (mine !== run) return
     status = null; body = content; lastLoadAt = deps.nowMs?.() ?? Date.now(); draw()
+    if (route.name !== 'mentions') void poll()
+  }
+
+  /** Looks for what is new around my notes since the last visit to Mentions and shows how many things the filter lets through as a number on the tab. */
+  async function poll(): Promise<void> {
+    if (!me || !session || parseRoute(deps.location.hash).name === 'mentions') return
+    if (seenAt === null) loadSeen()
+    if (seenAt === null) { markSeen(); return } // first run: start counting from now, do not greet with a pile
+    try {
+      fetcher.clear()
+      const n = countNew(await loadActivity(fetcher, ctx(), settings), seenAt).shown
+      if (n !== badge) { badge = n; draw() }
+    } catch { /* a failed look says nothing */ }
   }
 
   async function checkUpdate(): Promise<void> {
@@ -275,7 +311,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     // the old one, which then collapses to zero.
     const kept = root.querySelector('main.view')?.scrollTop ?? 0
     const route = parseRoute(deps.location.hash)
-    const tab = (name: 'following' | 'mentions' | 'me', href: string) => h('a', { href, class: route.name === name ? 'tab on' : 'tab', ...(route.name === name ? { 'aria-current': 'page' } : {}), onClick: (e: Event) => { if (route.name === name) { e.preventDefault(); refresh() } } }, t(lang, name))
+    const tab = (name: 'following' | 'mentions' | 'me', href: string) => h('a', { href, class: route.name === name ? 'tab on' : 'tab', ...(route.name === name ? { 'aria-current': 'page' } : {}), onClick: (e: Event) => { if (route.name === name) { e.preventDefault(); refresh() } } }, t(lang, name), name === 'mentions' && badge > 0 ? h('span', { class: 'badge', role: 'status', 'aria-label': t(lang, 'newItems', { n: badge }) }, badge > 9 ? '9+' : String(badge)) : null)
     const input = h('input', { type: 'text', placeholder: t(lang, 'loginPlaceholder'), autocomplete: 'off', spellcheck: 'false', 'aria-label': t(lang, 'loginTitle') })
     const loginForm = h('form', { class: 'login card', onSubmit: (e: Event) => { e.preventDefault(); login(input.value) } },
       h('p', { class: 'tagline' }, t(lang, 'tagline')), h('h2', {}, t(lang, 'loginTitle')), h('p', {}, t(lang, 'loginHelp')), input, ' ', h('button', { type: 'submit', class: 'primary' }, t(lang, 'loginButton')),
@@ -311,6 +347,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   // Coming back to the app after a while (an installed app stays alive in the background): show fresh notes, not what was there hours ago.
   deps.onVisible?.(() => { void checkUpdate(); if (me && !busy && (deps.nowMs?.() ?? Date.now()) - lastLoadAt > 120_000) refresh() })
   deps.onTick?.(() => { void checkUpdate() })
+  deps.onPoll?.(() => { if (!busy) void poll() })
   void checkUpdate()
   draw()
   void load()
