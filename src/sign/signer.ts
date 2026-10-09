@@ -158,13 +158,16 @@ export class Signer {
    * Sessions saved by older versions have no such key: those ask the signer, and keep asking for a couple of minutes while the user opens it. The saved
    * session is left alone when it fails.
    */
-  async resume(): Promise<boolean> {
+  async resume(hint?: string): Promise<boolean> {
     if (this.state === 'connected') return true
     const saved = this.load()
     if (!saved?.signerPubkey || !saved.relays?.length) return false
-    if (saved.userPubkey && HEX64.test(saved.userPubkey) && HEX64.test(saved.signerPubkey)) {
+    // `hint` is the account the user is reading as: for a session saved before the signer's key was stored, it stands in for it until the first signature
+    // confirms it (a wrong hint is refused there and is never saved).
+    const known = saved.userPubkey ?? hint
+    if (known && HEX64.test(known) && HEX64.test(saved.signerPubkey)) {
       this.bunker = BunkerSigner.fromBunker(hexToBytes(saved.clientSecret), { pubkey: saved.signerPubkey, relays: saved.relays, secret: null }, this.params())
-      this.pubkey = saved.userPubkey
+      this.pubkey = known
       this.set('connected')
       return true
     }
@@ -201,6 +204,8 @@ export class Signer {
     const event = await withTimeout(cancelled ? Promise.race([asked, cancelled]) : asked, timeoutMs, 'the signer')
     const ok = verifyEvent(event) && event.pubkey === this.pubkey && event.kind === t.kind && event.content === t.content && sameTags(event.tags, t.tags) && Math.abs(event.created_at - t.created_at) <= 300
     if (!ok) throw new Error('the signer returned an event that differs from what was asked, or is not signed by the connected key. It was discarded and nothing was published')
+    const saved = this.load()
+    if (saved && !saved.userPubkey) this.save({ ...saved, userPubkey: event.pubkey }) // now confirmed by a real signature: later reloads need no hint
     return { event, ms: this.now() - t0 }
   }
 

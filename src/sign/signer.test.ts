@@ -147,6 +147,29 @@ describe.skipIf(!bin)('Signer with a pretend Clave through a real relay', () => 
     await expect(page2.sign(note(), 8000)).rejects.toThrow(/not signed by the connected key|differs from what was asked/)
   }, 30_000)
 
+  it('a session saved by an older version resumes at once using the account being read as, and is upgraded by the first real signature', async () => {
+    const { fake, store } = await connected()
+    const old = JSON.parse(store.m.get('signer')!); delete old.userPubkey
+    const again = mem(); again.m.set('signer', JSON.stringify(old))
+    fake.behaviour.silentAboutIdentity = true
+    const page2 = new Signer({ kv: again.kv, relays: [relay.url] }); signers.push(page2)
+    const t0 = Date.now(); expect(await page2.resume(fake.userPk)).toBe(true)
+    expect(Date.now() - t0).toBeLessThan(500); expect(page2.pubkey).toBe(fake.userPk)
+    expect(JSON.parse(again.m.get('signer')!).userPubkey).toBeUndefined() // not trusted yet
+    await page2.sign(note('first after upgrade'), 8000)
+    expect(JSON.parse(again.m.get('signer')!).userPubkey).toBe(fake.userPk) // confirmed by a signature, now saved
+  }, 30_000)
+
+  it('a WRONG hint is refused at the first signature and never saved', async () => {
+    const { fake, store } = await connected()
+    const old = JSON.parse(store.m.get('signer')!); delete old.userPubkey
+    const again = mem(); again.m.set('signer', JSON.stringify(old))
+    const page2 = new Signer({ kv: again.kv, relays: [relay.url] }); signers.push(page2)
+    expect(await page2.resume(getPublicKey(generateSecretKey()))).toBe(true)
+    await expect(page2.sign(note(), 8000)).rejects.toThrow(/not signed by the connected key|differs from what was asked/)
+    expect(JSON.parse(again.m.get('signer')!).userPubkey).toBeUndefined(); void fake
+  }, 30_000)
+
   it('resume with nobody answering gives up with a clear error and leaves the saved session intact', async () => {
     const store = mem(); store.m.set('signer', JSON.stringify({ clientSecret: Buffer.from(generateSecretKey()).toString('hex'), signerPubkey: getPublicKey(generateSecretKey()), relays: [relay.url] }))
     const s = new Signer({ kv: store.kv, relays: [relay.url], timeouts: { resumeMs: 1500, attemptMs: 700 } }); signers.push(s)
