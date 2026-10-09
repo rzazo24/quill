@@ -3,6 +3,7 @@ import type { Child } from './dom.js'
 import { h } from './dom.js'
 import { refs, shortNpub } from '../core/refs.js'
 import { avatarOf } from '../core/avatar.js'
+import { icon } from './icons.js'
 import { cleanText, segments } from '../core/text.js'
 import type { Judged, RuleId, Settings } from '../core/verdict.js'
 import type { ThreadNode } from '../data/feed.js'
@@ -13,11 +14,16 @@ export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: 
 export const nameOf = (v: View, pubkey: string): string => v.names.get(pubkey) ?? shortNpub(pubkey)
 
 /** The text of a note: plain text, readable references to people and notes, and links shown in full. Never markup. */
+/** The way to a thread, the same everywhere: in a note's header and when a note quotes another. */
+export function threadChip(href: string, v: View): HTMLElement {
+  return h('a', { class: 'thread-link', href }, icon('thread', 14), t(v.lang, 'thread'))
+}
+
 export function renderContent(raw: string, v: View): DocumentFragment {
   const frag = document.createDocumentFragment()
   for (const part of refs(cleanText(raw, 4000))) {
     if (part.type === 'person') frag.append(h('a', { class: 'ref', href: '#/mentions' }, '@' + nameOf(v, part.pubkey)))
-    else if (part.type === 'note') frag.append(h('a', { class: 'ref', href: `#/note/${part.id}` }, '↪ ' + t(v.lang, 'thread')))
+    else if (part.type === 'note') frag.append(threadChip(`#/note/${part.id}`, v))
     else for (const seg of segments(part.value)) {
       frag.append(seg.type === 'link' ? h('a', { class: 'ext', href: seg.href, rel: 'noopener noreferrer nofollow', target: '_blank' }, seg.value) : seg.value)
     }
@@ -39,9 +45,11 @@ function card(j: Judged, v: View, extra: Child[] = []): HTMLElement {
     avatarEl(event.pubkey, v),
     h('div', { class: 'note-main' },
       h('header', {},
-        h('strong', {}, nameOf(v, event.pubkey)), ' ',
-        h('time', { datetime: new Date(event.created_at * 1000).toISOString() }, ago(v.lang, event.created_at, v.nowMs)), ' ',
-        h('a', { class: 'thread-link', href: `#/note/${event.id}` }, t(v.lang, 'thread')),
+        // name and time run together and may wrap onto two lines; the thread button stays at the top right, always
+        h('span', { class: 'byline' },
+          h('strong', {}, nameOf(v, event.pubkey)), ' ',
+          h('time', { datetime: new Date(event.created_at * 1000).toISOString() }, ago(v.lang, event.created_at, v.nowMs))),
+        threadChip(`#/note/${event.id}`, v),
       ),
       h('div', { class: 'body' }, renderContent(event.content, v)),
       ...extra, ...(v.actions?.(j) ?? []),

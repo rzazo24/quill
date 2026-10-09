@@ -12,6 +12,7 @@ import { failedRelays, type Publisher } from '../net/publisher.js'
 import { PipelineError, signAndPublish, type Published, type SignerApi, type Step } from '../sign/pipeline.js'
 import { checkTemplate, MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
+import { icon } from './icons.js'
 import { detectLang, problemText, t, type Key, type Lang } from './i18n.js'
 import { avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type Review } from './sign-ui.js'
@@ -135,7 +136,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   function threadView(th: Thread): HTMLElement {
     const all = [...(th.root ? [th.root] : []), ...flat(th.replies)]
     return h('div', { class: 'stack' },
-      h('a', { class: 'back', href: '#/' }, t(lang, 'back')),
+      h('a', { class: 'back', href: '#/' }, icon('back', 16), t(lang, 'back')),
       renderSummary(tally(all), view(), toggleSettings),
       th.root ? renderJudged(th.root, view()) : null,
       h('h3', {}, `${th.total} ${t(lang, 'replies')}`),
@@ -283,7 +284,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view()), h('h2', { class: 'section' }, t(lang, 'myNotes')), statusEl, body, h('p', { class: 'foot' }, signOut)]
       : [signArea, statusEl, body]
     const page: (HTMLElement | null)[] = [
-      h('header', { class: 'top' }, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('h1', {}, h('a', { href: '#/' }, 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline')), me ? h('button', { type: 'button', class: 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), onClick: refresh }, '↻') : null, pills),
+      h('header', { class: 'top' }, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('h1', {}, h('a', { href: '#/' }, 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline')), me ? h('button', { type: 'button', class: 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), onClick: refresh }, icon('refresh', 18)) : null, pills),
       h('main', { class: 'view' }, ...content),
       me ? h('nav', { class: 'tabbar' }, tab('following', '#/'), tab('mentions', '#/mentions'), tab('me', '#/me')) : null,
     ]

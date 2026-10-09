@@ -1,6 +1,6 @@
 /* Same family as the ephemeral chat and the relay's landing page: dark navy, teal accent, rounded cards. Mobile first: the base rules are for a phone,
    the media query at the end only widens things. Nothing here loads anything: no fonts, no images. */
-:root { --bg:#0b0f16; --panel:#111823; --border:#1f2a3a; --text:#e6edf3; --muted:#93a1b1; --accent:#2dd4bf; --amber:#fbbf24; --red:#ff9aa5; --tab-h:58px }
+:root { --btn:#162030; --bg:#0b0f16; --panel:#111823; --border:#1f2a3a; --text:#e6edf3; --muted:#93a1b1; --accent:#2dd4bf; --amber:#fbbf24; --red:#ff9aa5; --tab-h:58px }
 * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: #2b3a50 transparent }
 html { color-scheme: dark; -webkit-text-size-adjust: 100% }
 body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -22,14 +22,14 @@ main.view { max-width: 680px; margin: 0 auto; padding: 12px 14px 24px; display: 
 .tabbar .tab.on { color: var(--accent); border-top-color: var(--accent) }
 
 /* controls */
-button { font: inherit; cursor: pointer; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 0 14px; min-height: 44px }
+/* ONE button look for everything you can press, the one of the language switch: soft rectangle, thin outline, hover outline in the accent colour */
+button { font: inherit; cursor: pointer; color: var(--text); background: var(--btn); border: 1px solid var(--border); border-radius: 8px; padding: 0 14px; min-height: 44px }
 @media (hover: hover) { button:hover { border-color: var(--accent) } } /* no sticky hover after a tap on a touch screen */
 button.primary, button[type=submit] { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 700 }
 /* secondary actions: a quiet outlined pill, not an underlined hyperlink */
-button.link { background: transparent; border: 1px solid var(--border); border-radius: 999px; padding: 0 14px; min-height: 36px; color: var(--accent); text-decoration: none; font-size: .9rem; font-weight: 600 }
-@media (hover: hover) { button.link:hover { background: rgba(45,212,191,.08) } }
+button.link { min-height: 36px; padding: 0 12px; font-size: .9rem }
 button.danger { color: var(--red); border-color: #5a2230 }
-a.button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid var(--accent); border-radius: 8px; color: var(--accent); text-decoration: none; font-weight: 600 }
+a.button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; background: var(--btn); border: 1px solid var(--accent); border-radius: 8px; color: var(--accent); text-decoration: none; font-weight: 600 }
 input[type=text], textarea, select { font: inherit; font-size: 16px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; min-height: 44px; width: 100% }
 input[type=text]:focus, textarea:focus, select:focus { border-color: var(--accent); outline: none }
 input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent); vertical-align: middle }
@@ -38,7 +38,8 @@ input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent); v
 .settings h2, .sign h2, .login h2 { font-size: 1.05rem } .login p, .settings p, .sign p { margin: 0 } .settings p, .login p { color: var(--muted) }
 .check { display: flex; align-items: center; gap: 10px; min-height: 36px }
 .meta, small { color: var(--muted); font-size: .85rem }
-.status, .empty, .hint { color: var(--muted); margin: 0 } .error { color: var(--red); margin: 0 } .hint a { text-decoration: none }
+.status, .empty, .hint { color: var(--muted); margin: 0 } .error { color: var(--red); margin: 0 } .hint a { display: flex; align-items: center; min-height: 44px; padding: 0 14px; background: var(--btn); border: 1px solid var(--border); border-radius: 8px; color: var(--text); text-decoration: none }
+@media (hover: hover) { .hint a:hover, .back:hover, .by-link summary:hover, .thread-link:hover { border-color: var(--accent) } }
 h2.section { font-size: 1.05rem; margin-top: 8px } .foot { margin: 8px 0 0 }
 
 /* avatars: colour from the key, initials from the name; generated here, nothing is fetched */
@@ -50,25 +51,28 @@ h2.section { font-size: 1.05rem; margin-top: 8px } .foot { margin: 8px 0 0 }
 /* notes */
 .list { display: grid; gap: 8px }
 .note { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 10px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px }
-.note header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; font-size: .85rem; color: var(--muted) } .note header strong { color: var(--text); font-size: .95rem }
+.note header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px; font-size: .85rem; color: var(--muted) }
+.note header .byline { overflow-wrap: anywhere } .note header strong { color: var(--text); font-size: .95rem } .note header time { white-space: nowrap } /* the thread button is always the right column of the header, whatever the length of the name */
 .note .body { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 2px }
-.thread-link { font-size: .75rem; color: var(--muted); text-decoration: none; border: 1px solid var(--border); border-radius: 999px; padding: 0 9px; line-height: 1.6 }
-@media (hover: hover) { .thread-link:hover { color: var(--accent); border-color: var(--accent) } }
+/* the chip that leads to a thread: the same look as every button, only smaller */
+.thread-link { display: inline-flex; align-items: center; gap: 5px; flex: none; font-size: .78rem; line-height: 1.7; padding: 0 9px 0 8px; background: var(--btn); color: var(--muted); text-decoration: none; border: 1px solid var(--border); border-radius: 8px; vertical-align: baseline }
+.thread-link .icon { flex: none }
+@media (hover: hover) { .thread-link:hover { color: var(--accent) } }
 .ref { text-decoration: none; font-weight: 600 }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin-top: 8px }
 .actions button.link { margin-right: 0; padding: 0 9px; font-size: .8rem; min-height: 34px }
 .summary button.link { min-height: 32px; padding: 0 12px; font-size: .85rem }
 .stack { display: grid; gap: 12px }
-.actions button.react { min-height: 34px; min-width: 34px; padding: 0; border-radius: 17px; font-size: 1rem }
+.actions button.react { min-height: 34px; min-width: 34px; padding: 0; border-radius: 8px; font-size: 1rem }
 .folded { border: 1px dashed #2b3a50; border-radius: 12px }
 .folded > summary { padding: 11px 14px; min-height: 44px; color: var(--muted); cursor: pointer; font-size: .9rem }
 .folded .why { color: var(--amber); font-weight: 700 } .folded .who { opacity: .75 }
 .folded[open] > summary { border-bottom: 1px dashed #2b3a50 } .folded .note { border: 0; background: none; border-radius: 0 0 12px 12px }
 .summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 10px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; color: var(--muted); font-size: .85rem }
 .summary .counts strong { color: var(--text); font-weight: 600 }
-.more { width: 100%; color: var(--accent); margin-top: 4px }
+.more { width: 100%; margin-top: 4px }
 .compose-start { width: 100%; text-align: left; color: var(--muted); background: var(--bg); min-height: 48px; padding: 0 14px }
-.back { display: inline-block; padding: 6px 0 } h3 { font-size: 1rem; color: var(--muted) }
+.back { display: inline-flex; align-items: center; gap: 6px; justify-self: start; min-height: 36px; padding: 0 12px; background: var(--btn); border: 1px solid var(--border); border-radius: 8px; color: var(--text); text-decoration: none; font-size: .9rem } h3 { font-size: 1rem; color: var(--muted) }
 .reply { margin-left: 8px; padding-left: 10px; border-left: 2px solid var(--border); display: grid; gap: 8px; margin-top: 8px }
 
 /* writing and connecting */
@@ -77,7 +81,8 @@ h2.section { font-size: 1.05rem; margin-top: 8px } .foot { margin: 8px 0 0 }
 .preview { margin: 0; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit }
 .replying { color: var(--muted); font-size: .9rem } .replying q { font-style: italic }
 .bunker { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--accent); border-radius: 10px; background: rgba(45,212,191,.05) }
-.bunker h3 { color: var(--text) } .by-link summary { cursor: pointer; color: var(--accent); min-height: 36px }
+.bunker h3 { color: var(--text) } .by-link summary { display: inline-flex; align-items: center; cursor: pointer; list-style: none; min-height: 36px; padding: 0 12px; background: var(--btn); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: .9rem }
+.by-link summary::-webkit-details-marker { display: none }
 .result ul { margin: 0; padding-left: 0; list-style: none; font-size: .9rem }
 .sign .toast { position: fixed; left: 0; right: 0; bottom: calc(var(--tab-h) + env(safe-area-inset-bottom)); z-index: 7; max-height: 45vh; overflow: auto; padding: 10px 14px; background: var(--panel);
   border-top: 2px solid var(--accent); box-shadow: 0 -6px 16px rgba(0,0,0,.35); display: grid; gap: 6px }
@@ -92,8 +97,14 @@ h2.section { font-size: 1.05rem; margin-top: 8px } .foot { margin: 8px 0 0 }
   main.view { padding-top: 20px } .tag { flex: 0 1 auto } .lang { margin-left: auto }
   .tabbar { left: 50%; right: auto; width: 680px; transform: translateX(-50%); border: 1px solid var(--border); border-bottom: 0; border-radius: 12px 12px 0 0 }
 }
-button.icon { min-height: 36px; min-width: 36px; padding: 0; border-radius: 18px; font-size: 1.1rem; color: var(--muted) }
+button.icon { display: inline-grid; place-items: center; min-height: 36px; min-width: 36px; padding: 0; border-radius: 8px; color: var(--muted) }
 .install h2 { font-size: 1.05rem } .install p { margin: 6px 0 0 }
 .top { flex-wrap: wrap }
 .update { flex-basis: 100%; order: -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 6px 6px 14px; margin: -2px 0 2px; background: rgba(45,212,191,.12); border: 1px solid var(--accent); border-radius: 12px; font-size: .9rem }
 .update button { min-height: 36px }
+
+/* the connect panel: breathing room, and buttons you can hit with a thumb */
+.connect { display: grid; gap: 12px } .connect h2, .connect h3 { margin: 0 }
+.bunker form { display: grid; gap: 8px } .bunker p { margin: 0 } .by-link { display: grid; gap: 8px; margin: 0 }
+.bunker button, .by-link button, .by-link a.button, .connect > p > button { width: 100% }
+.sign.hint-only { background: none; border: 0; padding: 0 }

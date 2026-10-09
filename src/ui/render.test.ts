@@ -14,7 +14,8 @@ describe('hostile content stays text', () => {
   const evil = '<img src=x onerror=alert(1)><script>alert(2)</script><a href="javascript:alert(3)">x</a> https://ok.example/path "><svg onload=alert(4)>'
   it('creates no element from a note\'s text', () => {
     const el = renderJudged(shown(ev(pk('a'), evil)), v)
-    expect(el.querySelectorAll('img, script, svg, iframe, style, object, embed').length).toBe(0)
+    expect(el.querySelectorAll('img, script, iframe, style, object, embed').length).toBe(0)
+    expect(el.querySelectorAll('.body svg, .body img, .body script').length).toBe(0) // the only svg in a card is the app's own icon, never one from the note's text
     expect(el.querySelector('.body')!.textContent).toContain('<img src=x onerror=alert(1)>')
     const links = [...el.querySelectorAll('a.ext')]
     expect(links.map((a) => a.getAttribute('href'))).toEqual(['https://ok.example/path'])
@@ -39,10 +40,31 @@ describe('references', () => {
   it('a person becomes @name (or a short npub) and a note becomes a thread link', () => {
     const el = document.createElement('div')
     el.append(renderContent(`hi nostr:${nip19.npubEncode(pk('a'))} and nostr:${nip19.npubEncode(pk('d'))} see nostr:${nip19.noteEncode('e'.repeat(64))}`, v))
-    const refs = [...el.querySelectorAll('a.ref')].map((a) => [a.textContent, a.getAttribute('href')])
+    const refs = [...el.querySelectorAll('a.ref, a.thread-link')].map((a) => [a.textContent, a.getAttribute('href')])
     expect(refs[0]).toEqual(['@Ana', '#/mentions'])
     expect(refs[1]![0]).toMatch(/^@npub1/)
-    expect(refs[2]).toEqual(['↪ Thread', '#/note/' + 'e'.repeat(64)])
+    expect([refs[2]![0]!.trim(), refs[2]![1]]).toEqual(['Thread', '#/note/' + 'e'.repeat(64)])
+  })
+})
+
+describe('the thread button looks the same everywhere', () => {
+  const chipOf = (el: Element) => el.querySelector('a.thread-link')!
+  it('the header chip and the chip for a quoted note are the same component: same markup, same icon, only the address differs', () => {
+    const quoting = renderJudged(shown(ev(pk('a'), `see nostr:${nip19.noteEncode('e'.repeat(64))}`)), v)
+    const headerChip = quoting.querySelector('header a.thread-link')!, inlineChip = quoting.querySelector('.body a.thread-link')!
+    expect(headerChip).not.toBeNull(); expect(inlineChip).not.toBeNull()
+    const strip = (c: Element) => c.outerHTML.replace(/href="[^"]*"/, 'href=""')
+    expect(strip(inlineChip)).toBe(strip(headerChip))
+    expect(headerChip.querySelector('svg.icon path')).not.toBeNull(); expect(headerChip.textContent).toBe('Thread')
+    expect(quoting.textContent).not.toContain('↪') // no text arrow standing in for an icon
+  })
+  it('in a card the header is always [name and time][thread button], however long the name, and the name is never cut', () => {
+    for (const name of ['Ana', 'A very long display name that would never fit on one line of a phone']) {
+      const el = renderJudged(shown(ev(pk('c'), 'hi')), { ...v, names: new Map([[pk('c'), name]]) })
+      const kids = [...el.querySelector('header')!.children].map((c) => c.tagName.toLowerCase() + (c.classList.contains('thread-link') ? '.thread-link' : ''))
+      expect(kids, name).toEqual(['span', 'a.thread-link'])
+      expect(el.querySelector('header .byline strong')!.textContent).toBe(name); expect(el.querySelector('header .byline time')).not.toBeNull()
+    }
   })
 })
 

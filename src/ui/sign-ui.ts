@@ -57,7 +57,8 @@ export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, sign
   }
   // what is happening shows at the bottom of the screen, where it is seen wherever the reader has scrolled to
   if (toast.some(Boolean)) parts.push(h('div', { class: 'toast' }, ...toast))
-  return parts.some(Boolean) ? h('section', { class: 'sign' }, ...parts) : null
+  const onlyHint = where === 'feed' && s.signer !== 'connected' && parts.length === 1 // a lone "connect Clave" button needs no card around it
+  return parts.some(Boolean) ? h('section', { class: onlyHint ? 'sign hint-only' : 'sign' }, ...parts) : null
 }
 
 function renderConnect(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement {
