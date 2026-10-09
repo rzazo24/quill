@@ -1,0 +1,20 @@
+# Caddy site block for Quill (static files + strict CSP). scripts/deploy.sh fills in the domain.
+__DOMAIN__ {
+	root * /srv/sites/quill
+	encode gzip
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		Strict-Transport-Security "max-age=31536000"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+	}
+	# Text only, enforced by the browser: own script and style, connections to relays (wss://) and nothing else. No images, fonts, frames or media.
+	# (wss: is open because bunker:// addresses and signers bring their own relays.) frame-ancestors can only be a header, not a meta tag.
+	header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; connect-src wss:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+	# hashed assets never change; the page itself must always be revalidated
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	@page not path /assets/*
+	header @page Cache-Control "no-cache"
+	file_server
+}
