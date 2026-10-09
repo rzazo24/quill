@@ -26,6 +26,10 @@ export function parseSettings(raw: string | null): Settings {
   } catch { return d }
 }
 
+export type FontSize = 'small' | 'normal' | 'large' | 'xlarge'
+export const FONT_SIZES: readonly FontSize[] = ['small', 'normal', 'large', 'xlarge']
+export const parseFont = (raw: string | null): FontSize => (FONT_SIZES as readonly string[]).includes(raw ?? '') ? (raw as FontSize) : 'normal'
+
 export const parseLang = (raw: string | null): Lang | null => (raw === 'en' || raw === 'es' ? raw : null)
 
 export function parseWords(raw: string | null): string[] {

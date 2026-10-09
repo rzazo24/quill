@@ -4,6 +4,7 @@ import { h } from './dom.js'
 import { refs, shortNpub } from '../core/refs.js'
 import { avatarOf } from '../core/avatar.js'
 import { showReaction, type ReactionGroup } from '../data/activity.js'
+import { FONT_SIZES, type FontSize } from './store.js'
 import { icon } from './icons.js'
 import { cleanText, segments } from '../core/text.js'
 import type { Judged, RuleId, Settings } from '../core/verdict.js'
@@ -121,6 +122,30 @@ export interface SettingsPanelProps {
   graph: { answered: number; total: number; loaded: boolean } | null
   onSettings: (s: Settings) => void
   onWords: (words: string) => void
+}
+
+export interface PrefsProps {
+  font: FontSize; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
+  onFont: (f: FontSize) => void; onAdd: (text: string) => void; onRemove: (url: string) => void; onTest: (url: string) => void; onReset: () => void
+}
+/** Text size and the relay list. */
+export function renderPrefs(p: PrefsProps, v: View): HTMLElement {
+  const input = h('input', { type: 'text', placeholder: t(v.lang, 'relayPlaceholder'), autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false', inputmode: 'url', 'aria-label': t(v.lang, 'relaysTitle') })
+  const state = (u: string) => p.probe.get(u)
+  return h('section', { class: 'prefs card' },
+    h('h2', {}, t(v.lang, 'prefsTitle')),
+    h('h3', {}, t(v.lang, 'fontTitle')),
+    h('div', { class: 'seg', role: 'group', 'aria-label': t(v.lang, 'fontTitle') }, ...FONT_SIZES.map((f) =>
+      h('button', { type: 'button', class: `size-${f}`, 'aria-pressed': String(p.font === f), onClick: () => { if (p.font !== f) p.onFont(f) } }, t(v.lang, `font_${f}` as Parameters<typeof t>[1])))),
+    h('h3', {}, t(v.lang, 'relaysTitle')), h('p', { class: 'meta' }, t(v.lang, 'relaysHelp')),
+    h('ul', { class: 'relay-list' }, ...p.relays.map((u) => h('li', {},
+      h('span', { class: 'url' }, u.replace(/^wss:\/\//, '')),
+      state(u) ? h('span', { class: `probe ${state(u)}`, role: 'status' }, t(v.lang, state(u) === 'testing' ? 'relayTesting' : state(u) === 'up' ? 'relayUp' : 'relayDown')) : null,
+      h('button', { type: 'button', class: 'link', ...(state(u) === 'testing' ? { disabled: true } : {}), onClick: () => p.onTest(u) }, t(v.lang, 'relayTest')),
+      h('button', { type: 'button', class: 'link', ...(p.relays.length <= 1 ? { disabled: true, title: t(v.lang, 'relayLast') } : {}), 'aria-label': `${t(v.lang, 'relayRemove')} ${u}`, onClick: () => p.onRemove(u) }, t(v.lang, 'relayRemove'))))),
+    h('form', { class: 'relay-add', onSubmit: (e: Event) => { e.preventDefault(); p.onAdd(input.value) } }, input, ' ', h('button', { type: 'submit' }, t(v.lang, 'relayAdd'))),
+    p.error ? h('p', { class: 'error', role: 'alert' }, p.error) : null,
+    p.isDefault ? null : h('p', {}, h('button', { type: 'button', class: 'link', onClick: p.onReset }, t(v.lang, 'relayReset'))))
 }
 
 export function renderSettings(p: SettingsPanelProps, v: View): HTMLElement {

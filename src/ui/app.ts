@@ -16,10 +16,11 @@ import { checkTemplate, MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
 import { icon } from './icons.js'
 import { detectLang, problemText, t, type Key, type Lang } from './i18n.js'
-import { renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
+import { renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type Review } from './sign-ui.js'
 import { installHint, type Env } from './install.js'
-import { parseLang, parseSettings, parseWords, safeGet, safeSet, type KV } from './store.js'
+import { parseFont, parseLang, parseSettings, parseWords, safeGet, safeSet, type FontSize, type KV } from './store.js'
+import { addRelay, parseRelays, removeRelay } from '../net/relays.js'
 
 export interface Deps {
   fetcher: Fetcher; storage?: KV; languages?: readonly string[]; location: Pick<Location, 'hash'>; onHash: (cb: () => void) => void; setHash: (h: string) => void
@@ -30,6 +31,8 @@ export interface Deps {
   /** Facts about where the page runs (iPhone? installed?), and a hook for "the page came back to the foreground". */
   env?: Env; onVisible?: (cb: () => void) => void
   /** Is there a newer build of the app on the server? Asked at start, whenever the app comes back to the foreground and on every `onTick`. */
+  /** Tells the code that talks to relays which list to use now (called at start and whenever the reader changes it). */
+  setRelays?: (relays: string[]) => void; /** Does something answer at this address? */ probeRelay?: (url: string) => Promise<boolean>
   checkVersion?: () => Promise<boolean>; onTick?: (cb: () => void) => void; reload?: () => void
   /** Called about once a minute while the page is visible: looks for new replies, mentions and reactions. */
   onPoll?: (cb: () => void) => void
@@ -54,7 +57,14 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const fetcher = memo(deps.fetcher)
   const kv = deps.storage
   const { signer, publisher } = deps
-  const relays = deps.relays ?? DEFAULT_RELAYS
+  const defaultRelays = deps.relays ?? DEFAULT_RELAYS
+  let relays = parseRelays(safeGet(kv, 'relays')) ?? defaultRelays
+  let font: FontSize = parseFont(safeGet(kv, 'font'))
+  let relayError: string | null = null
+  const probes = new Map<string, 'testing' | 'up' | 'down'>()
+  deps.setRelays?.(relays)
+  const applyFont = () => root.ownerDocument.documentElement.setAttribute('data-font', font)
+  applyFont()
   let lang: Lang = parseLang(safeGet(kv, 'lang')) ?? detectLang(deps.languages)
   let settings: Settings = parseSettings(safeGet(kv, 'settings'))
   let words: string[] = parseWords(safeGet(kv, 'words'))
@@ -189,6 +199,23 @@ export function startApp(root: HTMLElement, deps: Deps): void {
 
   function toggleSettings(): void { deps.setHash('#/me') } // the filter settings live on the Me page
   function changeSettings(s: Settings): void { settings = s; safeSet(kv, 'settings', JSON.stringify(s)); void load() }
+  function changeFont(f: FontSize): void { font = f; safeSet(kv, 'font', f); applyFont(); draw() }
+  /** A new relay list: stored, handed to the network code, and everything is read again from it. */
+  function changeRelays(list: string[]): void {
+    relays = list; relayError = null; probes.clear()
+    safeSet(kv, 'relays', JSON.stringify(list)); deps.setRelays?.(list); refresh()
+  }
+  const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i])
+  function onAddRelay(text: string): void {
+    const r = addRelay(relays, text)
+    if (!r.ok) { relayError = t(lang, r.why === 'invalid' ? 'relayBad' : r.why === 'duplicate' ? 'relayDup' : 'relayFull'); return draw() }
+    changeRelays(r.list)
+  }
+  function onTestRelay(url: string): void {
+    if (!deps.probeRelay) return
+    probes.set(url, 'testing'); draw()
+    void deps.probeRelay(url).then((ok) => { if (relays.includes(url)) { probes.set(url, ok ? 'up' : 'down'); draw() } })
+  }
   function changeWords(text: string): void { words = parseWords(text); safeSet(kv, 'words', words.join('\n')); void load() }
 
   function login(raw: string): void {
@@ -340,7 +367,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const statusEl = me && status ? h('p', { class: 'status', role: 'status' }, status) : null
     const signOut = h('button', { type: 'button', class: 'danger', onClick: () => { me = null; session = null; body = null; shownRoute = ''; safeSet(kv, 'me', null); void signer?.disconnect(); composer = review = result = null; flash = null; deps.setHash(''); draw() } }, t(lang, 'signOut'))
     const content: (HTMLElement | null)[] = !me ? [loginForm, signArea]
-      : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view()), h('h2', { class: 'section' }, t(lang, 'myNotes')), statusEl, body, h('p', { class: 'foot' }, signOut)]
+      : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, renderPrefs({ font, relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays) }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view()), h('h2', { class: 'section' }, t(lang, 'myNotes')), statusEl, body, h('p', { class: 'foot' }, signOut)]
       : [signArea, statusEl, body]
     const page: (HTMLElement | null)[] = [
       h('header', { class: 'top' }, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('div', { class: 'brand' }, h('h1', {}, h('a', { href: '#/' }, 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline'))), me ? h('button', { type: 'button', class: 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), onClick: refresh }, icon('refresh', 18)) : null, pills),

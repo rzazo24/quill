@@ -10,9 +10,9 @@ export interface Publisher { publish(event: Event, relays?: string[]): Promise<R
 
 const NO_ANSWER = 'no answer from the relay'
 
-export function poolPublisher(relays: string[] = DEFAULT_RELAYS, timeoutMs = 8000, pool = new SimplePool()): Publisher {
+export function poolPublisher(relays: string[] | (() => string[]) = DEFAULT_RELAYS, timeoutMs = 8000, pool = new SimplePool()): Publisher {
   return {
-    async publish(event, only = relays) {
+    async publish(event, only = typeof relays === 'function' ? relays() : relays) {
       const results = await Promise.all(only.map(async (url) => {
         try {
           await Promise.race([

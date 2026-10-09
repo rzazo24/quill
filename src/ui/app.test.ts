@@ -16,17 +16,17 @@ const relays = (events: Event[], delayMs = 0): Fetcher => ({ query: async (f: Fi
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms))
 const roots: HTMLElement[] = []
 
-function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean } } = {}) {
+function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
-  const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, base = relays(opts.events ?? world, opts.delayMs), calls = { n: 0 }
+  const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs), calls = { n: 0 }
   startApp(root, {
-    fetcher: { query: (f) => { calls.n++; return base.query(f) } }, env: opts.env, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), reload: () => { reloads.n++ },
+    fetcher: { query: (f) => { calls.n++; return base.query(f) } }, env: opts.env, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), reload: () => { reloads.n++ },
     checkVersion: opts.newer ? async () => { asked.n++; return opts.newer!.value } : undefined, languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
     storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
   })
   const go = async (hash: string) => { location.hash = hash; listeners.forEach((l) => l()); await tick() }
-  return { root, go, mem, calls, reloads, asked, tick: () => ticks.forEach((t) => t()), poll: () => polls.forEach((t) => t()), comeBack: () => visible.forEach((v) => v()), text: () => root.textContent ?? '' }
+  return { root, go, mem, calls, setRelays, reloads, asked, tick: () => ticks.forEach((t) => t()), poll: () => polls.forEach((t) => t()), comeBack: () => visible.forEach((v) => v()), text: () => root.textContent ?? '' }
 }
 afterEach(() => { roots.forEach((r) => r.remove()); roots.length = 0 })
 
@@ -232,5 +232,53 @@ describe('notifications inside the app', () => {
   it('no number when you are reading as somebody who has nothing new, and no look is made while Mentions is open', async () => {
     const a = start(base()); await tick(150); await a.go('#/mentions'); await tick(150)
     const before = a.calls.n; a.poll(); await tick(60); expect(a.calls.n).toBe(before); expect(badge(a)).toBeNull(); expect(a.root.querySelector('.reacted')).toBeNull()
+  })
+})
+
+describe('settings: text size and relays', () => {
+  const start = (o: Parameters<typeof boot>[0] = {}) => boot({ ...o, stored: { me, ...(o.stored ?? {}) } })
+  const prefs = (a: ReturnType<typeof boot>) => a.root.querySelector('.prefs') as HTMLElement
+  const urls = (a: ReturnType<typeof boot>) => [...prefs(a).querySelectorAll('.relay-list .url')].map((x) => x.textContent)
+  const add = async (a: ReturnType<typeof boot>, text: string) => { const i = prefs(a).querySelector('.relay-add input') as HTMLInputElement; i.value = text; prefs(a).querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true })); await tick(80) }
+  const press = async (a: ReturnType<typeof boot>, label: string) => { const b = [...prefs(a).querySelectorAll('button')].find((x) => x.textContent === label || x.getAttribute('aria-label')?.startsWith(label))!; b.click(); await tick(80) }
+
+  it('the Me page has a Settings section with the default relays and the text-size choices', async () => {
+    const a = start(); await a.go('#/me'); await tick(80)
+    expect(urls(a)).toHaveLength(6); expect(urls(a)).toContain('relay.hivescope.xyz'); expect([...prefs(a).querySelectorAll('.seg button')].map((b) => b.textContent)).toEqual(['Small', 'Normal', 'Large', 'Very large'])
+    expect(a.setRelays.at(-1)).toHaveLength(6); expect(prefs(a).textContent).not.toContain('Restore the default relays')
+  })
+  it('text size is applied at once, remembered, and restored on the next start', async () => {
+    const a = start(); await a.go('#/me'); await tick(80); expect(document.documentElement.getAttribute('data-font')).toBe('normal')
+    await press(a, 'Large'); expect(document.documentElement.getAttribute('data-font')).toBe('large'); expect(a.mem.get('font')).toBe('large'); expect(prefs(a).querySelector('button[aria-pressed=true]')!.textContent).toBe('Large')
+    const b = start({ stored: { font: 'xlarge' } }); expect(document.documentElement.getAttribute('data-font')).toBe('xlarge'); void b
+    start({ stored: { font: 'gigantic' } }); expect(document.documentElement.getAttribute('data-font')).toBe('normal')
+  })
+  it('adding a relay stores it, tells the network code, and reads everything again from the new list', async () => {
+    const a = start(); await a.go('#/me'); await tick(80); const before = a.calls.n
+    await add(a, 'Relay.Example.com/'); await tick(80)
+    expect(urls(a)).toContain('relay.example.com'); expect(urls(a)).toHaveLength(7); expect(JSON.parse(a.mem.get('relays')!)).toContain('wss://relay.example.com'); expect(a.setRelays.at(-1)).toContain('wss://relay.example.com')
+    expect(a.calls.n).toBeGreaterThan(before); expect(prefs(a).textContent).toContain('Restore the default relays')
+  })
+  it('refuses insecure, malformed and repeated addresses, says why, and changes nothing', async () => {
+    const a = start(); await a.go('#/me'); await tick(80); const sets = a.setRelays.length
+    for (const [bad, msg] of [['ws://relay.example.com', 'not a valid secure relay'], ['localhost', 'not a valid secure relay'], ['wss://relay.primal.net', 'already in the list']] as const) {
+      await add(a, bad); expect(prefs(a).querySelector('[role=alert]')!.textContent).toContain(msg); expect(urls(a)).toHaveLength(6)
+    }
+    expect(a.mem.has('relays')).toBe(false); expect(a.setRelays).toHaveLength(sets)
+  })
+  it('a relay can be removed, but never the last one; the defaults can be restored', async () => {
+    const a = start({ stored: { relays: JSON.stringify(['wss://a.example.com', 'wss://b.example.com']) } }); await a.go('#/me'); await tick(80)
+    expect(urls(a)).toEqual(['a.example.com', 'b.example.com']); await press(a, 'Remove wss://a.example.com'); expect(urls(a)).toEqual(['b.example.com'])
+    expect((prefs(a).querySelector('.relay-list button[aria-label^="Remove"]') as HTMLButtonElement).disabled).toBe(true)
+    await press(a, 'Restore the default relays'); expect(urls(a)).toHaveLength(6); expect(a.setRelays.at(-1)).toHaveLength(6); expect(prefs(a).textContent).not.toContain('Restore the default relays')
+  })
+  it('a corrupt stored list falls back to the defaults', async () => {
+    const a = start({ stored: { relays: '{"not":"a list"}' } }); await a.go('#/me'); await tick(80); expect(urls(a)).toHaveLength(6)
+  })
+  it('Test says whether a relay answers, per relay', async () => {
+    const a = start({ reachable: (u) => u.includes('nos.lol') }); await a.go('#/me'); await tick(80)
+    const row = (name: string) => [...prefs(a).querySelectorAll('.relay-list li')].find((li) => li.textContent!.includes(name))!
+    ;(row('nos.lol').querySelector('button') as HTMLElement).click(); ;(row('nostr.mom').querySelector('button') as HTMLElement).click(); await tick(80)
+    expect(row('nos.lol').querySelector('.probe')!.textContent).toBe('Answers'); expect(row('nostr.mom').querySelector('.probe')!.textContent).toBe('No answer'); expect(row('nos.lol').querySelector('.probe.up')).not.toBeNull()
   })
 })

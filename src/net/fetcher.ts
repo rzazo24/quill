@@ -36,9 +36,10 @@ export function accept(filter: Filter, events: Event[], verify: (e: Event) => bo
   return out
 }
 
-export function poolFetcher(relays: string[] = DEFAULT_RELAYS, maxWait = 6000): Fetcher {
+/** `relays` may be a function, so the list can change while the page is open (the reader edits it in Settings). */
+export function poolFetcher(relays: string[] | (() => string[]) = DEFAULT_RELAYS, maxWait = 6000): Fetcher {
   const pool = new SimplePool()
-  return { query: async (filter) => accept(filter, await pool.querySync(relays, filter, { maxWait })) }
+  return { query: async (filter) => accept(filter, await pool.querySync(typeof relays === 'function' ? relays() : relays, filter, { maxWait })) }
 }
 
 /** The same query for many authors, a hundred at a time (relays refuse long lists), merged without duplicates. */

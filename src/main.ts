@@ -1,15 +1,20 @@
 import './style.css'
 import { poolFetcher } from './net/fetcher.js'
 import { poolPublisher } from './net/publisher.js'
+import { probeRelay } from './net/relays.js'
 import { Signer } from './sign/signer.js'
 import { startApp } from './ui/app.js'
 import { detectEnv } from './ui/install.js'
 import { isNewer } from './ui/update.js'
 
 const storage = ((): Storage | undefined => { try { return window.localStorage } catch { return undefined } })()
+let relays: string[] = [] // set by the app at start, then whenever the reader edits the list in Settings
+const current = () => relays
 startApp(document.getElementById('app')!, {
-  fetcher: poolFetcher(),
-  publisher: poolPublisher(),
+  fetcher: poolFetcher(current),
+  publisher: poolPublisher(current),
+  setRelays: (list) => { relays = list },
+  probeRelay: (url) => probeRelay(url),
   signer: new Signer({ kv: storage, appUrl: location.origin }),
   storage,
   languages: navigator.languages,

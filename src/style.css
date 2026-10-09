@@ -3,7 +3,7 @@
 :root { --col: 820px; --btn:#162030; --bg:#0b0f16; --panel:#111823; --border:#1f2a3a; --text:#e6edf3; --muted:#93a1b1; --accent:#2dd4bf; --amber:#fbbf24; --red:#ff9aa5; --tab-h:44px }
 * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: #2b3a50 transparent }
 html { color-scheme: dark; -webkit-text-size-adjust: 100%; height: 100% }
-body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+body { margin: 0; background: var(--bg); color: var(--text); font: 1rem/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   /* An app shell: the PAGE never scrolls, only <main> does. A page that scrolls makes iPhone Safari show and hide its toolbar, which pushes fixed bars
      around (the tab bar jumped up when a list was emptied and refilled). Header and tab bar are plain rows of this column instead. */
   /* pinned to the four edges of the screen: unlike the viewport-height units, this fills the real screen in an installed iPhone app (there those units came
@@ -146,3 +146,16 @@ button.icon { display: inline-grid; place-items: center; min-height: 36px; min-w
 .sign .popup.stay { animation: popup-in .2s ease both; pointer-events: auto; display: flex; align-items: center; gap: 12px }
 @keyframes popup-in { from { opacity: 0; transform: translate(-50%, 8px) } to { opacity: 1; transform: translate(-50%, 0) } }
 @media (prefers-reduced-motion: reduce) { .sign .popup.stay { animation: none } }
+
+/* text size: everything sized in rem follows the page's base size */
+html[data-font=small] { font-size: 90% } html[data-font=large] { font-size: 112.5% } html[data-font=xlarge] { font-size: 125% }
+/* settings: text size and relays */
+.prefs h3 { margin: 14px 0 6px; font-size: 1rem }
+.seg { display: flex; flex-wrap: wrap; gap: 8px }
+.seg button[aria-pressed=true] { border-color: var(--accent); background: rgba(45,212,191,.18); color: var(--accent) }
+.seg .size-small { font-size: .85rem } .seg .size-large { font-size: 1.1rem } .seg .size-xlarge { font-size: 1.2rem }
+.relay-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 4px }
+.relay-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 0; border-bottom: 1px solid var(--border) }
+.relay-list .url { flex: 1 1 100%; min-width: 0; overflow-wrap: anywhere }
+.relay-list .probe { font-size: .85rem } .relay-list .probe.up { color: var(--accent) } .relay-list .probe.down { color: var(--red) } .relay-list .probe.testing { color: var(--muted) }
+.relay-add { display: flex; gap: 8px; margin-top: 8px } .relay-add input { flex: 1; min-width: 0 }
