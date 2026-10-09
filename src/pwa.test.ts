@@ -52,7 +52,7 @@ describe('both security policies allow the app\'s own manifest and icons, and no
 describe('the app shell: the page never scrolls, only <main> does', () => {
   it('the layout rules that keep iPhone Safari\'s toolbar (and so the tab bar) still', () => {
     const css = text('src/style.css')
-    expect(css).toMatch(/body \{[^}]*overflow: hidden/); expect(css).toMatch(/body \{[^}]*height: 100dvh/); expect(css).toMatch(/#app \{[^}]*flex-direction: column/)
+    expect(css).toMatch(/body \{[^}]*overflow: hidden/); expect(css).toMatch(/body \{[^}]*position: fixed[^}]*inset: 0/); expect(css).not.toMatch(/body \{[^}]*100d?vh/); expect(css).toMatch(/#app \{[^}]*flex-direction: column/)
     expect(css).toMatch(/main\.view \{[^}]*overflow-y: auto/); expect(css).toMatch(/\.tabbar \{[^}]*flex: none/)
     expect(css).not.toMatch(/\.tabbar \{[^}]*position: fixed/) // a fixed bar over a scrolling page is what jumped
   })
