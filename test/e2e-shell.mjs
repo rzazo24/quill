@@ -41,6 +41,14 @@ await p.goto('http://localhost:4173/', { waitUntil: 'domcontentloaded' }); await
   const sm = (async () => { while (Date.now() - t1 < 8000) { const r = await p.evaluate(() => ({ top: Math.round(document.querySelector('.seg.feedmode')?.getBoundingClientRect().top ?? -1), loading: !!document.querySelector('.status.loading') })); tops.add(r.top); if (r.loading) sawLoading++; await new Promise((r) => setTimeout(r, 40)) } })()
   await p.click('.seg.feedmode button:nth-child(2)'); await sm
   say(tops.size === 1, `the Follows | Network switch stayed put (${[...tops].join(', ')} px) while loading was shown in ${sawLoading} samples`) }
+// a very long thread stops indenting: the notes keep a readable width from the fourth level on
+{ const w = await p.evaluate(() => { const host = document.createElement('div'); document.querySelector('main.view').prepend(host); let parent = host
+    for (let d = 0; d < 10; d++) { const r = document.createElement('div'); r.className = 'reply'; r.dataset.depth = String(Math.min(d, 6)); const a = document.createElement('article'); a.className = 'note'; a.textContent = 'x'; r.append(a); parent.append(r); parent = r }
+    const out = [...host.querySelectorAll('article.note')].map((a) => Math.round(a.getBoundingClientRect().width)); host.remove(); return out })
+  say(w[9] === w[3] && w[9] >= 250, `a thread 10 levels deep: note widths ${w.join(', ')} (no narrower than level 3, and at least 250 px)`) }
+// "Loading…" is for screen readers only: it is not drawn
+{ const box = await p.evaluate(() => { const s = document.createElement('p'); s.className = 'status loading'; s.innerHTML = '<span>Loading</span>'; document.querySelector('header.top').append(s); const r = s.getBoundingClientRect(); s.remove(); return [Math.round(r.width), Math.round(r.height)] })
+  say(box[0] <= 1 && box[1] <= 1, `the loading message has no visible box (${box.join(' x ')} px)`) }
 // the header: the logo and the name are at the same height as the buttons (the centre of what you see, not of a text line with room under it)
 await p.goto('http://localhost:4173/', { waitUntil: 'domcontentloaded' }); await p.waitForSelector('header.top svg.logo')
 const hd = await p.evaluate(() => { const mid = (r) => (r.top + r.bottom) / 2, rg = document.createRange(); rg.selectNodeContents([...document.querySelector('.wordmark').childNodes].find((x) => x.nodeType === 3)); return { logo: mid(document.querySelector('.wordmark .logo').getBoundingClientRect()), name: mid(rg.getBoundingClientRect()), button: mid(document.querySelector('header.top button.icon').getBoundingClientRect()) } })

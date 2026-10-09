@@ -27,7 +27,7 @@ main.view { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior
      otherwise sit off-centre against the header and tab bar by the width of the bar */
   grid-template-columns: minmax(0, var(--col)); justify-content: center; scrollbar-gutter: stable both-edges }
 .tabbar { flex: none; width: min(100%, var(--col)); margin: 0 auto; position: relative; z-index: 6; display: flex; justify-content: center; background: var(--panel); border-top: 1px solid var(--border) }
-.tabbar .tab { flex: 1; max-width: 226px; display: flex; align-items: center; justify-content: center; min-height: calc(var(--tab-h) + env(safe-area-inset-bottom) * .5); padding-bottom: calc(env(safe-area-inset-bottom) * .5); color: var(--muted); text-decoration: none; font-size: .85rem; font-weight: 600; border-top: 3px solid transparent }
+.tabbar .tab { flex: 1; max-width: 226px; display: flex; align-items: center; justify-content: center; min-height: calc(var(--tab-h) + env(safe-area-inset-bottom) * .5); padding-bottom: calc(env(safe-area-inset-bottom) * .18); color: var(--muted); text-decoration: none; font-size: .85rem; font-weight: 600; border-top: 3px solid transparent }
 .tabbar .tab.on { color: var(--tc); border-top-color: var(--tc); background: var(--tcbg) }
 /* the tabs wear the app's green: tinted icon, and the open one lit with a line on top */
 .tab { --tc: var(--accent); --tcbg: rgba(45,212,191,.10) }
@@ -92,6 +92,8 @@ h2.section { font-size: 1.05rem; margin-top: 8px } .foot { margin: 8px 0 0 }
 .more { width: 100%; margin-top: 4px }
 .back { display: inline-flex; align-items: center; gap: 6px; justify-self: start; min-height: 36px; padding: 0 12px; background: var(--btn); border: 1px solid var(--border); border-radius: 8px; color: var(--text); text-decoration: none; font-size: .9rem } h3 { font-size: 1rem; color: var(--muted) }
 .reply { margin-left: 8px; padding-left: 10px; border-left: 2px solid var(--border); display: grid; gap: 8px; margin-top: 8px }
+/* a long thread would squeeze its notes into a sliver: from the fifth level on the replies keep the indentation of the fourth (data-depth counts from 0) */
+.reply[data-depth="4"], .reply[data-depth="5"], .reply[data-depth="6"] { margin-left: 0; padding-left: 0; border-left: 0 }
 
 /* writing and connecting */
 .signing-as { display: flex; align-items: center; gap: 12px } .signing-as .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(45,212,191,.18) }
@@ -217,8 +219,5 @@ button.icon.on { color: var(--accent); border-color: var(--accent); background: 
 /* Following: Follows | Network */
 .seg.feedmode { display: flex; gap: 8px } .seg.feedmode button { flex: 1; max-width: 200px }
 
-/* "Loading…" hangs under the header (which never scrolls) instead of taking a line of its own: nothing moves when it comes and goes. It only shows if the wait lasts a moment. */
-.top .status.loading { position: absolute; top: 100%; left: 0; right: 0; height: 0; margin: 0; z-index: 4; pointer-events: none }
-.top .status.loading > span { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 6px 14px; border-radius: 16px; background: var(--panel); border: 1px solid var(--border); color: var(--muted); font-size: .9rem; box-shadow: 0 4px 14px rgba(0,0,0,.4); animation: loading-in .2s ease .3s both }
-@keyframes loading-in { from { opacity: 0 } to { opacity: 1 } }
-@media (prefers-reduced-motion: reduce) { .top .status.loading > span { animation: none } }
+/* "Loading…" is read out by screen readers but not drawn: it only made the page flicker */
+.top .status.loading { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; pointer-events: none }
