@@ -21,6 +21,8 @@ export interface Deps {
   fetcher: Fetcher; storage?: KV; languages?: readonly string[]; location: Pick<Location, 'hash'>; onHash: (cb: () => void) => void; setHash: (h: string) => void
   /** Without these the app is read-only. */
   signer?: SignerApi; publisher?: Publisher; relays?: string[]; copy?: (text: string) => void; nowMs?: () => number
+  /** Reads the clipboard (needs a tap; may be refused). */
+  readClipboard?: () => Promise<string>
 }
 
 type Route = { name: 'following' } | { name: 'mentions' } | { name: 'note'; id: string }
@@ -159,9 +161,17 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     void resumed.then((ok) => { if (!ok) flash = null; draw() })
   }
 
-  function openConnect(): void {
+  function openConnect(): void { if (!signer) return; connectOpen = true; flash = null; draw() }
+  async function pasteBunker(): Promise<void> {
     if (!signer) return
-    connectOpen = true; flash = null
+    let text = ''
+    try { text = (await deps.readClipboard?.()) ?? '' } catch { /* refused or unavailable */ }
+    if (!/^\s*bunker:\/\//i.test(text)) { say('error', t(lang, 'clipboardNoBunker')); return draw() }
+    await bunker(text)
+  }
+  function startLink(): void {
+    if (!signer) return
+    flash = null
     const c = signer.startConnect(); connect = { uri: c.uri, claveLink: c.claveLink }
     void c.done.then((ok) => { if (!ok && signer.lastError) say('error', t(lang, 'connectFailed', { why: signer.lastError })); draw() })
     draw()
@@ -238,7 +248,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const signArea = signer ? renderSignArea({
       signer: signer.state, who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, flash, composer, review, step, result, relays,
     }, {
-      openConnect, cancelConnect, bunker: (x) => void bunker(x), disconnect: () => { void signer.disconnect(); composer = review = result = null; flash = null; draw() }, copy: (x) => { deps.copy?.(x); say('info', t(lang, 'copied')); draw() },
+      openConnect, startLink, pasteBunker: () => void pasteBunker(), cancelConnect, bunker: (x) => void bunker(x), disconnect: () => { void signer.disconnect(); composer = review = result = null; flash = null; draw() }, copy: (x) => { deps.copy?.(x); say('info', t(lang, 'copied')); draw() },
       edit: (x) => { if (composer) composer.text = x }, review: doReview, publish: () => void publish(), back: () => { review = null; draw() }, cancelComposer: () => { composer = null; review = null; draw() },
       retry: () => void retry(), dismissResult: () => { result = null; draw() }, startNote, cancelSigning: () => signing?.abort(),
     }, view(), true) : null

@@ -48,13 +48,14 @@ const publisherFake = (outcomes: Record<string, string> = { 'wss://r1.example': 
   return { p, sent }
 }
 
-function boot(o: { signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; stored?: Record<string, string> } = {}) {
+function boot(o: { signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; stored?: Record<string, string>; clipboard?: string | Error } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, mem = new Map(Object.entries(o.stored ?? { me }))
   const pub = o.pub ?? publisherFake()
   startApp(root, {
     fetcher: relays(world), languages: ['en'], location, onHash: () => {}, setHash: () => {}, relays: ['wss://r1.example', 'wss://r2.example'], nowMs: () => 1_700_000_000_000,
     storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
+    readClipboard: async () => { if (o.clipboard instanceof Error) throw o.clipboard; return o.clipboard ?? '' },
     ...(o.signer ? { signer: o.signer.s, publisher: pub.p } : {}),
   })
   return { root, mem, pub, text: () => root.textContent ?? '' }
@@ -73,7 +74,10 @@ describe('connecting Clave', () => {
   it('offers a link for Clave, then shows who you are signing as, and reactions appear', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100)
     expect(a.root.querySelector('.actions')).toBeNull() // not connected: nothing to click
-    await click(a.root, 'Connect Clave')
+    await click(a.root, 'Connect Clave') // opens the panel: the bunker:// address comes first, nothing is started yet
+    expect(sg.log).not.toContain('startConnect'); expect(a.text()).toContain('Recommended: paste the bunker address from Clave')
+    expect(a.root.querySelector('a.button')).toBeNull()
+    await click(a.root, 'Connect Clave') // the alternative, inside "Use a link instead"
     expect(sg.log).toContain('startConnect')
     expect(a.root.querySelector('a.button')!.getAttribute('href')).toMatch(/^https:\/\/clave\.casa\/connect\/\?uri=/)
     // it must open in a NEW tab: leaving this page would throw away the pending connection that Clave is about to answer
@@ -98,6 +102,27 @@ describe('connecting Clave', () => {
     await click(a.root, 'Connect Clave')
     const input = a.root.querySelector('.connect input') as HTMLInputElement; input.value = 'bunker://x'
     a.root.querySelector('.connect form')!.dispatchEvent(new Event('submit', { cancelable: true })); await tick(60)
+    expect(a.text()).toMatch(/Could not connect: nope/)
+  })
+})
+
+describe('pasting the bunker:// address from Clave', () => {
+  it('the paste button reads the clipboard and connects with the bunker address', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg, clipboard: 'bunker://' + 'a'.repeat(64) + '?relay=wss%3A%2F%2Frelay.powr.build&secret=s' }); await tick(100)
+    await click(a.root, 'Connect Clave'); await click(a.root, 'Paste and connect')
+    expect(sg.log.some((l) => l.startsWith('bunker bunker://'))).toBe(true)
+  })
+  it('a clipboard that is not a bunker address is refused with a message, and nothing is sent anywhere', async () => {
+    for (const clip of ['', 'hello world', 'nostrconnect://abc', 'https://example.com', new Error('permission denied')]) {
+      const sg = fakeSigner(); const a = boot({ signer: sg, clipboard: clip }); await tick(100)
+      await click(a.root, 'Connect Clave'); await click(a.root, 'Paste and connect')
+      expect(a.text(), String(clip)).toContain('does not hold a bunker:// address'); expect(sg.log.some((l) => l.startsWith('bunker'))).toBe(false)
+    }
+  })
+  it('the typed address still works, and a failure says why', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await click(a.root, 'Connect Clave')
+    const input = a.root.querySelector('.bunker input') as HTMLInputElement; input.value = 'bunker://x'
+    a.root.querySelector('.bunker form')!.dispatchEvent(new Event('submit', { cancelable: true })); await tick(60)
     expect(a.text()).toMatch(/Could not connect: nope/)
   })
 })

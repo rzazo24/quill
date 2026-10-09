@@ -31,7 +31,7 @@ export interface SignUiState {
 export interface SignUiHandlers {
   openConnect(): void; cancelConnect(): void; bunker(text: string): void; disconnect(): void; copy(text: string): void
   edit(text: string): void; review(): void; publish(): void; back(): void; cancelComposer(): void; retry(): void; dismissResult(): void
-  startNote(): void; cancelSigning(): void
+  startNote(): void; cancelSigning(): void; startLink(): void; pasteBunker(): void
 }
 
 const excerpt = (e: NostrEvent) => cleanText(e.content, 140).replace(/\s+/g, ' ')
@@ -56,13 +56,22 @@ export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, sign
 }
 
 function renderConnect(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement {
-  const input = h('input', { type: 'text', placeholder: 'bunker://…', autocomplete: 'off', spellcheck: 'false', 'aria-label': t(v.lang, 'bunkerLabel') })
+  const input = h('input', { type: 'text', placeholder: 'bunker://…', autocomplete: 'off', spellcheck: 'false', 'aria-label': t(v.lang, 'bunkerTitle') })
   return h('div', { class: 'connect' },
     h('h2', {}, t(v.lang, 'connectTitle')), h('p', {}, t(v.lang, 'connectHelp')),
-    s.connect ? h('p', {}, h('a', { class: 'button', href: s.connect.claveLink, rel: 'noopener noreferrer', target: '_blank' }, t(v.lang, 'openClave')), ' ',
-      h('button', { type: 'button', class: 'link', onClick: () => hd.copy(s.connect!.uri) }, t(v.lang, 'copyLink'))) : null,
-    s.signer === 'connecting' ? h('p', { class: 'status', role: 'status' }, t(v.lang, 'connectWaiting')) : null,
-    h('form', { onSubmit: (e: Event) => { e.preventDefault(); hd.bunker(input.value) } }, h('label', {}, t(v.lang, 'bunkerLabel'), h('br'), input), ' ', h('button', { type: 'submit' }, t(v.lang, 'bunkerButton'))),
+    // The way Clave documents for signing from the background: a bunker:// address copied in Clave.
+    h('div', { class: 'bunker' },
+      h('h3', {}, t(v.lang, 'bunkerTitle')), h('p', { class: 'meta' }, t(v.lang, 'bunkerHelp')),
+      h('form', { onSubmit: (e: Event) => { e.preventDefault(); hd.bunker(input.value) } }, input, ' ', h('button', { type: 'submit' }, t(v.lang, 'bunkerButton'))),
+      h('p', {}, h('button', { type: 'button', onClick: hd.pasteBunker }, t(v.lang, 'pasteAndConnect'))),
+      s.signer === 'connecting' && !s.connect ? h('p', { class: 'status', role: 'status' }, t(v.lang, 'connectingBunker')) : null),
+    // The link / QR way: works, but Clave has to be on screen to answer.
+    h('details', { class: 'by-link', ...(s.connect ? { open: true } : {}) },
+      h('summary', {}, t(v.lang, 'useLinkInstead')),
+      h('p', { class: 'meta' }, t(v.lang, 'linkHelp')),
+      s.connect ? h('p', {}, h('a', { class: 'button', href: s.connect.claveLink, rel: 'noopener noreferrer', target: '_blank' }, t(v.lang, 'openClave')), ' ',
+        h('button', { type: 'button', class: 'link', onClick: () => hd.copy(s.connect!.uri) }, t(v.lang, 'copyLink'))) : h('p', {}, h('button', { type: 'button', onClick: hd.startLink }, t(v.lang, 'connectSigner'))),
+      s.signer === 'connecting' && s.connect ? h('p', { class: 'status', role: 'status' }, t(v.lang, 'connectWaiting')) : null),
     h('p', {}, h('button', { type: 'button', class: 'link', onClick: hd.cancelConnect }, t(v.lang, 'cancel'))),
   )
 }

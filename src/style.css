@@ -48,3 +48,5 @@ a.button, .sign button:not(.link), .actions button.react { display: inline-block
 .sign .toast { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; max-height: 45vh; overflow: auto; padding: 0.6rem 1rem; background: var(--bg); border-top: 2px solid var(--accent); box-shadow: 0 -4px 12px rgba(0,0,0,0.15); display: grid; gap: 0.4rem; }
 .sign .toast > * { max-width: 42rem; margin: 0 auto; width: 100%; }
 main { padding-bottom: 6rem; }
+.connect h3 { margin: 0.5rem 0 0.25rem; font-size: 1rem; } .bunker { display: grid; gap: 0.5rem; padding: 0.6rem; border: 1px solid var(--accent); border-radius: 6px; }
+.by-link { margin-top: 0.5rem; } .by-link summary { cursor: pointer; color: var(--accent); }

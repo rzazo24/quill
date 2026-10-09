@@ -32,7 +32,9 @@ Enforced by the browser, not just by the code: the production page ships a Conte
 
 ## Writing: Quill never sees your private key
 
-*Connect Clave* shows a link to open in Clave (or paste a `bunker://` address). Clave holds the key and signs; Quill keeps only an app key, saved in this browser, that identifies it to Clave. The connection asks for `sign_event` of kinds 1 and 7 only.
+*Connect Clave* asks you to paste the **`bunker://` address** that Clave gives you (or press *Paste and connect* after copying it in Clave). Clave holds the key and signs; Quill keeps only an app key, saved in this browser, that identifies it to Clave.
+
+**Why `bunker://` and not a link:** Clave signs in the background only for clients paired this way (its push service wakes it for requests sent through `relay.powr.build`); with a `nostrconnect://` link or QR, tested here on an iPhone, Clave answered only while it was open on screen. A link is still offered as an alternative (*Use a link instead*), for when Clave is open anyway.
 
 - **React** under a note: one tap. **Reply** and **new note**: a review screen shows the exact text, kind, tags and relays before anything is asked of Clave.
 - Quill sends **one** request to Clave (one notification) and waits up to 5 minutes, with a Cancel button; nothing is published unless Clave signs. What comes back is verified: valid signature, your key, and exactly the kind, content and tags that were asked for (a signer that adds a hidden mention is refused). Then it publishes to the relays and shows the result **per relay**, with a retry for the ones that failed that does not need a new signature.

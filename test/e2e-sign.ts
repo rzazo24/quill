@@ -19,7 +19,8 @@ const fake = new FakeSigner({ delayMs: 50 })
 let code = 0
 try {
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded', timeout: 20000 })
-  await page.click('button:has-text("Connect Clave")')
+  await page.click('button:has-text("Connect Clave")') // opens the panel (the bunker:// address comes first)
+  await page.click('.by-link button:has-text("Connect Clave")') // the link way
   const href = (await page.locator('a.button').getAttribute('href')) ?? ''
   const uri = decodeURIComponent(href.replace(/^.*\?uri=/, ''))
   console.log('link params:', [...new URL(uri).searchParams.keys()].join(','), '| relays:', new URL(uri).searchParams.getAll('relay').join(' '))

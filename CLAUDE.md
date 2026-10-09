@@ -29,6 +29,13 @@ npm run build                 # tsc -b && vite build
 
 `src/core` pure logic (text, NIP-10 threads, refs, identity, the filter) · `src/data` loading (follows, graph, mutes, feeds, threads) over an injected `Fetcher` · `src/net/fetcher.ts` the only code that talks to relays: drops events with a bad signature or that do not answer the filter, `memo` caches per page · `src/ui` DOM only through `h()`/`textContent` (no `innerHTML`), `app.ts` holds the state. The build ships a CSP meta tag (own script/style + `wss:` only); `frame-ancestors` has to be a response header from the web server.
 
+## What was learned about Clave (iOS signer) — keep it in mind before changing the connection code
+
+- Pair with a **`bunker://` address copied in Clave** (primary UI). Verified on a real iPhone/PC: signing is answered in ~1 s with Clave in the BACKGROUND. With `nostrconnect://` (link/QR) Clave answered only while open on screen, at Low, Medium and Full trust alike, even though pairing "succeeds" and the requests reach relay.powr.build. Clave's own docs (github.com/DocNR/clave README and docs/nip46-compatibility.md) say the push proxy watches ONE relay, relay.powr.build, and recommend bunker:// for the same device.
+- iOS freezes a backgrounded app's sockets after ~5-10 s: a page cannot rely on listening live while the user is in another app. `src/sign/nip46.ts` is a client that also POLLS the relay (relay.powr.build stores kind 24133) so a late answer is found; it is tested but NOT wired into `Signer` yet (the bunker path signs in the background, so Safari stays in front). Wire it in if Clave needs to be opened to approve (e.g. Low trust).
+- Do not put relays other than relay.powr.build in links that Clave must serve unless there is a reason; our own relay rejects kind 24133.
+- When something looks broken, look at relay.powr.build directly (kind 24133, authors/`#p` of the user's key): it shows whether the request arrived and whether Clave answered, without decrypting anything.
+
 ## Signing rules that must not erode
 
 - The user's private key never enters Quill (no nsec field anywhere; `parseIdentity` refuses an nsec on sight and does not echo it). Quill keeps only an app key (localStorage `signer`) and the signer's key/relays.

@@ -15,4 +15,5 @@ startApp(document.getElementById('app')!, {
   onHash: (cb) => addEventListener('hashchange', cb),
   setHash: (h) => { location.hash = h },
   copy: (text) => { void navigator.clipboard?.writeText(text).catch(() => {}) },
+  readClipboard: () => navigator.clipboard.readText(),
 })
