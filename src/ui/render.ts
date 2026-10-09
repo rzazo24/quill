@@ -155,7 +155,7 @@ export function renderPrefs(p: PrefsProps, v: View): HTMLElement {
     h('h3', {}, t(v.lang, 'fontTitle')),
     h('div', { class: 'seg', role: 'group', 'aria-label': t(v.lang, 'fontTitle') }, ...FONT_SIZES.map((f) =>
       h('button', { type: 'button', class: `size-${f}`, 'aria-pressed': String(p.font === f), onClick: () => { if (p.font !== f) p.onFont(f) } }, t(v.lang, `font_${f}` as Parameters<typeof t>[1])))),
-    h('label', { class: 'check' }, h('input', { type: 'checkbox', ...(p.reposts ? { checked: true } : {}), onChange: (e: Event) => p.onReposts((e.target as HTMLInputElement).checked) }), t(v.lang, 'showReposts')),
+    h('label', { class: 'check' }, h('span', {}, t(v.lang, 'showReposts')), h('input', { type: 'checkbox', role: 'switch', ...(p.reposts ? { checked: true } : {}), onChange: (e: Event) => p.onReposts((e.target as HTMLInputElement).checked) })),
     h('h3', {}, t(v.lang, 'relaysTitle')), h('p', { class: 'meta' }, t(v.lang, 'relaysHelp')),
     h('ul', { class: 'relay-list' }, ...p.relays.map((u) => h('li', {},
       h('span', { class: 'url' }, u.replace(/^wss:\/\//, '')),
@@ -184,7 +184,7 @@ function renderRelayListSync(p: PrefsProps, v: View): HTMLElement | null {
 export function renderSettings(p: SettingsPanelProps, v: View): HTMLElement {
   const { settings: s } = p
   const rule = (key: keyof Settings['rules'], label: Parameters<typeof t>[1]) =>
-    h('label', { class: 'check' }, h('input', { type: 'checkbox', ...(s.rules[key] ? { checked: true } : {}), onChange: (e: Event) => p.onSettings({ ...s, rules: { ...s.rules, [key]: (e.target as HTMLInputElement).checked } }) }), ' ', t(v.lang, label))
+    h('label', { class: 'check' }, h('span', {}, t(v.lang, label)), h('input', { type: 'checkbox', role: 'switch', ...(s.rules[key] ? { checked: true } : {}), onChange: (e: Event) => p.onSettings({ ...s, rules: { ...s.rules, [key]: (e.target as HTMLInputElement).checked } }) }))
   const select = h('select', { onChange: (e: Event) => p.onSettings({ ...s, maxDistance: Number((e.target as HTMLSelectElement).value) }) },
     h('option', { value: '1', ...(s.maxDistance === 1 ? { selected: true } : {}) }, t(v.lang, 'distance1')),
     h('option', { value: '2', ...(s.maxDistance === 2 ? { selected: true } : {}) }, t(v.lang, 'distance2')),
@@ -192,7 +192,7 @@ export function renderSettings(p: SettingsPanelProps, v: View): HTMLElement {
   const area = h('textarea', { rows: '3', onChange: (e: Event) => p.onWords((e.target as HTMLTextAreaElement).value) })
   area.value = p.words.join('\n')
   return h('section', { class: 'settings' },
-    h('h2', {}, t(v.lang, 'settingsTitle')), h('p', {}, t(v.lang, 'settingsHelp')),
+    h('h2', {}, t(v.lang, 'settingsTitle')), h('p', {}, t(v.lang, 'settingsHelp')), h('p', { class: 'meta' }, t(v.lang, 'switchHelp')),
     rule('repeatedText', 'ruleRepeated'), rule('burst', 'ruleBurst'), rule('linkOnly', 'ruleLinks'), rule('outsideNetwork', 'ruleNetwork'),
     h('label', {}, t(v.lang, 'distance'), ' ', select),
     h('label', {}, t(v.lang, 'mutedWords'), h('br'), area), h('small', {}, t(v.lang, 'mutedWordsHelp')),

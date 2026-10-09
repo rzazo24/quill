@@ -45,7 +45,14 @@ input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent); v
 .card, .settings, .sign, .login { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px }
 .login, .settings, .sign { display: grid; gap: 10px } .sign:empty { display: none }
 .settings h2, .sign h2, .login h2 { font-size: 1.05rem } .login p, .settings p, .sign p { margin: 0 } .settings p, .login p { color: var(--muted) }
-.check { display: flex; align-items: center; gap: 10px; min-height: 36px }
+.check { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 44px } .check > span { flex: 1; min-width: 0 }
+/* a switch: on = turquoise, knob to the right; off = grey, knob to the left (still a checkbox underneath, announced as on/off) */
+.check input[type=checkbox] { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 48px; height: 28px; margin: 0; border-radius: 14px; background: #2a3547; border: 1px solid #3a475b; cursor: pointer; transition: background .15s, border-color .15s }
+.check input[type=checkbox]::before { content: ''; position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%; background: #c9d4e0; transition: transform .15s, background .15s }
+.check input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent) }
+.check input[type=checkbox]:checked::before { transform: translateX(20px); background: #f4fbfa }
+.check input[type=checkbox]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+@media (prefers-reduced-motion: reduce) { .check input[type=checkbox], .check input[type=checkbox]::before { transition: none } }
 .meta, small { color: var(--muted); font-size: .85rem }
 .status, .empty, .hint { color: var(--muted); margin: 0 } .error { color: var(--red); margin: 0 } .hint a { display: flex; align-items: center; min-height: 44px; padding: 0 14px; background: var(--btn); border: 1px solid var(--border); border-radius: 8px; color: var(--text); text-decoration: none }
 @media (hover: hover) { .hint a:hover, .back:hover, .by-link summary:hover, .thread-link:hover { border-color: var(--accent) } }

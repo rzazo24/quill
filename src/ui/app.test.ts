@@ -416,3 +416,13 @@ describe('reposts of the people you follow', () => {
     const a = boot({ events: feed, stored: { me } }); await tick(100); await a.go('#/mentions'); await tick(150); expect(a.root.querySelector('.reposted')).toBeNull()
   })
 })
+
+describe('the switches in Settings', () => {
+  it('every rule and the reposts option is a switch (a checkbox announced as on/off), with the words first and the switch at the end, and one line that says what on and off mean', async () => {
+    const a = boot({ stored: { me } }); await tick(80); await a.go('#/settings'); await tick(100)
+    const rows = [...a.root.querySelectorAll('label.check')]; expect(rows).toHaveLength(5) // four rules + reposts
+    for (const r of rows) { const input = r.querySelector('input')!; expect(input.type).toBe('checkbox'); expect(input.getAttribute('role')).toBe('switch'); expect(r.firstElementChild!.tagName).toBe('SPAN'); expect(r.lastElementChild).toBe(input) }
+    expect(a.root.querySelector('.settings .meta')!.textContent).toBe('On = the rule hides what meets its condition. Off = it hides nothing.')
+    expect(rows.slice(0, 4).map((r) => (r.querySelector('input') as HTMLInputElement).checked)).toEqual([true, true, true, true]) // all on by default
+  })
+})
