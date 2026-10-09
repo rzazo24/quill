@@ -320,17 +320,30 @@ describe('the relay list on Nostr', () => {
   })
   it('a different published list is reported, and can be used here instead', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg, events: [...world, published(['wss://x.example', 'wss://y.example', 'wss://z.example'])], stored: { me, relays: JSON.stringify(['wss://r1.example']) } }); await open(a, sg)
-    expect(prefs(a).textContent).toContain('is different (3 relays)')
+    expect(prefs(a).textContent).toContain('is different (relays: 3)')
     await press(a, 'Use the published list'); expect(urls(a)).toEqual(['x.example', 'y.example', 'z.example']); expect(JSON.parse(a.mem.get('relays')!)).toEqual(['wss://x.example', 'wss://y.example', 'wss://z.example'])
     expect(prefs(a).textContent).toContain('is this one.')
   })
-  it('a device that never chose a list starts from the published one, without storing it; a device that chose keeps its own', async () => {
+  it('a device that never chose a list starts from the published one and keeps it as its own (the notice shows once); a device that chose keeps its own', async () => {
     const list = published(['wss://x.example', 'wss://y.example'])
-    const fresh = boot({ signer: fakeSigner(), events: [...world, list] }); await open(fresh, undefined); expect(urls(fresh)).toEqual(['x.example', 'y.example']); expect(fresh.mem.has('relays')).toBe(false); expect(fresh.text()).toContain('Using the relay list you published')
+    const fresh = boot({ signer: fakeSigner(), events: [...world, list] }); await open(fresh, undefined); expect(urls(fresh)).toEqual(['x.example', 'y.example']); expect(JSON.parse(fresh.mem.get('relays')!)).toEqual(['wss://x.example', 'wss://y.example']); expect(fresh.text()).toContain('Relays loaded from your list on Nostr (2).')
     const chosen = boot({ events: [...world, list], stored: { me, relays: JSON.stringify(['wss://r1.example']) } }); await open(chosen); expect(urls(chosen)).toEqual(['r1.example'])
   })
   it('somebody else\'s relay list is never adopted', async () => {
     const theirs = ev(friend, '', { kind: 10002, created_at: 1000, tags: [['r', 'wss://evil.example']] })
     const a = boot({ events: [...world, theirs] }); await open(a); expect(urls(a)).toEqual(['r1.example', 'r2.example'])
+  })
+})
+
+describe('adopting the published relay list happens once', () => {
+  it('the second start on the same device uses its own list, says nothing, and a later change on Nostr is offered, not forced', async () => {
+    const first = boot({ signer: fakeSigner(), events: [...world, ev(me, '', { kind: 10002, created_at: 1000, tags: [['r', 'wss://x.example'], ['r', 'wss://y.example']] })] }); await tick(150)
+    expect(first.text()).toContain('Relays loaded from your list on Nostr (2).')
+    const stored = first.mem.get('relays')!
+    const newer = ev(me, '', { kind: 10002, created_at: 2000, tags: [['r', 'wss://z.example']] })
+    const second = boot({ signer: fakeSigner(), events: [...world, newer], stored: { me, relays: stored } }); await tick(150)
+    expect(second.text()).not.toContain('Relays loaded from your list'); expect(second.mem.get('relays')).toBe(stored)
+    await second.go('#/settings'); await tick(100); expect(second.root.querySelector('.prefs')!.textContent).toContain('is different (relays: 1)')
+    expect([...second.root.querySelectorAll('.relay-list .url')].map((x) => x.textContent)).toEqual(['x.example', 'y.example'])
   })
 })

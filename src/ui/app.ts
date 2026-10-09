@@ -136,7 +136,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       if (!adoptTried) {
         adoptTried = true
         if (got.p && safeGet(kv, 'relays') === null && !sameList(got.p, relays)) { // a new device: start from the list the reader published
-          relays = got.p; deps.setRelays?.(relays); fetcher.clear(); say('info', t(lang, 'listAdopted'))
+          relays = got.p; safeSet(kv, 'relays', JSON.stringify(relays)); deps.setRelays?.(relays); fetcher.clear(); say('info', t(lang, 'listAdopted', { n: relays.length })) // from now on it is this device's own list: the notice shows once
           got = await fetchAll()
         }
       }

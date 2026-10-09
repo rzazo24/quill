@@ -46,7 +46,7 @@ The summary at the top says how many notes are hidden and why. Every rule can be
 
 • Text size: four sizes, remembered on this device.
 • Relays: the relays Quill reads from and publishes to. Only secure addresses (wss://), from 1 to 10. Test tells you if one answers, and you can restore the defaults. Every relay sees your IP address and what you publish. Clave uses its own relays and is not affected.
-• Relay list on Nostr: you can publish your list so that other apps and your other devices know it. It is public, so Quill asks you to confirm and Clave asks you to approve it. A device where you never chose a list starts from the one you published.
+• Relay list on Nostr: you can publish your list so that other apps and your other devices know it. It is public, so Quill asks you to confirm and Clave asks you to approve it. A device where you never chose a list starts from the one you published (once; after that it is that device's own list).
 • Filter: the rules, how far your network reaches and the muted words.` },
   { id: 'install', title: 'Install it as an app', body: `• iPhone (Safari): Share, then Add to Home Screen.
 • Android (Chrome): menu, then Install app.
@@ -100,7 +100,7 @@ El resumen de arriba dice cuántas notas se ocultan y por qué. Cada regla se pu
 
 • Tamaño del texto: cuatro tamaños, recordados en este dispositivo.
 • Relés: los relés de los que Quill lee y en los que publica. Solo direcciones seguras (wss://), de 1 a 10. Probar te dice si uno responde, y puedes restaurar los de por defecto. Cada relé ve tu dirección IP y lo que publicas. Clave usa sus propios relés y no se ve afectada.
-• Lista de relés en Nostr: puedes publicar tu lista para que otras apps y tus otros dispositivos la conozcan. Es pública, así que Quill te pide que confirmes y Clave te pide que la apruebes. Un dispositivo donde nunca elegiste lista empieza con la que publicaste.
+• Lista de relés en Nostr: puedes publicar tu lista para que otras apps y tus otros dispositivos la conozcan. Es pública, así que Quill te pide que confirmes y Clave te pide que la apruebes. Un dispositivo donde nunca elegiste lista empieza con la que publicaste (una sola vez; después es la lista de ese dispositivo).
 • Filtro: las reglas, hasta dónde llega tu red y las palabras silenciadas.` },
   { id: 'install', title: 'Instálala como app', body: `• iPhone (Safari): Compartir y después Añadir a pantalla de inicio.
 • Android (Chrome): menú y después Instalar app.
