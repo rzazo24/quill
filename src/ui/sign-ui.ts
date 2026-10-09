@@ -54,7 +54,8 @@ export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, sign
   if (where === 'me' && s.connectOpen && s.signer !== 'connected') parts.push(renderConnect(s, hd, v))
   if (where === 'me' && s.signer === 'connected') parts.push(h('p', { class: 'signing-as' }, t(v.lang, 'signingAs', { who: s.who ?? '' }), ' ', h('button', { type: 'button', class: 'link', onClick: hd.disconnect }, t(v.lang, 'disconnectSigner'))))
   if (s.signer === 'connected') {
-    if (s.step) toast.push(h('p', { class: 'status', role: 'status' }, t(v.lang, `step_${s.step}` as Parameters<typeof t>[1]), s.step === 'waiting' ? h('span', {}, ' ', h('button', { type: 'button', class: 'link', onClick: hd.cancelSigning }, t(v.lang, 'cancel'))) : null))
+    // while the signer works: a popup that stays as long as the wait lasts (it does not fade) and goes away when it is over
+    if (s.step) parts.push(h('div', { class: 'popup stay', role: 'status' }, h('span', {}, t(v.lang, `step_${s.step}` as Parameters<typeof t>[1])), s.step === 'waiting' ? h('button', { type: 'button', class: 'link', onClick: hd.cancelSigning }, t(v.lang, 'cancel')) : null))
     else if (s.result) toast.push(renderResult(s.result, s.relays, hd, v))
     else if (s.review) parts.push(renderReview(s, hd, v))
     else parts.push(renderComposer(s, hd, v))

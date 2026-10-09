@@ -220,10 +220,13 @@ describe('tapping again while Clave has not answered', () => {
     ;(a.root.querySelector('button[aria-label="React 🤙"]') as HTMLElement).click(); await tick(300)
     expect(a.pub.sent).toHaveLength(1); expect(a.pub.sent[0]!.event.content).toBe('❤️'); expect(sg.log.filter((l) => l.startsWith('sign'))).toHaveLength(1)
   })
-  it('what is happening is shown in a bar fixed to the bottom of the screen, not somewhere up the page', async () => {
+  it('waiting for the signer is a popup fixed to the screen that stays while it waits, can be cancelled, and goes away when it is over', async () => {
     const sg = fakeSigner({ hang: true }); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)
     ;(a.root.querySelector('button[aria-label="React ❤️"]') as HTMLElement).click(); await tick(60)
-    expect(a.root.querySelector('.sign .toast')!.textContent).toMatch(/Waiting for Clave/)
+    const pop = a.root.querySelector('.sign .popup.stay')!; expect(pop.textContent).toMatch(/Waiting for Clave/); expect(pop.querySelector('button')!.textContent).toBe('Cancel')
+    await tick(3200); expect(a.root.querySelector('.sign .popup.stay')).not.toBeNull() // it does not fade away like a plain notice
+    ;(pop.querySelector('button') as HTMLElement).click(); await tick(80)
+    expect(a.root.querySelector('.sign .popup.stay')).toBeNull(); expect(a.pub.sent).toEqual([])
   })
 })
 
