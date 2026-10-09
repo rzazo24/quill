@@ -87,4 +87,6 @@ Organización del código: `src/core` lógica pura (seguridad del texto, hilos, 
 
 Mirado antes de empezar (octubre de 2026): Coracle oculta notas bajo un umbral de red de confianza sin decir por qué; nostui es un cliente de terminal sin filtro de spam.
 
-Licencia MIT.
+## Licencia
+
+[MIT](LICENSE) © 2026 rzazo24. Libre para usar, copiar, modificar y distribuir, sin garantía. El texto legal que vale es el original en inglés del archivo `LICENSE`; esto es solo un resumen.

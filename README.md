@@ -87,4 +87,6 @@ Layout of the code: `src/core` pure logic (text safety, threads, the filter) · 
 
 Looked at before starting (October 2026): Coracle hides notes under a web-of-trust threshold without saying why; nostui is a terminal client with no spam filtering.
 
-MIT licensed.
+## License
+
+[MIT](LICENSE) © 2026 rzazo24. Free to use, copy, modify and distribute, with no warranty.
