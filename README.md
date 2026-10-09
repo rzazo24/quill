@@ -31,7 +31,7 @@ Principles: behaviour is evidence, **missing data is not** (a key without a prof
 - **Following**, **Mentions** (where the filter earns its keep), **Me** (your account, your Clave connection, the filter settings, your own notes) and any **thread**.
 - **In-app notifications**: a number on *Mentions*, new notes marked, and a list of who reacted to your notes.
 - **React** with one tap; what you already reacted to or replied to is marked; **reply** and **write a note** through a review screen that shows the exact text, kind, tags and relays before anything is asked of your signer.
-- **Settings**: your own relay list (with a connection test) and four text sizes, both remembered on the device.
+- **Settings**: your own relay list (with a connection test; optionally published on Nostr as your NIP-65 list, and used as the starting point on a new device) and four text sizes, both remembered on the device.
 - English and Spanish; dark theme; mobile first, and fine on a desktop.
 - Installable as an app on iPhone and Android.
 
@@ -47,7 +47,7 @@ No direct messages, zaps, search, lists, media or long-form articles. The relay 
 
 - Quill sends **one** request to the signer (one notification) and waits up to 90 seconds, with a Cancel button; nothing is published unless the signer signs. A new tap replaces a request still waiting.
 - What comes back is **verified**: valid signature, your key, and exactly the kind, content and tags that were asked for (a signer that adds a hidden mention is refused). Then it publishes to the relays and shows the result **per relay**, with a retry for the ones that failed that needs no new signature.
-- Quill's own policy only ever signs notes (≤ 1000 characters) and reactions, at most 20 signatures per hour, **whatever trust level you give it in the signer**. Suggested level for Quill in Clave: *medium* (it auto-approves kinds 1, 6 and 7, which is all Quill needs); *full* also approves deletions, follow lists and relay lists, which Quill never asks for.
+- Quill's own policy only ever signs notes (≤ 1000 characters), reactions and, when you press the button in Settings, your relay list (NIP-65, kind 10002, in exactly the shape Quill builds), at most 20 signatures per hour, **whatever trust level you give it in the signer**. Suggested level for Quill in Clave: *medium* (it auto-approves kinds 1, 6 and 7, which is all Quill needs); *full* also approves deletions, follow lists and relay lists, which Quill never asks for.
 - A signer for a different account than the one you are reading as is refused and disconnected.
 
 ## Install it as an app

@@ -296,3 +296,41 @@ describe('signing out', () => {
     await a.go('#/me'); await click(a.root, 'Sign out'); expect(sg.log).toContain('disconnect'); expect(a.mem.has('me')).toBe(false)
   })
 })
+
+describe('the relay list on Nostr', () => {
+  const published = (urls: string[], at = 1000) => ev(me, '', { kind: 10002, created_at: at, tags: urls.map((u) => ['r', u]) })
+  const prefs = (a: ReturnType<typeof boot>) => a.root.querySelector('.prefs') as HTMLElement
+  const urls = (a: ReturnType<typeof boot>) => [...prefs(a).querySelectorAll('.relay-list .url')].map((x) => x.textContent)
+  const press = async (a: ReturnType<typeof boot>, label: string) => { const b = [...prefs(a).querySelectorAll('button')].find((x) => x.textContent === label)!; b.click(); await tick(150) }
+  const open = async (a: ReturnType<typeof boot>, sg?: ReturnType<typeof fakeSigner>) => { await tick(100); if (sg) await connectClave(a, sg); await a.go('#/me'); await tick(100) }
+
+  it('with nothing published, and a signer connected, the list can be published after a confirmation that says it is public', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await open(a, sg)
+    expect(prefs(a).textContent).toContain('You have not published your relay list on Nostr yet.')
+    await press(a, 'Publish this list on Nostr'); expect(prefs(a).textContent).toContain('This is public'); expect(prefs(a).textContent).toContain('these 2 relays'); expect(a.pub.sent).toEqual([])
+    await press(a, 'Cancel'); expect(prefs(a).textContent).not.toContain('This is public'); expect(a.pub.sent).toEqual([]) // nothing signed without the second step
+    await press(a, 'Publish this list on Nostr'); await press(a, 'Sign and publish')
+    expect(a.pub.sent).toHaveLength(1); const e = a.pub.sent[0]!.event
+    expect(e.kind).toBe(10002); expect(e.content).toBe(''); expect(e.tags).toEqual([['r', 'wss://r1.example'], ['r', 'wss://r2.example']])
+    expect(prefs(a).textContent).toContain('The relay list you published on Nostr is this one.'); expect(a.text()).toContain('Relay list published')
+  })
+  it('without a signer it says what is needed and offers nothing to press', async () => {
+    const a = boot(); await open(a)
+    expect(prefs(a).textContent).toContain('Connect Clave (above) to publish this list.'); expect([...prefs(a).querySelectorAll('button')].some((b) => b.textContent === 'Publish this list on Nostr')).toBe(false)
+  })
+  it('a different published list is reported, and can be used here instead', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg, events: [...world, published(['wss://x.example', 'wss://y.example', 'wss://z.example'])], stored: { me, relays: JSON.stringify(['wss://r1.example']) } }); await open(a, sg)
+    expect(prefs(a).textContent).toContain('is different (3 relays)')
+    await press(a, 'Use the published list'); expect(urls(a)).toEqual(['x.example', 'y.example', 'z.example']); expect(JSON.parse(a.mem.get('relays')!)).toEqual(['wss://x.example', 'wss://y.example', 'wss://z.example'])
+    expect(prefs(a).textContent).toContain('is this one.')
+  })
+  it('a device that never chose a list starts from the published one, without storing it; a device that chose keeps its own', async () => {
+    const list = published(['wss://x.example', 'wss://y.example'])
+    const fresh = boot({ signer: fakeSigner(), events: [...world, list] }); await open(fresh, undefined); expect(urls(fresh)).toEqual(['x.example', 'y.example']); expect(fresh.mem.has('relays')).toBe(false); expect(fresh.text()).toContain('Using the relay list you published')
+    const chosen = boot({ events: [...world, list], stored: { me, relays: JSON.stringify(['wss://r1.example']) } }); await open(chosen); expect(urls(chosen)).toEqual(['r1.example'])
+  })
+  it('somebody else\'s relay list is never adopted', async () => {
+    const theirs = ev(friend, '', { kind: 10002, created_at: 1000, tags: [['r', 'wss://evil.example']] })
+    const a = boot({ events: [...world, theirs] }); await open(a); expect(urls(a)).toEqual(['r1.example', 'r2.example'])
+  })
+})

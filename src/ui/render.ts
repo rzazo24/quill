@@ -5,6 +5,7 @@ import { refs, shortNpub } from '../core/refs.js'
 import { avatarOf } from '../core/avatar.js'
 import { showReaction, type ReactionGroup } from '../data/activity.js'
 import { FONT_SIZES, type FontSize } from './store.js'
+import type { ListState } from '../data/relaylist.js'
 import { icon } from './icons.js'
 import { cleanText, segments } from '../core/text.js'
 import type { Judged, RuleId, Settings } from '../core/verdict.js'
@@ -126,6 +127,9 @@ export interface SettingsPanelProps {
 
 export interface PrefsProps {
   font: FontSize; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
+  /** The list published on Nostr compared with this one, and what can be done about it. */
+  list: { state: ListState; publishedCount: number; canSign: boolean; confirming: boolean }
+  onAskPublish: () => void; onCancelPublish: () => void; onPublish: () => void; onUsePublished: () => void
   onFont: (f: FontSize) => void; onAdd: (text: string) => void; onRemove: (url: string) => void; onTest: (url: string) => void; onReset: () => void
 }
 /** Text size and the relay list. */
@@ -145,7 +149,21 @@ export function renderPrefs(p: PrefsProps, v: View): HTMLElement {
       h('button', { type: 'button', class: 'link', ...(p.relays.length <= 1 ? { disabled: true, title: t(v.lang, 'relayLast') } : {}), 'aria-label': `${t(v.lang, 'relayRemove')} ${u}`, onClick: () => p.onRemove(u) }, t(v.lang, 'relayRemove'))))),
     h('form', { class: 'relay-add', onSubmit: (e: Event) => { e.preventDefault(); p.onAdd(input.value) } }, input, ' ', h('button', { type: 'submit' }, t(v.lang, 'relayAdd'))),
     p.error ? h('p', { class: 'error', role: 'alert' }, p.error) : null,
-    p.isDefault ? null : h('p', {}, h('button', { type: 'button', class: 'link', onClick: p.onReset }, t(v.lang, 'relayReset'))))
+    p.isDefault ? null : h('p', {}, h('button', { type: 'button', class: 'link', onClick: p.onReset }, t(v.lang, 'relayReset'))),
+    renderRelayListSync(p, v))
+}
+
+/** Is the list the same on Nostr? Publishing it is a public act, so it asks first. */
+function renderRelayListSync(p: PrefsProps, v: View): HTMLElement | null {
+  const { state, publishedCount, canSign, confirming } = p.list
+  if (state === 'unknown') return null
+  const say = state === 'none' ? t(v.lang, 'listNone') : state === 'same' ? t(v.lang, 'listSame') : t(v.lang, 'listDiffers', { n: publishedCount })
+  return h('div', { class: 'list-sync' },
+    h('p', { class: 'meta' }, say),
+    state === 'same' ? null
+      : confirming ? h('div', { class: 'confirm' }, h('p', {}, t(v.lang, 'listConfirm', { n: p.relays.length })), h('p', {}, h('button', { type: 'button', class: 'primary', onClick: p.onPublish }, t(v.lang, 'listSign')), ' ', h('button', { type: 'button', class: 'link', onClick: p.onCancelPublish }, t(v.lang, 'listCancel'))))
+      : h('p', {}, ...(canSign ? [h('button', { type: 'button', onClick: p.onAskPublish }, t(v.lang, 'listPublish'))] : [h('span', { class: 'meta' }, t(v.lang, 'listNeedSigner'))]),
+          ...(state === 'differs' ? [' ', h('button', { type: 'button', class: 'link', onClick: p.onUsePublished }, t(v.lang, 'listUse'))] : [])))
 }
 
 export function renderSettings(p: SettingsPanelProps, v: View): HTMLElement {

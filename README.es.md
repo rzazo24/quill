@@ -31,7 +31,7 @@ Principios: la conducta es una prueba, **la falta de datos no lo es** (una clave
 - **Siguiendo**, **Menciones** (donde el filtro se gana el sueldo), **Yo** (tu cuenta, tu conexión con Clave, los ajustes del filtro y tus propias notas) y cualquier **hilo**.
 - **Notificaciones dentro de la app**: un número en *Menciones*, las notas nuevas marcadas y una lista de quién reaccionó a tus notas.
 - **Reaccionar** con un toque; lo que ya has reaccionado o respondido queda marcado; **responder** y **escribir una nota** con una pantalla de revisión que muestra el texto exacto, el tipo, las etiquetas y los relés antes de pedirle nada al firmador.
-- **Ajustes**: tu propia lista de relés (con prueba de conexión) y cuatro tamaños de letra, ambos recordados en el dispositivo.
+- **Ajustes**: tu propia lista de relés (con prueba de conexión; se puede publicar en Nostr como tu lista NIP-65, y se usa como punto de partida en un dispositivo nuevo) y cuatro tamaños de letra, ambos recordados en el dispositivo.
 - Inglés y español; tema oscuro; pensado primero para móvil, y también cómodo en un ordenador.
 - Instalable como app en iPhone y Android.
 
@@ -47,7 +47,7 @@ Ni mensajes directos, ni zaps, ni búsqueda, ni listas, ni multimedia, ni artíc
 
 - Quill manda **una** petición al firmador (una sola notificación) y espera hasta 90 segundos, con un botón Cancelar; no se publica nada si el firmador no firma. Un toque nuevo sustituye a una petición que siga esperando.
 - Lo que vuelve se **verifica**: firma válida, tu clave, y exactamente el tipo, el contenido y las etiquetas que se pidieron (un firmador que añade una mención oculta es rechazado). Después publica en los relés y muestra el resultado **relé por relé**, con un reintento para los que fallaron que no necesita una firma nueva.
-- La política propia de Quill solo firma notas (hasta 1000 caracteres) y reacciones, como mucho 20 firmas por hora, **sea cual sea el nivel de confianza que le des en el firmador**. Nivel sugerido para Quill en Clave: *medio* (aprueba solo los tipos 1, 6 y 7, que es todo lo que Quill necesita); *completo* también aprobaría borrados, listas de seguidos y de relés, que Quill nunca pide.
+- La política propia de Quill solo firma notas (hasta 1000 caracteres), reacciones y, cuando pulsas el botón en Ajustes, tu lista de relés (NIP-65, tipo 10002, exactamente con la forma que Quill construye), como mucho 20 firmas por hora, **sea cual sea el nivel de confianza que le des en el firmador**. Nivel sugerido para Quill en Clave: *medio* (aprueba solo los tipos 1, 6 y 7, que es todo lo que Quill necesita); *completo* también aprobaría borrados, listas de seguidos y de relés, que Quill nunca pide.
 - Un firmador de una cuenta distinta de la que estás leyendo se rechaza y se desconecta.
 
 ## Instálala como app

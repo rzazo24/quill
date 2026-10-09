@@ -21,6 +21,7 @@ import { reactionBar, renderSignArea, type Composer, type Flash, type Review } f
 import { installHint, type Env } from './install.js'
 import { parseFont, parseLang, parseSettings, parseWords, safeGet, safeSet, type FontSize, type KV } from './store.js'
 import { addRelay, parseRelays, removeRelay } from '../net/relays.js'
+import { listState, loadPublishedRelays, relayListTemplate } from '../data/relaylist.js'
 
 export interface Deps {
   fetcher: Fetcher; storage?: KV; languages?: readonly string[]; location: Pick<Location, 'hash'>; onHash: (cb: () => void) => void; setHash: (h: string) => void
@@ -62,6 +63,9 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let font: FontSize = parseFont(safeGet(kv, 'font'))
   let relayError: string | null = null
   const probes = new Map<string, 'testing' | 'up' | 'down'>()
+  let published: string[] | null | undefined // the relay list on Nostr: undefined = not read (yet), null = none
+  let confirmingList = false
+  let adoptTried = false // the published list becomes this device's list at most once per page load, and only if the reader never chose one here
   deps.setRelays?.(relays)
   const applyFont = () => root.ownerDocument.documentElement.setAttribute('data-font', font)
   applyFont()
@@ -115,6 +119,13 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     status = t(lang, 'loadingFollows'); draw()
     try { session = await loadSession(fetcher, me) } catch { status = null; return false }
     engagement = await loadEngagement(fetcher, me).catch(() => new Engagement()) // a failure only means nothing is marked
+    published = await loadPublishedRelays(fetcher, me).catch(() => undefined)
+    if (!adoptTried) {
+      adoptTried = true
+      if (published && safeGet(kv, 'relays') === null && !sameList(published, relays)) { // a new device: start from the list the reader published
+        relays = published; deps.setRelays?.(relays); fetcher.clear(); session = null; say('info', t(lang, 'listAdopted')); return ensureSession()
+      }
+    }
     return true
   }
 
@@ -206,6 +217,16 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     safeSet(kv, 'relays', JSON.stringify(list)); deps.setRelays?.(list); refresh()
   }
   const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i])
+  /** Publishing the list is a public act: first a confirmation that says so, then the signer. */
+  async function publishList(): Promise<void> {
+    confirmingList = false
+    if (!signer || signer.state !== 'connected') return draw()
+    const template = relayListTemplate(relays, Math.floor((deps.nowMs?.() ?? Date.now()) / 1000))
+    const problem = checkTemplate(template)
+    if (problem) { say('error', problemText(lang, problem)); return draw() }
+    if (await send(template)) { published = [...relays]; if (result && !failedRelays(result.outcomes).length) { result = null; say('info', t(lang, 'listDone')) } }
+    draw()
+  }
   function onAddRelay(text: string): void {
     const r = addRelay(relays, text)
     if (!r.ok) { relayError = t(lang, r.why === 'invalid' ? 'relayBad' : r.why === 'duplicate' ? 'relayDup' : 'relayFull'); return draw() }
@@ -367,7 +388,9 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const statusEl = me && status ? h('p', { class: 'status', role: 'status' }, status) : null
     const signOut = h('button', { type: 'button', class: 'danger', onClick: () => { me = null; session = null; body = null; shownRoute = ''; safeSet(kv, 'me', null); void signer?.disconnect(); composer = review = result = null; flash = null; deps.setHash(''); draw() } }, t(lang, 'signOut'))
     const content: (HTMLElement | null)[] = !me ? [loginForm, signArea]
-      : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, renderPrefs({ font, relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays) }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view()), h('h2', { class: 'section' }, t(lang, 'myNotes')), statusEl, body, h('p', { class: 'foot' }, signOut)]
+      : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, renderPrefs({ font, relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
+        list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
+        onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view()), h('h2', { class: 'section' }, t(lang, 'myNotes')), statusEl, body, h('p', { class: 'foot' }, signOut)]
       : [signArea, statusEl, body]
     const page: (HTMLElement | null)[] = [
       h('header', { class: 'top' }, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('div', { class: 'brand' }, h('h1', {}, h('a', { href: '#/' }, 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline'))), me ? h('button', { type: 'button', class: 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), onClick: refresh }, icon('refresh', 18)) : null, pills),

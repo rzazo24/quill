@@ -10,8 +10,8 @@ describe('checkTemplate: Quill only asks for notes and reactions', () => {
     expect(checkTemplate(note('hi', [['e', id, '', 'root'], ['p', id]]))).toBeNull()
     expect(checkTemplate(note('🦞', [['e', id], ['p', id], ['k', '1']], 7))).toBeNull()
   })
-  it('refuses every other kind: deleting, follow lists, relay lists, DMs, profiles', () => {
-    for (const kind of [0, 3, 4, 5, 6, 10002, 10050, 14, 30023, 22242, 24133]) expect(checkTemplate(note('x', [], kind)), String(kind)).toBe('kind')
+  it('refuses every other kind: deleting, follow lists, relay-list lookalikes of other kinds, DMs, profiles', () => {
+    for (const kind of [0, 3, 4, 5, 6, 10050, 10063, 14, 30023, 22242, 24133]) expect(checkTemplate(note('x', [], kind)), String(kind)).toBe('kind')
   })
   it('refuses empty and over-long notes, counting characters', () => {
     expect(checkTemplate(note('   \n '))).toBe('empty')

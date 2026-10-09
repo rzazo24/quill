@@ -42,10 +42,10 @@ describe.skipIf(!bin)('Signer with a pretend Clave through a real relay', () => 
     expect(JSON.stringify([...store.m.values()])).not.toContain(Buffer.from(fake.userSk).toString('hex')) // the user's private key never reaches the app
   }, 30_000)
 
-  it('requests ask for sign_event:1 and :7 only', async () => {
+  it('requests ask for sign_event for notes (1), reactions (7) and the relay list (10002) only', async () => {
     const store = mem(); const signer = new Signer({ kv: store.kv, relays: [relay.url] }); signers.push(signer)
     const u = new URL(signer.startConnect().uri)
-    expect(u.searchParams.get('perms')).toBe('get_public_key,sign_event:1,sign_event:7'); expect(u.searchParams.get('name')).toBe('Quill'); expect(u.searchParams.has('url')).toBe(false)
+    expect(u.searchParams.get('perms')).toBe('get_public_key,sign_event:1,sign_event:7,sign_event:10002'); expect(u.searchParams.get('name')).toBe('Quill'); expect(u.searchParams.has('url')).toBe(false)
     const withUrl = new URL(new Signer({ kv: mem().kv, relays: [relay.url], appUrl: 'https://quill.example' }).startConnect().uri)
     expect(withUrl.searchParams.get('url')).toBe('https://quill.example')
     expect(new URL(new Signer({ kv: mem().kv, relays: [relay.url], appUrl: 'http://insecure.example' }).startConnect().uri).searchParams.has('url')).toBe(false)
