@@ -35,8 +35,8 @@ const en = {
   chars: '{n} / {max}', previewTitle: 'You are about to publish as {who}', previewPublic: 'It is public. Deleting it later is only a request that relays may ignore.',
   previewRelays: 'Sent to {n} relays', previewReplyTo: 'In reply to {who}', previewMentions: 'Notifies {n} people',
   p_kind: 'Quill only signs notes and reactions.', p_empty: 'The note is empty.', p_too_long: 'The note is too long (limit {max} characters).', p_reaction: 'That is not a valid reaction.', p_tags: 'The note has invalid tags.', p_reaction_target: 'A reaction needs a note to react to.',
-  step_checking: 'Checking that Clave is awake…', step_waiting: 'Waiting for Clave. Keep it open on screen and approve if it asks.', step_sending: 'Sending to the relays…',
-  e_rate: 'Too many signatures in the last hour. Try again later.', e_no_signer: 'Connect Clave first.', e_asleep: 'Clave did not answer. Open it on screen (or tap its blank notification) and try again. Nothing was signed.', e_not_signed: 'Clave did not sign: {why}. Nothing was published.',
+  cancelledSigning: 'Cancelled. Nothing was published.', step_waiting: 'Waiting for Clave. Open it on screen (or tap its notification) and approve if it asks.', step_sending: 'Sending to the relays…',
+  e_rate: 'Too many signatures in the last hour. Try again later.', e_no_signer: 'Connect Clave first.', e_asleep: 'Clave did not answer in time. Open it on screen (or tap its blank notification) and try again. Nothing was published.', e_not_signed: 'Clave did not sign: {why}. Nothing was published.',
   published: 'Published to {ok} of {total} relays', publishedNone: 'Signed, but no relay accepted it', retryFailed: 'Retry the failed relays', done: 'Done', dismiss: 'Close',
 }
 export type Key = keyof typeof en
@@ -73,8 +73,8 @@ const es: Record<Key, string> = {
   chars: '{n} / {max}', previewTitle: 'Vas a publicar como {who}', previewPublic: 'Es público. Borrarlo después es solo una petición que los relés pueden ignorar.',
   previewRelays: 'Se envía a {n} relés', previewReplyTo: 'En respuesta a {who}', previewMentions: 'Avisa a {n} personas',
   p_kind: 'Quill solo firma notas y reacciones.', p_empty: 'La nota está vacía.', p_too_long: 'La nota es demasiado larga (límite {max} caracteres).', p_reaction: 'Esa reacción no es válida.', p_tags: 'La nota tiene etiquetas no válidas.', p_reaction_target: 'Una reacción necesita una nota a la que reaccionar.',
-  step_checking: 'Comprobando que Clave está despierta…', step_waiting: 'Esperando a Clave. Tenla abierta en pantalla y aprueba si lo pide.', step_sending: 'Enviando a los relés…',
-  e_rate: 'Demasiadas firmas en la última hora. Inténtalo más tarde.', e_no_signer: 'Conecta primero Clave.', e_asleep: 'Clave no contestó. Ábrela en pantalla (o pulsa su notificación en blanco) e inténtalo de nuevo. No se firmó nada.', e_not_signed: 'Clave no firmó: {why}. No se publicó nada.',
+  cancelledSigning: 'Cancelado. No se publicó nada.', step_waiting: 'Esperando a Clave. Ábrela en pantalla (o pulsa su notificación) y aprueba si lo pide.', step_sending: 'Enviando a los relés…',
+  e_rate: 'Demasiadas firmas en la última hora. Inténtalo más tarde.', e_no_signer: 'Conecta primero Clave.', e_asleep: 'Clave no contestó a tiempo. Ábrela en pantalla (o pulsa su notificación en blanco) e inténtalo de nuevo. No se publicó nada.', e_not_signed: 'Clave no firmó: {why}. No se publicó nada.',
   published: 'Publicado en {ok} de {total} relés', publishedNone: 'Firmado, pero ningún relé lo aceptó', retryFailed: 'Reintentar los relés que fallaron', done: 'Hecho', dismiss: 'Cerrar',
 }
 

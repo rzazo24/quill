@@ -84,6 +84,15 @@ describe.skipIf(!bin)('Signer with a pretend Clave through a real relay', () => 
     await expect(s.signer.sign(note(), 800)).rejects.toThrow(/did not answer within/)
   }, 40_000)
 
+  it('stop waiting for a signature: rejects at once, and the late answer is ignored', async () => {
+    const { signer, fake } = await connected({ decision: 'ignore' })
+    const ac = new AbortController(); setTimeout(() => ac.abort(), 150)
+    const t0 = Date.now()
+    await expect(signer.sign(note(), 20_000, ac.signal)).rejects.toThrow(/cancelled/)
+    expect(Date.now() - t0).toBeLessThan(3000); expect(fake.signRequests).toBe(1)
+    await expect(signer.sign(note(), 20_000, AbortSignal.abort())).rejects.toThrow(/cancelled/) // already cancelled: does not even wait
+  }, 30_000)
+
   it('ping is true only on a real pong; silence is false; reconnect replaces a dead connection', async () => {
     const { signer, fake } = await connected()
     expect(await signer.ping(3000)).toBe(true); expect(await signer.awake(3000)).toBe(true)

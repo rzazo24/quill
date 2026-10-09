@@ -18,7 +18,7 @@ const btn = (root: HTMLElement, text: string) => [...root.querySelectorAll('butt
 const click = async (root: HTMLElement, text: string) => { const b = btn(root, text); if (!b) throw new Error(`no button "${text}" in: ${root.textContent?.slice(0, 200)}`); b.click(); await tick() }
 
 /** A signer that does what the test tells it to: connects when asked, signs (or not), and records what it was asked. */
-function fakeSigner(over: { pubkey?: string; awake?: boolean; signError?: string; saved?: boolean } = {}) {
+function fakeSigner(over: { pubkey?: string; signError?: string; saved?: boolean; hang?: boolean } = {}) {
   const listeners: (() => void)[] = []
   const log: string[] = []
   const s = {
@@ -28,9 +28,9 @@ function fakeSigner(over: { pubkey?: string; awake?: boolean; signError?: string
     startConnect: () => { log.push('startConnect'); s.state = 'connecting'; return { uri: 'nostrconnect://abc?relay=wss%3A%2F%2Fr.example', claveLink: 'https://clave.casa/connect/?uri=nostrconnect%3A%2F%2Fabc', done: Promise.resolve(true) } },
     connectBunker: async (x: string) => { log.push('bunker ' + x); s.state = 'disconnected'; s.lastError = 'nope'; return false },
     resume: async () => true,
-    awake: async () => over.awake ?? true,
-    sign: async (t: { kind: number; content: string; tags: string[][]; created_at: number }) => {
+    sign: async (t: { kind: number; content: string; tags: string[][]; created_at: number }, _ms?: number, signal?: AbortSignal) => {
       log.push('sign ' + t.kind)
+      if (over.hang) await new Promise((_, reject) => signal?.addEventListener('abort', () => reject(new Error('cancelled'))))
       if (over.signError) throw new Error(over.signError)
       return { event: { ...ev(over.pubkey ?? me, t.content, { kind: t.kind, tags: t.tags, created_at: t.created_at }) }, ms: 700 }
     },
@@ -146,10 +146,16 @@ describe('writing a reply', () => {
     const ta = a.root.querySelector('textarea') as HTMLTextAreaElement; ta.value = 'x'.repeat(1001); ta.dispatchEvent(new Event('input')); await click(a.root, 'Review')
     expect(a.text()).toMatch(/too long \(limit 1000/)
   })
-  it('a sleeping Clave: clear message, nothing signed or published, and the draft is kept', async () => {
-    const sg = fakeSigner({ awake: false }); const a = await toReview(sg); await click(a.root, 'Publish'); await tick(40)
-    expect(a.text()).toMatch(/Clave did not answer/); expect(a.pub.sent).toEqual([]); expect(sg.log.some((l) => l.startsWith('sign'))).toBe(false)
+  it('a Clave that never answers: clear message, nothing published, and the draft is kept', async () => {
+    const sg = fakeSigner({ signError: 'the signer did not answer within 300 s' }); const a = await toReview(sg); await click(a.root, 'Publish'); await tick(40)
+    expect(a.text()).toMatch(/Clave did not answer in time/); expect(a.pub.sent).toEqual([])
     expect(a.root.querySelector('pre.preview')).not.toBeNull()
+  })
+  it('while waiting for Clave there is a Cancel button: it stops the wait, publishes nothing, keeps the draft', async () => {
+    const sg = fakeSigner({ hang: true }); const a = await toReview(sg); await click(a.root, 'Publish')
+    expect(a.text()).toMatch(/Waiting for Clave\. Open it on screen/); expect(sg.log.filter((l) => l.startsWith('sign'))).toHaveLength(1) // ONE request
+    await click(a.root, 'Cancel'); await tick(30)
+    expect(a.text()).toContain('Cancelled. Nothing was published.'); expect(a.pub.sent).toEqual([]); expect(a.root.querySelector('pre.preview')).not.toBeNull()
   })
   it('a rejection in Clave publishes nothing', async () => {
     const a = await toReview(fakeSigner({ signError: 'user rejected the request' })); await click(a.root, 'Publish'); await tick(40)

@@ -64,6 +64,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let step: Step | null = null
   let result: Published | null = null
   let busy = false // one signature at a time
+  let signing: AbortController | null = null // lets the user stop waiting for the signer
 
   const actions = (j: Judged) => (signer?.state === 'connected' ? [reactionBar(j.event, (emoji) => void react(j.event, emoji), () => startReply(j.event), view())] : [])
   const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.() })
@@ -168,18 +169,19 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   const sayPipelineError = (e: unknown): void => {
-    if (e instanceof PipelineError) say('error', t(lang, e.code === 'rate' ? 'e_rate' : e.code === 'no-signer' ? 'e_no_signer' : e.code === 'asleep' ? 'e_asleep' : 'e_not_signed', { why: e.message }))
+    if (e instanceof PipelineError && e.code === 'cancelled') say('info', t(lang, 'cancelledSigning'))
+    else if (e instanceof PipelineError) say('error', t(lang, e.code === 'rate' ? 'e_rate' : e.code === 'no-signer' ? 'e_no_signer' : /did not answer within/.test(e.message) ? 'e_asleep' : 'e_not_signed', { why: e.message }))
     else say('error', t(lang, 'e_not_signed', { why: e instanceof Error ? e.message : String(e) }))
   }
 
   async function send(template: Template): Promise<boolean> {
     if (!signer || !publisher || busy) return false
-    busy = true; flash = null; result = null; draw()
+    busy = true; flash = null; result = null; signing = new AbortController(); draw()
     try {
-      result = await signAndPublish({ signer, publisher, kv, now: deps.nowMs }, template, (s) => { step = s; draw() })
+      result = await signAndPublish({ signer, publisher, kv, now: deps.nowMs, signal: signing.signal }, template, (s) => { step = s; draw() })
       step = null; fetcher.clear()
       return true
-    } catch (e) { step = null; sayPipelineError(e); return false } finally { busy = false; draw() }
+    } catch (e) { step = null; sayPipelineError(e); return false } finally { busy = false; signing = null; draw() }
   }
 
   function templateFor(text: string, target?: NostrEvent): Template {
@@ -227,7 +229,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     }, {
       openConnect, cancelConnect, bunker: (x) => void bunker(x), disconnect: () => { void signer.disconnect(); composer = review = result = null; flash = null; draw() }, copy: (x) => { deps.copy?.(x); say('info', t(lang, 'copied')); draw() },
       edit: (x) => { if (composer) composer.text = x }, review: doReview, publish: () => void publish(), back: () => { review = null; draw() }, cancelComposer: () => { composer = null; review = null; draw() },
-      retry: () => void retry(), dismissResult: () => { result = null; draw() }, startNote,
+      retry: () => void retry(), dismissResult: () => { result = null; draw() }, startNote, cancelSigning: () => signing?.abort(),
     }, view(), true) : null
     root.replaceChildren(
       h('header', { class: 'top' },

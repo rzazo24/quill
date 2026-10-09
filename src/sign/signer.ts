@@ -179,12 +179,17 @@ export class Signer {
    * Asks the signer to sign `t`, and checks what comes back: a valid signature, by the connected key, and exactly the kind, content and tags that
    * were asked for (a compromised or confused signer could return something else). Also refuses anything Quill's own policy does not allow.
    */
-  async sign(t: Template, timeoutMs: number): Promise<{ event: VerifiedEvent; ms: number }> {
+  async sign(t: Template, timeoutMs: number, signal?: AbortSignal): Promise<{ event: VerifiedEvent; ms: number }> {
     const problem = checkTemplate(t)
     if (problem) throw new Error(`Quill will not sign this (${problem})`)
     if (this.state !== 'connected' || !this.bunker || !this.pubkey) throw new Error('no signer is connected')
     const t0 = this.now()
-    const event = await withTimeout(this.bunker.signEvent(t), timeoutMs, 'the signer')
+    const asked = this.bunker.signEvent(t)
+    // A user who cancels stops waiting; the request itself cannot be recalled, but its answer is ignored and nothing is published.
+    const cancelled = signal ? new Promise<never>((_, reject) => { if (signal.aborted) reject(new Error('cancelled')); else signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true }) }) : null
+    cancelled?.catch(() => {})
+    asked.catch(() => {}) // a late answer or error after cancelling is not an unhandled rejection
+    const event = await withTimeout(cancelled ? Promise.race([asked, cancelled]) : asked, timeoutMs, 'the signer')
     const ok = verifyEvent(event) && event.pubkey === this.pubkey && event.kind === t.kind && event.content === t.content && sameTags(event.tags, t.tags) && Math.abs(event.created_at - t.created_at) <= 300
     if (!ok) throw new Error('the signer returned an event that differs from what was asked, or is not signed by the connected key. It was discarded and nothing was published')
     return { event, ms: this.now() - t0 }

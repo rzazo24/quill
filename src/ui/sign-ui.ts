@@ -31,7 +31,7 @@ export interface SignUiState {
 export interface SignUiHandlers {
   openConnect(): void; cancelConnect(): void; bunker(text: string): void; disconnect(): void; copy(text: string): void
   edit(text: string): void; review(): void; publish(): void; back(): void; cancelComposer(): void; retry(): void; dismissResult(): void
-  startNote(): void
+  startNote(): void; cancelSigning(): void
 }
 
 const excerpt = (e: NostrEvent) => cleanText(e.content, 140).replace(/\s+/g, ' ')
@@ -44,7 +44,7 @@ export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, sign
   if (s.connectOpen && s.signer !== 'connected') parts.push(renderConnect(s, hd, v))
   if (s.signer === 'connected') parts.push(h('p', { class: 'signing-as' }, t(v.lang, 'signingAs', { who: s.who ?? '' }), ' ', h('button', { type: 'button', class: 'link', onClick: hd.disconnect }, t(v.lang, 'disconnectSigner'))))
   if (s.signer === 'connected') {
-    if (s.step) parts.push(h('p', { class: 'status', role: 'status' }, t(v.lang, `step_${s.step}` as Parameters<typeof t>[1])))
+    if (s.step) parts.push(h('p', { class: 'status', role: 'status' }, t(v.lang, `step_${s.step}` as Parameters<typeof t>[1]), s.step === 'waiting' ? h('span', {}, ' ', h('button', { type: 'button', class: 'link', onClick: hd.cancelSigning }, t(v.lang, 'cancel'))) : null))
     else if (s.result) parts.push(renderResult(s.result, s.relays, hd, v))
     else if (s.review) parts.push(renderReview(s, hd, v))
     else parts.push(renderComposer(s, hd, v))
