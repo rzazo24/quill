@@ -485,3 +485,11 @@ describe('the Network view in Following', () => {
     const nothing = boot({ events: world, stored: { me, feed: 'network' } }); await tick(200); expect(nothing.text()).toContain('Nothing new from the people your follows follow')
   })
 })
+
+describe('the loading message takes no room', () => {
+  it('hangs under the header, never inside the list, so nothing moves when it comes and goes', async () => {
+    const a = boot({ stored: { me }, delayMs: 60 }); await tick(30)
+    expect(a.root.querySelector('header.top .status.loading')!.textContent!.length).toBeGreaterThan(5); expect(a.root.querySelector('main.view .status')).toBeNull()
+    await tick(1500); expect(a.root.querySelector('.status.loading')).toBeNull(); expect(a.text()).toContain('a post from my friend')
+  })
+})
