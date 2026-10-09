@@ -1,6 +1,6 @@
 /* Same family as the ephemeral chat and the relay's landing page: dark navy, teal accent, rounded cards. Mobile first: the base rules are for a phone,
    the media query at the end only widens things. Nothing here loads anything: no fonts, no images. */
-:root { --col: 820px; --btn:#162030; --bg:#0b0f16; --panel:#111823; --border:#1f2a3a; --text:#e6edf3; --muted:#93a1b1; --accent:#2dd4bf; --amber:#fbbf24; --red:#ff9aa5; --tab-h:52px }
+:root { --col: 820px; --btn:#162030; --bg:#0b0f16; --panel:#111823; --border:#1f2a3a; --text:#e6edf3; --muted:#93a1b1; --accent:#2dd4bf; --amber:#fbbf24; --red:#ff9aa5; --tab-h:44px }
 * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: #2b3a50 transparent }
 html { color-scheme: dark; -webkit-text-size-adjust: 100%; height: 100% }
 body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -27,7 +27,7 @@ main.view { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior
      otherwise sit off-centre against the header and tab bar by the width of the bar */
   grid-template-columns: minmax(0, var(--col)); justify-content: center; scrollbar-gutter: stable both-edges }
 .tabbar { flex: none; width: min(100%, var(--col)); margin: 0 auto; position: relative; z-index: 6; display: flex; justify-content: center; background: var(--panel); border-top: 1px solid var(--border); padding-bottom: calc(env(safe-area-inset-bottom) * .5) }
-.tabbar .tab { flex: 1; max-width: 226px; display: flex; align-items: center; justify-content: center; min-height: var(--tab-h); color: var(--muted); text-decoration: none; font-size: .9rem; font-weight: 600; border-top: 3px solid transparent }
+.tabbar .tab { flex: 1; max-width: 226px; display: flex; align-items: center; justify-content: center; min-height: var(--tab-h); color: var(--muted); text-decoration: none; font-size: .85rem; font-weight: 600; border-top: 3px solid transparent }
 .tabbar .tab.on { color: var(--accent); border-top-color: var(--accent) }
 
 /* controls */
