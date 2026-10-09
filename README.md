@@ -41,6 +41,16 @@ Enforced by the browser, not just by the code: the production page ships a Conte
 - Quill's own policy only ever signs notes (≤ 1000 characters) and reactions, at most 20 signatures per hour, whatever trust level you give it in Clave. **Suggested trust level for Quill in Clave: medium** (it auto-approves kinds 1, 6 and 7, which is all Quill needs); full also approves deletions, follow lists and relay lists, which Quill never asks for.
 - A signer for a different account than the one you are reading as is refused and disconnected.
 
+## Install it as an app
+
+On an iPhone, in Safari: **Share → Add to Home Screen**. It opens full screen with its own icon. (Quill says so on the *Me* page while it is not installed.) Things that are different once installed:
+
+- **It keeps its own data**, separate from Safari: you log in and connect Clave again inside it.
+- There is no pull-to-refresh: use the **↻** button, tap the current tab again, or just come back after a few minutes (it refreshes by itself after two).
+- It works with Clave the same way: paste the `bunker://` address.
+
+Nothing is cached for offline use (there is no service worker): the notes come live from the relays, so an offline copy would only show an empty shell.
+
 ## Develop
 
 ```bash
@@ -50,6 +60,8 @@ npm run build   # type-check + production build
 npm run dev
 npm run probe -- <npub>        # data layer against the real relays, prints what the filter would do
 node test/e2e.mjs <npub>       # real browser (Playwright) against `npm run build` output; screenshots in .e2e/
+npm run e2e:pwa                # asks Chromium (DevTools protocol) whether the page is installable and the manifest parses
+npm run e2e:sign               # real browser + a pretend Clave: the connection handshake
 ```
 
 ## Prior art

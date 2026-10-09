@@ -15,6 +15,7 @@ import { h } from './dom.js'
 import { detectLang, problemText, t, type Key, type Lang } from './i18n.js'
 import { avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type Review } from './sign-ui.js'
+import { installHint, type Env } from './install.js'
 import { parseLang, parseSettings, parseWords, safeGet, safeSet, type KV } from './store.js'
 
 export interface Deps {
@@ -23,6 +24,8 @@ export interface Deps {
   signer?: SignerApi; publisher?: Publisher; relays?: string[]; copy?: (text: string) => void; nowMs?: () => number
   /** Reads the clipboard (needs a tap; may be refused). */
   readClipboard?: () => Promise<string>
+  /** Facts about where the page runs (iPhone? installed?), and a hook for "the page came back to the foreground". */
+  env?: Env; onVisible?: (cb: () => void) => void
 }
 
 type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'note'; id: string }
@@ -69,6 +72,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let busy = false // one signature at a time
   let signing: AbortController | null = null // lets the user stop waiting for the signer
   let current: Promise<boolean> | null = null // the action in progress
+  let lastLoadAt = 0
 
   const actions = (j: Judged) => (signer?.state === 'connected' ? [reactionBar(j.event, (emoji) => void react(j.event, emoji), () => startReply(j.event), view())] : [])
   const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.() })
@@ -112,8 +116,11 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       }
     } catch { content = h('p', { class: 'empty' }, t(lang, 'noNote')) }
     if (mine !== run) return
-    status = null; body = content; draw()
+    status = null; body = content; lastLoadAt = deps.nowMs?.() ?? Date.now(); draw()
   }
+
+  /** Reads everything again from the relays (an installed app has no pull-to-refresh). */
+  function refresh(): void { fetcher.clear(); session = null; void load() }
 
   const flat = (nodes: ThreadNode[]): Judged[] => nodes.flatMap((n) => [n.item, ...flat(n.children)])
 
@@ -247,7 +254,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
 
   function draw(): void {
     const route = parseRoute(deps.location.hash)
-    const tab = (name: 'following' | 'mentions' | 'me', href: string) => h('a', { href, class: route.name === name ? 'tab on' : 'tab', ...(route.name === name ? { 'aria-current': 'page' } : {}) }, t(lang, name))
+    const tab = (name: 'following' | 'mentions' | 'me', href: string) => h('a', { href, class: route.name === name ? 'tab on' : 'tab', ...(route.name === name ? { 'aria-current': 'page' } : {}), onClick: (e: Event) => { if (route.name === name) { e.preventDefault(); refresh() } } }, t(lang, name))
     const input = h('input', { type: 'text', placeholder: t(lang, 'loginPlaceholder'), autocomplete: 'off', spellcheck: 'false', 'aria-label': t(lang, 'loginTitle') })
     const loginForm = h('form', { class: 'login card', onSubmit: (e: Event) => { e.preventDefault(); login(input.value) } },
       h('h2', {}, t(lang, 'loginTitle')), h('p', {}, t(lang, 'loginHelp')), input, ' ', h('button', { type: 'submit', class: 'primary' }, t(lang, 'loginButton')),
@@ -265,10 +272,10 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const statusEl = me && status ? h('p', { class: 'status', role: 'status' }, status) : null
     const signOut = h('button', { type: 'button', class: 'danger', onClick: () => { me = null; session = null; body = null; shownRoute = ''; safeSet(kv, 'me', null); void signer?.disconnect(); composer = review = result = null; flash = null; deps.setHash(''); draw() } }, t(lang, 'signOut'))
     const content: (HTMLElement | null)[] = !me ? [loginForm, signArea]
-      : route.name === 'me' ? [accountCard(), signArea, renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view()), h('h2', { class: 'section' }, t(lang, 'myNotes')), statusEl, body, h('p', { class: 'foot' }, signOut)]
+      : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view()), h('h2', { class: 'section' }, t(lang, 'myNotes')), statusEl, body, h('p', { class: 'foot' }, signOut)]
       : [signArea, statusEl, body]
     const page: (HTMLElement | null)[] = [
-      h('header', { class: 'top' }, h('h1', {}, h('a', { href: '#/' }, 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline')), pills),
+      h('header', { class: 'top' }, h('h1', {}, h('a', { href: '#/' }, 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline')), me ? h('button', { type: 'button', class: 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), onClick: refresh }, '↻') : null, pills),
       h('main', { class: 'view' }, ...content),
       me ? h('nav', { class: 'tabbar' }, tab('following', '#/'), tab('mentions', '#/mentions'), tab('me', '#/me')) : null,
     ]
@@ -276,6 +283,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   deps.onHash(() => { void load() })
+  // Coming back to the app after a while (an installed app stays alive in the background): show fresh notes, not what was there hours ago.
+  deps.onVisible?.(() => { if (me && !busy && (deps.nowMs?.() ?? Date.now()) - lastLoadAt > 120_000) refresh() })
   draw()
   void load()
 }

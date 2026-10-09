@@ -16,16 +16,16 @@ const relays = (events: Event[], delayMs = 0): Fetcher => ({ query: async (f: Fi
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms))
 const roots: HTMLElement[] = []
 
-function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[] } = {}) {
+function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number } } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
-  const mem = new Map(Object.entries(opts.stored ?? {}))
+  const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], base = relays(opts.events ?? world, opts.delayMs), calls = { n: 0 }
   startApp(root, {
-    fetcher: relays(opts.events ?? world, opts.delayMs), languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
+    fetcher: { query: (f) => { calls.n++; return base.query(f) } }, env: opts.env, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
     storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
   })
   const go = async (hash: string) => { location.hash = hash; listeners.forEach((l) => l()); await tick() }
-  return { root, go, mem, text: () => root.textContent ?? '' }
+  return { root, go, mem, calls, comeBack: () => visible.forEach((v) => v()), text: () => root.textContent ?? '' }
 }
 afterEach(() => { roots.forEach((r) => r.remove()); roots.length = 0 })
 
@@ -110,6 +110,30 @@ describe('the app', () => {
     const a = boot({ stored: { me } }); await tick(80)
     const av = a.root.querySelector('article.note .avatar') as HTMLElement
     expect(av.textContent).toMatch(/^[A-Z0-9]{2}$/); expect(av.style.getPropertyValue('--h')).toMatch(/^\d+$/); expect(a.root.querySelectorAll('img, [src]').length).toBe(0)
+  })
+  it('an installed app has no pull-to-refresh: the header button and re-tapping the current tab read everything again', async () => {
+    const a = boot({ stored: { me } }); await tick(100)
+    const base = a.calls.n; expect(base).toBeGreaterThan(0)
+    ;(a.root.querySelector('button.icon') as HTMLElement).click(); await tick(100)
+    const afterButton = a.calls.n; expect(afterButton).toBeGreaterThan(base)
+    const current = a.root.querySelector('nav.tabbar a[aria-current]') as HTMLElement
+    const ev2 = new Event('click', { cancelable: true, bubbles: true }); current.dispatchEvent(ev2); await tick(100)
+    expect(ev2.defaultPrevented).toBe(true); expect(a.calls.n).toBeGreaterThan(afterButton)
+    const other = a.root.querySelector('nav.tabbar a:not([aria-current])') as HTMLElement
+    const ev3 = new Event('click', { cancelable: true, bubbles: true }); other.dispatchEvent(ev3); expect(ev3.defaultPrevented).toBe(false) // another tab navigates normally
+  })
+  it('coming back to the app after a few minutes refreshes it; after a few seconds it does not', async () => {
+    const clock = { now: 1_700_000_000_000 }; const a = boot({ stored: { me }, clock }); await tick(100)
+    const base = a.calls.n
+    clock.now += 30_000; a.comeBack(); await tick(100); expect(a.calls.n).toBe(base) // 30 s: nothing to do
+    clock.now += 5 * 60_000; a.comeBack(); await tick(100); expect(a.calls.n).toBeGreaterThan(base) // 5 min: fresh notes
+  })
+  it('the install hint shows on the Me page for iPhone Safari only, never once installed, never on a computer', async () => {
+    const shows = async (env: { ios: boolean; standalone: boolean } | undefined) => { const a = boot({ stored: { me }, env }); await tick(80); await a.go('#/me'); return a.text().includes('Add to Home Screen') }
+    expect(await shows({ ios: true, standalone: false })).toBe(true)
+    expect(await shows({ ios: true, standalone: true })).toBe(false)
+    expect(await shows({ ios: false, standalone: false })).toBe(false)
+    expect(await shows(undefined)).toBe(false)
   })
   it('survives a hostile note, junk in storage, and relays that return nothing', async () => {
     const evil = ev(friend, '<img src=x onerror=alert(1)> <script>x</script>')

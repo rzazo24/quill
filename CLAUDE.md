@@ -36,6 +36,13 @@ npm run build                 # tsc -b && vite build
 - Do not put relays other than relay.powr.build in links that Clave must serve unless there is a reason; our own relay rejects kind 24133.
 - When something looks broken, look at relay.powr.build directly (kind 24133, authors/`#p` of the user's key): it shows whether the request arrived and whether Clave answered, without decrypting anything.
 
+## Installable app (PWA) — what must stay true
+
+- `public/manifest.webmanifest`, the icons (`scripts/make-icons.mjs` renders the PNGs and favicon.ico from the quill drawing in `public/favicon.svg`), the page's `<link>`s and BOTH security policies (the meta tag in `vite.config.ts` and the header in `deploy/quill.caddy.template`) must agree: `src/pwa.test.ts` checks it, `npm run e2e:pwa` asks a real Chromium. `img-src 'self'` is for the app's own icons ONLY: never allow external images without a deliberate decision (privacy: profile pictures leak the reader's IP).
+- No service worker on purpose (live data; an offline shell is useless and stale caches are a risk). Web push later would need one.
+- An installed iPhone app has its OWN localStorage: a separate login and Clave pairing from Safari's. The header pads `env(safe-area-inset-top)` (status bar is translucent); the body must not.
+- Installed apps have no pull-to-refresh: the ↻ button, re-tapping the current tab and coming back after >2 min all call `refresh()`.
+
 ## Signing rules that must not erode
 
 - The user's private key never enters Quill (no nsec field anywhere; `parseIdentity` refuses an nsec on sight and does not echo it). Quill keeps only an app key (localStorage `signer`) and the signer's key/relays.
