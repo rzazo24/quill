@@ -161,3 +161,13 @@ html[data-font=small] { font-size: 90% } html[data-font=large] { font-size: 112.
 .relay-add { display: flex; gap: 8px; margin-top: 8px } .relay-add input { flex: 1; min-width: 0 }
 
 button.icon.on { color: var(--accent); border-color: var(--accent); background: rgba(45,212,191,.18) }
+
+/* help */
+.help h2 { margin: 0 0 8px }
+.help-section { border-top: 1px solid var(--border); padding: 4px 0 }
+.help-section summary { cursor: pointer; padding: 10px 0; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 12px; min-height: 44px; align-items: center }
+.help-section summary::-webkit-details-marker { display: none }
+.help-section summary::after { content: '+'; color: var(--accent); font-size: 1.3rem; line-height: 1 }
+.help-section[open] summary::after { content: '−' }
+.help-section p, .help-section ul { margin: 0 0 10px; color: var(--text) }
+.help-section ul { padding-left: 20px } .help-section li { margin: 0 0 6px }

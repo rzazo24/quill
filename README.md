@@ -31,6 +31,7 @@ Principles: behaviour is evidence, **missing data is not** (a key without a prof
 - **Following**, **Mentions** (where the filter earns its keep), **Me** (your account, your Clave connection, the filter settings, your own notes) and any **thread**.
 - **In-app notifications**: a number on *Mentions*, new notes marked, and a list of who reacted to your notes.
 - **React** with one tap; what you already reacted to or replied to is marked; **reply** and **write a note** through a review screen that shows the exact text, kind, tags and relays before anything is asked of your signer.
+- **Help**: a page with folding sections (the filter, writing with Clave, settings, install), behind the ? button, in both languages.
 - **Settings**: your own relay list (with a connection test; optionally published on Nostr as your NIP-65 list, and used as the starting point on a new device) and four text sizes, both remembered on the device.
 - English and Spanish; dark theme; mobile first, and fine on a desktop.
 - Installable as an app on iPhone and Android.

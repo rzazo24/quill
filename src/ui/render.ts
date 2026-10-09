@@ -5,6 +5,7 @@ import { refs, shortNpub } from '../core/refs.js'
 import { avatarOf } from '../core/avatar.js'
 import { showReaction, type ReactionGroup } from '../data/activity.js'
 import { FONT_SIZES, type FontSize } from './store.js'
+import { HELP, helpBlocks } from './help-text.js'
 import type { ListState } from '../data/relaylist.js'
 import { icon } from './icons.js'
 import { cleanText, segments } from '../core/text.js'
@@ -123,6 +124,14 @@ export interface SettingsPanelProps {
   graph: { answered: number; total: number; loaded: boolean } | null
   onSettings: (s: Settings) => void
   onWords: (words: string) => void
+}
+
+/** The Help page: sections that fold, built from text only. What is open is kept by the caller, because the page is rebuilt on every redraw. */
+export function renderHelp(v: View, open: ReadonlySet<string>, onToggle: (id: string, isOpen: boolean) => void): HTMLElement {
+  return h('section', { class: 'help card' }, h('h2', {}, t(v.lang, 'helpTitle')),
+    ...HELP[v.lang].map((s) => h('details', { class: 'help-section', 'data-id': s.id, ...(open.has(s.id) ? { open: true } : {}), onToggle: (e: Event) => onToggle(s.id, (e.target as HTMLDetailsElement).open) },
+      h('summary', {}, s.title),
+      ...helpBlocks(s.body).map((b) => (b.kind === 'p' ? h('p', {}, b.text) : h('ul', {}, ...b.items.map((i) => h('li', {}, i))))))))
 }
 
 export interface PrefsProps {

@@ -285,10 +285,10 @@ describe('settings: text size and relays', () => {
 
 describe('the settings cog', () => {
   const gear = (a: ReturnType<typeof boot>) => a.root.querySelector('header.top button[aria-label="Settings"]') as HTMLButtonElement | null
-  it('sits in the header right after the language buttons, only when somebody is signed in', async () => {
+  it('sits at the end of the header, after the language buttons and the help button, only when somebody is signed in', async () => {
     const out = boot(); expect(gear(out)).toBeNull()
     const a = boot({ stored: { me } }); await tick(80); const header = a.root.querySelector('header.top')!
-    const kids = [...header.querySelectorAll('button')]; expect(kids.at(-1)).toBe(gear(a)); expect(kids.at(-2)!.textContent).toBe('ES'); expect(gear(a)!.querySelector('svg')).not.toBeNull()
+    const kids = [...header.querySelectorAll('button')]; expect(kids.at(-1)).toBe(gear(a)); expect(kids.at(-2)!.getAttribute('aria-label')).toBe('Help'); expect(kids.at(-3)!.textContent).toBe('ES'); expect(gear(a)!.querySelector('svg')).not.toBeNull()
   })
   it('opens Settings (text size, relays and the filter together); pressing it again goes back to the feed', async () => {
     const a = boot({ stored: { me } }); await tick(80); expect(gear(a)!.getAttribute('aria-pressed')).toBe('false')
@@ -320,4 +320,26 @@ describe('several loads starting at once (a saved signer session resuming starts
       expect(a.text(), `second load at ${startAt} ms`).not.toContain('Could not find that note'); expect(a.text(), `second load at ${startAt} ms`).toContain('a post from my friend')
     }
   }, 60_000)
+})
+
+describe('the help page', () => {
+  const help = (a: ReturnType<typeof boot>) => a.root.querySelector('header.top button[aria-label="Help"]') as HTMLButtonElement
+  const sections = (a: ReturnType<typeof boot>) => [...a.root.querySelectorAll('details.help-section')] as HTMLDetailsElement[]
+  it('is one tap away from the header, also before signing in, and the same button closes it', async () => {
+    const out = boot(); expect(help(out)).not.toBeNull(); help(out).click(); await tick(60)
+    expect(sections(out)).toHaveLength(9); expect(out.text()).toContain('What Quill is'); expect(help(out).getAttribute('aria-pressed')).toBe('true')
+    help(out).click(); await tick(60); expect(sections(out)).toHaveLength(0); expect(out.text()).toContain('Read as…')
+    const a = boot({ stored: { me } }); await tick(80); expect([...a.root.querySelectorAll('header.top button')].map((b) => b.getAttribute('aria-label') ?? b.textContent).slice(-3)).toEqual(['ES', 'Help', 'Settings'])
+  })
+  it('opens with the first section unfolded; what you unfold stays unfolded when the page redraws', async () => {
+    const a = boot({ stored: { me } }); await tick(80); help(a).click(); await tick(60)
+    expect(sections(a).map((s) => s.open)).toEqual([true, false, false, false, false, false, false, false, false])
+    const filter = sections(a).find((s) => s.dataset.id === 'filter')!; filter.open = true; filter.dispatchEvent(new Event('toggle')); await tick(10)
+    ;(a.root.querySelector('.lang button[aria-pressed=false]') as HTMLElement).click(); await tick(80) // language change redraws the whole page
+    expect(sections(a).filter((s) => s.open).map((s) => s.dataset.id)).toEqual(['about', 'filter']); expect(a.text()).toContain('Cómo decide el filtro')
+  })
+  it('the text is shown as text, never as markup', async () => {
+    const a = boot({ stored: { me } }); await tick(80); help(a).click(); await tick(60)
+    expect(a.root.querySelector('.help script, .help img, .help a')).toBeNull(); expect(a.root.querySelectorAll('.help li').length).toBeGreaterThan(20)
+  })
 })

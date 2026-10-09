@@ -16,7 +16,7 @@ import { checkTemplate, MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
 import { icon } from './icons.js'
 import { detectLang, problemText, t, type Key, type Lang } from './i18n.js'
-import { renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
+import { renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type Review } from './sign-ui.js'
 import { installHint, type Env } from './install.js'
 import { parseFont, parseLang, parseSettings, parseWords, safeGet, safeSet, type FontSize, type KV } from './store.js'
@@ -39,7 +39,7 @@ export interface Deps {
   onPoll?: (cb: () => void) => void
 }
 
-type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'note'; id: string }
+type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'help' } | { name: 'note'; id: string }
 export function parseRoute(hash: string): Route {
   const m = /^#\/note\/(.+)$/.exec(hash)
   if (m) {
@@ -51,7 +51,7 @@ export function parseRoute(hash: string): Route {
       if (d.type === 'nevent') return { name: 'note', id: d.data.id }
     } catch { /* not a note id */ }
   }
-  return hash === '#/mentions' ? { name: 'mentions' } : hash === '#/me' ? { name: 'me' } : hash === '#/settings' ? { name: 'settings' } : hash === '#/settings/filter' ? { name: 'settings', focus: 'filter' } : { name: 'following' }
+  return hash === '#/mentions' ? { name: 'mentions' } : hash === '#/me' ? { name: 'me' } : hash === '#/help' ? { name: 'help' } : hash === '#/settings' ? { name: 'settings' } : hash === '#/settings/filter' ? { name: 'settings', focus: 'filter' } : { name: 'following' }
 }
 
 export function startApp(root: HTMLElement, deps: Deps): void {
@@ -65,6 +65,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const probes = new Map<string, 'testing' | 'up' | 'down'>()
   let published: string[] | null | undefined // the relay list on Nostr: undefined = not read (yet), null = none
   let confirmingList = false
+  const helpOpen = new Set<string>(['about']) // which Help sections are unfolded
   let adoptTried = false // the published list becomes this device's list at most once per page load, and only if the reader never chose one here
   deps.setRelays?.(relays)
   const applyFont = () => root.ownerDocument.documentElement.setAttribute('data-font', font)
@@ -158,7 +159,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const route = parseRoute(deps.location.hash)
     const key = JSON.stringify(route)
     if (key !== shownRoute) { body = null; shownRoute = key; scrollToTop = true; if (route.name !== 'mentions') markFrom = null }
-    if (route.name === 'settings') { status = null; body = null; draw(); return }
+    if (route.name === 'settings' || route.name === 'help') { status = null; body = null; draw(); return }
     status = t(lang, 'loadingFeed'); draw()
     let content: HTMLElement
     try {
@@ -404,14 +405,16 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       h('button', { type: 'button', 'aria-pressed': String(lang === l), onClick: () => { if (lang !== l) { lang = l; safeSet(kv, 'lang', lang); void load() } } }, l.toUpperCase())))
     const statusEl = me && status ? h('p', { class: 'status', role: 'status' }, status) : null
     const signOut = h('button', { type: 'button', class: 'danger', onClick: () => { me = null; session = null; body = null; shownRoute = ''; safeSet(kv, 'me', null); void signer?.disconnect(); composer = review = result = null; flash = null; deps.setHash(''); draw() } }, t(lang, 'signOut'))
-    const content: (HTMLElement | null)[] = !me ? [loginForm, signArea]
+    const helpPage = renderHelp(view(), helpOpen, (id, isOpen) => { if (isOpen) helpOpen.add(id); else helpOpen.delete(id) })
+    const content: (HTMLElement | null)[] = route.name === 'help' ? [signArea, helpPage]
+      : !me ? [loginForm, signArea]
       : route.name === 'settings' ? [signArea, renderPrefs({ font, relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
         onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
       : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), statusEl, body, h('p', { class: 'foot' }, signOut)]
       : [signArea, statusEl, body]
     const page: (HTMLElement | null)[] = [
-      h('header', { class: 'top' }, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('div', { class: 'brand' }, h('h1', {}, h('a', { href: '#/' }, 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline'))), me ? h('button', { type: 'button', class: 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), onClick: refresh }, icon('refresh', 18)) : null, pills, me ? h('button', { type: 'button', class: route.name === 'settings' ? 'icon on' : 'icon', 'aria-label': t(lang, 'prefsTitle'), title: t(lang, 'prefsTitle'), 'aria-pressed': String(route.name === 'settings'), onClick: () => deps.setHash(route.name === 'settings' ? '' : '#/settings') }, icon('gear', 18)) : null),
+      h('header', { class: 'top' }, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('div', { class: 'brand' }, h('h1', {}, h('a', { href: '#/' }, 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline'))), me ? h('button', { type: 'button', class: 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), onClick: refresh }, icon('refresh', 18)) : null, pills, h('button', { type: 'button', class: route.name === 'help' ? 'icon on' : 'icon', 'aria-label': t(lang, 'helpTitle'), title: t(lang, 'helpTitle'), 'aria-pressed': String(route.name === 'help'), onClick: () => deps.setHash(route.name === 'help' ? '' : '#/help') }, icon('help', 18)), me ? h('button', { type: 'button', class: route.name === 'settings' ? 'icon on' : 'icon', 'aria-label': t(lang, 'prefsTitle'), title: t(lang, 'prefsTitle'), 'aria-pressed': String(route.name === 'settings'), onClick: () => deps.setHash(route.name === 'settings' ? '' : '#/settings') }, icon('gear', 18)) : null),
       h('main', { class: 'view' }, ...content),
       me ? h('nav', { class: 'tabbar' }, tab('following', '#/'), tab('mentions', '#/mentions'), tab('me', '#/me')) : null,
     ]
