@@ -39,16 +39,19 @@ const excerpt = (e: NostrEvent) => cleanText(e.content, 140).replace(/\s+/g, ' '
 export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, signerConfigured: boolean): HTMLElement | null {
   if (!signerConfigured) return null
   const parts: (HTMLElement | null)[] = []
-  if (s.flash) parts.push(h('p', { class: s.flash.kind === 'error' ? 'error' : 'status', role: s.flash.kind === 'error' ? 'alert' : 'status' }, s.flash.text))
+  const toast: (HTMLElement | null)[] = []
+  if (s.flash) toast.push(h('p', { class: s.flash.kind === 'error' ? 'error' : 'status', role: s.flash.kind === 'error' ? 'alert' : 'status' }, s.flash.text))
   if (s.signer === 'disconnected' && !s.connectOpen) parts.push(h('p', {}, h('button', { type: 'button', class: 'link', onClick: hd.openConnect }, t(v.lang, 'connectSigner'))))
   if (s.connectOpen && s.signer !== 'connected') parts.push(renderConnect(s, hd, v))
   if (s.signer === 'connected') parts.push(h('p', { class: 'signing-as' }, t(v.lang, 'signingAs', { who: s.who ?? '' }), ' ', h('button', { type: 'button', class: 'link', onClick: hd.disconnect }, t(v.lang, 'disconnectSigner'))))
   if (s.signer === 'connected') {
-    if (s.step) parts.push(h('p', { class: 'status', role: 'status' }, t(v.lang, `step_${s.step}` as Parameters<typeof t>[1]), s.step === 'waiting' ? h('span', {}, ' ', h('button', { type: 'button', class: 'link', onClick: hd.cancelSigning }, t(v.lang, 'cancel'))) : null))
-    else if (s.result) parts.push(renderResult(s.result, s.relays, hd, v))
+    if (s.step) toast.push(h('p', { class: 'status', role: 'status' }, t(v.lang, `step_${s.step}` as Parameters<typeof t>[1]), s.step === 'waiting' ? h('span', {}, ' ', h('button', { type: 'button', class: 'link', onClick: hd.cancelSigning }, t(v.lang, 'cancel'))) : null))
+    else if (s.result) toast.push(renderResult(s.result, s.relays, hd, v))
     else if (s.review) parts.push(renderReview(s, hd, v))
     else parts.push(renderComposer(s, hd, v))
   }
+  // what is happening shows at the bottom of the screen, where it is seen wherever the reader has scrolled to
+  if (toast.some(Boolean)) parts.push(h('div', { class: 'toast' }, ...toast))
   return parts.some(Boolean) ? h('section', { class: 'sign' }, ...parts) : null
 }
 

@@ -45,3 +45,6 @@ button[type=submit] { padding: 0.4rem 0.9rem; border: 1px solid var(--accent); b
 a.button, .sign button:not(.link), .actions button.react { display: inline-block; padding: 0.3rem 0.8rem; border: 1px solid var(--accent); border-radius: 4px; background: transparent; color: var(--accent); text-decoration: none; cursor: pointer; }
 .actions { margin-top: 0.25rem; font-size: 0.9rem; } .actions button.react { padding: 0 0.4rem; border-color: var(--line); }
 @media (hover: hover) { .actions button.react:hover { border-color: var(--accent); } }
+.sign .toast { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; max-height: 45vh; overflow: auto; padding: 0.6rem 1rem; background: var(--bg); border-top: 2px solid var(--accent); box-shadow: 0 -4px 12px rgba(0,0,0,0.15); display: grid; gap: 0.4rem; }
+.sign .toast > * { max-width: 42rem; margin: 0 auto; width: 100%; }
+main { padding-bottom: 6rem; }

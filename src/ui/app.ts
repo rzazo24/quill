@@ -65,6 +65,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let result: Published | null = null
   let busy = false // one signature at a time
   let signing: AbortController | null = null // lets the user stop waiting for the signer
+  let current: Promise<boolean> | null = null // the action in progress
 
   const actions = (j: Judged) => (signer?.state === 'connected' ? [reactionBar(j.event, (emoji) => void react(j.event, emoji), () => startReply(j.event), view())] : [])
   const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.() })
@@ -179,13 +180,19 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   async function send(template: Template): Promise<boolean> {
-    if (!signer || !publisher || busy) return false
-    busy = true; flash = null; result = null; signing = new AbortController(); draw()
-    try {
-      result = await signAndPublish({ signer, publisher, kv, now: deps.nowMs, signal: signing.signal }, template, (s) => { step = s; draw() })
-      step = null; fetcher.clear()
-      return true
-    } catch (e) { step = null; sayPipelineError(e); return false } finally { busy = false; signing = null; draw() }
+    if (!signer || !publisher) return false
+    // Still waiting for the signer to answer an earlier tap (e.g. Clave was closed): a new tap replaces it, so opening Clave and tapping again works.
+    // Once the signature is made and the event is being sent, a second tap is ignored (no double posts).
+    if (busy && step === 'waiting') { signing?.abort(); await current?.catch(() => {}) } else if (busy) return false
+    busy = true; flash = null; result = null; const mine = signing = new AbortController(); draw()
+    current = (async () => {
+      try {
+        result = await signAndPublish({ signer, publisher, kv, now: deps.nowMs, signal: mine.signal }, template, (s) => { step = s; draw() })
+        step = null; fetcher.clear()
+        return true
+      } catch (e) { step = null; if (!(mine.signal.aborted && signing !== mine)) sayPipelineError(e); return false } finally { if (signing === mine) { busy = false; signing = null } draw() }
+    })()
+    return current
   }
 
   function templateFor(text: string, target?: NostrEvent): Template {

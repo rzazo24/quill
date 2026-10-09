@@ -18,7 +18,8 @@ const btn = (root: HTMLElement, text: string) => [...root.querySelectorAll('butt
 const click = async (root: HTMLElement, text: string) => { const b = btn(root, text); if (!b) throw new Error(`no button "${text}" in: ${root.textContent?.slice(0, 200)}`); b.click(); await tick() }
 
 /** A signer that does what the test tells it to: connects when asked, signs (or not), and records what it was asked. */
-function fakeSigner(over: { pubkey?: string; signError?: string; saved?: boolean; hang?: boolean } = {}) {
+function fakeSigner(over: { pubkey?: string; signError?: string; saved?: boolean; hang?: boolean; hangFirst?: boolean } = {}) {
+  let signCalls = 0
   const listeners: (() => void)[] = []
   const log: string[] = []
   const s = {
@@ -30,7 +31,8 @@ function fakeSigner(over: { pubkey?: string; signError?: string; saved?: boolean
     resume: async () => true,
     sign: async (t: { kind: number; content: string; tags: string[][]; created_at: number }, _ms?: number, signal?: AbortSignal) => {
       log.push('sign ' + t.kind)
-      if (over.hang) await new Promise((_, reject) => signal?.addEventListener('abort', () => reject(new Error('cancelled'))))
+      signCalls++
+      if (over.hang || (over.hangFirst && signCalls === 1)) await new Promise((_, reject) => signal?.addEventListener('abort', () => reject(new Error('cancelled'))))
       if (over.signError) throw new Error(over.signError)
       return { event: { ...ev(over.pubkey ?? me, t.content, { kind: t.kind, tags: t.tags, created_at: t.created_at }) }, ms: 700 }
     },
@@ -40,9 +42,9 @@ function fakeSigner(over: { pubkey?: string; signError?: string; saved?: boolean
   }
   return { s: s as unknown as SignerApi, raw: s, log }
 }
-const publisherFake = (outcomes: Record<string, string> = { 'wss://r1.example': 'ok', 'wss://r2.example': 'ok' }) => {
+const publisherFake = (outcomes: Record<string, string> = { 'wss://r1.example': 'ok', 'wss://r2.example': 'ok' }, delayMs = 0) => {
   const sent: { event: Event; only?: string[] }[] = []
-  const p: Publisher = { publish: async (event, only) => { sent.push({ event, only }); return only ? Object.fromEntries(only.map((u) => [u, 'ok'])) : outcomes } }
+  const p: Publisher = { publish: async (event, only) => { if (delayMs) await new Promise((r) => setTimeout(r, delayMs)); sent.push({ event, only }); return only ? Object.fromEntries(only.map((u) => [u, 'ok'])) : outcomes } }
   return { p, sent }
 }
 
@@ -109,6 +111,29 @@ describe('reacting, one tap', () => {
     expect(e.kind).toBe(7); expect(e.content).toBe('❤️')
     expect(e.tags).toEqual([['e', post.id], ['p', friend], ['k', '1']])
     expect(a.text()).toContain('Published to 2 of 2 relays')
+  })
+})
+
+describe('tapping again while Clave has not answered', () => {
+  it('a new tap replaces the old wait (so opening Clave and tapping again works): one request cancelled, one published', async () => {
+    const sg = fakeSigner({ hangFirst: true }); const a = boot({ signer: sg }); await tick(100); await click(a.root, 'Connect Clave'); sg.raw.approve(); await tick(100)
+    ;(a.root.querySelector('button[aria-label="React ❤️"]') as HTMLElement).click(); await tick(60)
+    expect(a.text()).toMatch(/Waiting for Clave/); expect(a.pub.sent).toEqual([])
+    ;(a.root.querySelector('button[aria-label="React 🤙"]') as HTMLElement).click(); await tick(120)
+    expect(sg.log.filter((l) => l.startsWith('sign'))).toHaveLength(2)
+    expect(a.pub.sent).toHaveLength(1); expect(a.pub.sent[0]!.event.content).toBe('🤙')
+    expect(a.text()).toContain('Published to 2 of 2 relays'); expect(a.text()).not.toContain('Cancelled')
+  })
+  it('once the signature exists and the event is being sent, a second tap is ignored: no double posts', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg, pub: publisherFake(undefined, 150) }); await tick(100); await click(a.root, 'Connect Clave'); sg.raw.approve(); await tick(100)
+    ;(a.root.querySelector('button[aria-label="React ❤️"]') as HTMLElement).click(); await tick(60)
+    ;(a.root.querySelector('button[aria-label="React 🤙"]') as HTMLElement).click(); await tick(300)
+    expect(a.pub.sent).toHaveLength(1); expect(a.pub.sent[0]!.event.content).toBe('❤️'); expect(sg.log.filter((l) => l.startsWith('sign'))).toHaveLength(1)
+  })
+  it('what is happening is shown in a bar fixed to the bottom of the screen, not somewhere up the page', async () => {
+    const sg = fakeSigner({ hang: true }); const a = boot({ signer: sg }); await tick(100); await click(a.root, 'Connect Clave'); sg.raw.approve(); await tick(100)
+    ;(a.root.querySelector('button[aria-label="React ❤️"]') as HTMLElement).click(); await tick(60)
+    expect(a.root.querySelector('.sign .toast')!.textContent).toMatch(/Waiting for Clave/)
   })
 })
 

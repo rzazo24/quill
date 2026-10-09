@@ -8,6 +8,9 @@ import type { Signer } from './signer.js'
 
 export type SignerApi = Pick<Signer, 'state' | 'pubkey' | 'lastError' | 'authUrl' | 'onChange' | 'startConnect' | 'connectBunker' | 'resume' | 'sign' | 'disconnect' | 'hasSavedSession'>
 
+/** How long to wait for the signer to sign. A request made while the signer app is closed is never picked up later, so a long wait only hides the problem. */
+export const SIGN_WAIT_MS = 90_000
+
 export type Step = 'waiting' | 'sending'
 export type FailCode = 'rate' | 'no-signer' | 'not-signed' | 'cancelled'
 
@@ -28,7 +31,7 @@ export async function signAndPublish(d: PipelineDeps, t: Template, onStep: (s: S
   // preliminary ping would never find out; a sleeping one just leaves the request waiting (with a Cancel button) until it is opened or the time runs out.
   onStep('waiting')
   let event: Event
-  try { ({ event } = await d.signer.sign(t, d.signTimeoutMs ?? 300_000, d.signal)) } catch (e) {
+  try { ({ event } = await d.signer.sign(t, d.signTimeoutMs ?? SIGN_WAIT_MS, d.signal)) } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     throw new PipelineError(d.signal?.aborted || msg === 'cancelled' ? 'cancelled' : 'not-signed', msg)
   }
