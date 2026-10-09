@@ -285,10 +285,10 @@ describe('settings: text size and relays', () => {
 
 describe('the settings cog', () => {
   const gear = (a: ReturnType<typeof boot>) => a.root.querySelector('header.top button[aria-label="Settings"]') as HTMLButtonElement | null
-  it('sits at the end of the header, after the language buttons and the help button, only when somebody is signed in', async () => {
+  it('sits right after the language buttons (and before the help button), only when somebody is signed in', async () => {
     const out = boot(); expect(gear(out)).toBeNull()
     const a = boot({ stored: { me } }); await tick(80); const header = a.root.querySelector('header.top')!
-    const kids = [...header.querySelectorAll('button')]; expect(kids.at(-1)).toBe(gear(a)); expect(kids.at(-2)!.getAttribute('aria-label')).toBe('Help'); expect(kids.at(-3)!.textContent).toBe('ES'); expect(gear(a)!.querySelector('svg')).not.toBeNull()
+    const kids = [...header.querySelectorAll('button')]; expect(kids.at(-2)).toBe(gear(a)); expect(kids.at(-1)!.getAttribute('aria-label')).toBe('Help'); expect(kids.at(-3)!.textContent).toBe('ES'); expect(gear(a)!.querySelector('svg')).not.toBeNull()
   })
   it('opens Settings (text size, relays and the filter together); pressing it again goes back to the feed', async () => {
     const a = boot({ stored: { me } }); await tick(80); expect(gear(a)!.getAttribute('aria-pressed')).toBe('false')
@@ -325,11 +325,11 @@ describe('several loads starting at once (a saved signer session resuming starts
 describe('the help page', () => {
   const help = (a: ReturnType<typeof boot>) => a.root.querySelector('header.top button[aria-label="Help"]') as HTMLButtonElement
   const sections = (a: ReturnType<typeof boot>) => [...a.root.querySelectorAll('details.help-section')] as HTMLDetailsElement[]
-  it('is one tap away from the header, also before signing in, and the same button closes it', async () => {
+  it('is the rightmost button of the header, also before signing in, and the same button closes it', async () => {
     const out = boot(); expect(help(out)).not.toBeNull(); help(out).click(); await tick(60)
     expect(sections(out)).toHaveLength(9); expect(out.text()).toContain('What Quill is'); expect(help(out).getAttribute('aria-pressed')).toBe('true')
     help(out).click(); await tick(60); expect(sections(out)).toHaveLength(0); expect(out.text()).toContain('Read as…')
-    const a = boot({ stored: { me } }); await tick(80); expect([...a.root.querySelectorAll('header.top button')].map((b) => b.getAttribute('aria-label') ?? b.textContent).slice(-3)).toEqual(['ES', 'Help', 'Settings'])
+    const a = boot({ stored: { me } }); await tick(80); expect([...a.root.querySelectorAll('header.top button')].map((b) => b.getAttribute('aria-label') ?? b.textContent).slice(-3)).toEqual(['ES', 'Settings', 'Help'])
   })
   it('opens with the first section unfolded; what you unfold stays unfolded when the page redraws', async () => {
     const a = boot({ stored: { me } }); await tick(80); help(a).click(); await tick(60)
