@@ -16,7 +16,8 @@ export type State = 'disconnected' | 'connecting' | 'connected'
 interface Saved { clientSecret: string; signerPubkey?: string; relays?: string[] }
 
 const HEX64 = /^[0-9a-f]{64}$/
-const CONNECT_WINDOW_MS = 120_000
+/** Time to scan the link, approve in Clave and come back: scanning from a computer with a phone takes a while. */
+const CONNECT_WINDOW_MS = 300_000
 const IDENTITY_WAIT_MS = 75_000
 const RESUME_WAIT_MS = 150_000
 const RESUME_ATTEMPT_MS = 20_000
@@ -44,6 +45,8 @@ export interface SignerOptions {
   now?: () => number
   /** Tests only: also accept ws:// relays on this machine in a bunker:// address (a real page is limited to wss:// by its CSP anyway). */
   allowLoopback?: boolean
+  /** The page's own address, shown by the signer next to the name so you can tell which app is asking (https only). */
+  appUrl?: string
 }
 
 export class Signer {
@@ -63,9 +66,11 @@ export class Signer {
   private readonly t: Required<NonNullable<SignerOptions['timeouts']>>
   private readonly now: () => number
   private readonly allowLoopback: boolean
+  private readonly appUrl?: string
 
   constructor(opts: SignerOptions = {}) {
     this.allowLoopback = opts.allowLoopback ?? false
+    this.appUrl = opts.appUrl?.startsWith('https://') ? opts.appUrl : undefined
     this.kv = opts.kv; this.relays = opts.relays ?? SIGNER_RELAYS; this.now = opts.now ?? Date.now
     this.t = { connectMs: CONNECT_WINDOW_MS, identityMs: IDENTITY_WAIT_MS, resumeMs: RESUME_WAIT_MS, attemptMs: RESUME_ATTEMPT_MS, ...opts.timeouts }
   }
@@ -104,7 +109,7 @@ export class Signer {
     const sk = this.appKey(), secretHex = bytesToHex(sk)
     const secret = bytesToHex(crypto.getRandomValues(new Uint8Array(16)))
     const perms = ['get_public_key', ...ALLOWED_KINDS.map((k) => `sign_event:${k}`)]
-    const uri = createNostrConnectURI({ clientPubkey: getPublicKey(sk), relays: this.relays, secret, perms, name: 'Quill' })
+    const uri = createNostrConnectURI({ clientPubkey: getPublicKey(sk), relays: this.relays, secret, perms, name: 'Quill', url: this.appUrl })
     this.pending?.abort()
     const ac = this.pending = new AbortController()
     this.set('connecting')

@@ -74,6 +74,8 @@ describe('connecting Clave', () => {
     await click(a.root, 'Connect Clave')
     expect(sg.log).toContain('startConnect')
     expect(a.root.querySelector('a.button')!.getAttribute('href')).toMatch(/^https:\/\/clave\.casa\/connect\/\?uri=/)
+    // it must open in a NEW tab: leaving this page would throw away the pending connection that Clave is about to answer
+    expect(a.root.querySelector('a.button')!.getAttribute('target')).toBe('_blank'); expect(a.root.querySelector('a.button')!.getAttribute('rel')).toBe('noopener noreferrer')
     expect(a.text()).toContain('Waiting for Clave')
     sg.raw.approve(); await tick(100)
     expect(a.text()).toContain('Signing as'); expect(a.root.querySelectorAll('.actions').length).toBeGreaterThan(0)

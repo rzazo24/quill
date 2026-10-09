@@ -10,7 +10,8 @@
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "preview": "vite preview",
-    "probe": "rolldown scripts/probe.ts --platform node --format esm --file .probe/probe.mjs --silent && node .probe/probe.mjs"
+    "probe": "rolldown scripts/probe.ts --platform node --format esm --file .probe/probe.mjs --silent && node .probe/probe.mjs",
+    "e2e:sign": "mkdir -p .e2e && rolldown test/e2e-sign.ts --platform node --format esm --external playwright --file .probe/e2e-sign.mjs && node .probe/e2e-sign.mjs"
   },
   "dependencies": {
     "nostr-tools": "^2.25.2"

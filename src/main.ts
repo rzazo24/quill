@@ -8,7 +8,7 @@ const storage = ((): Storage | undefined => { try { return window.localStorage }
 startApp(document.getElementById('app')!, {
   fetcher: poolFetcher(),
   publisher: poolPublisher(),
-  signer: new Signer({ kv: storage }),
+  signer: new Signer({ kv: storage, appUrl: location.origin }),
   storage,
   languages: navigator.languages,
   location,

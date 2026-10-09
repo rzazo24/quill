@@ -56,7 +56,7 @@ function renderConnect(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement
   const input = h('input', { type: 'text', placeholder: 'bunker://…', autocomplete: 'off', spellcheck: 'false', 'aria-label': t(v.lang, 'bunkerLabel') })
   return h('div', { class: 'connect' },
     h('h2', {}, t(v.lang, 'connectTitle')), h('p', {}, t(v.lang, 'connectHelp')),
-    s.connect ? h('p', {}, h('a', { class: 'button', href: s.connect.claveLink, rel: 'noopener noreferrer' }, t(v.lang, 'openClave')), ' ',
+    s.connect ? h('p', {}, h('a', { class: 'button', href: s.connect.claveLink, rel: 'noopener noreferrer', target: '_blank' }, t(v.lang, 'openClave')), ' ',
       h('button', { type: 'button', class: 'link', onClick: () => hd.copy(s.connect!.uri) }, t(v.lang, 'copyLink'))) : null,
     s.signer === 'connecting' ? h('p', { class: 'status', role: 'status' }, t(v.lang, 'connectWaiting')) : null,
     h('form', { onSubmit: (e: Event) => { e.preventDefault(); hd.bunker(input.value) } }, h('label', {}, t(v.lang, 'bunkerLabel'), h('br'), input), ' ', h('button', { type: 'submit' }, t(v.lang, 'bunkerButton'))),
