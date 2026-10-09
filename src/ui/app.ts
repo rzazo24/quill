@@ -59,6 +59,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   // signing
   let connect: { uri: string; claveLink: string } | null = null
   let connectOpen = false
+  let bunkerText = ''
+  let linkOpen = false
   let flash: Flash | null = null
   let composer: Composer | null = null
   let review: Review | null = null
@@ -251,11 +253,12 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       h('h2', {}, t(lang, 'loginTitle')), h('p', {}, t(lang, 'loginHelp')), input, ' ', h('button', { type: 'submit', class: 'primary' }, t(lang, 'loginButton')),
       loginError ? h('p', { class: 'error', role: 'alert' }, loginError) : null)
     const signArea = signer ? renderSignArea({
-      signer: signer.state, who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, flash, composer, review, step, result, relays,
+      signer: signer.state, who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, flash, composer, review, step, result, relays, bunkerText, linkOpen,
     }, {
       openConnect, startLink, pasteBunker: () => void pasteBunker(), cancelConnect, bunker: (x) => void bunker(x), disconnect: () => { void signer.disconnect(); composer = review = result = null; flash = null; draw() }, copy: (x) => { deps.copy?.(x); say('info', t(lang, 'copied')); draw() },
       edit: (x) => { if (composer) composer.text = x }, review: doReview, publish: () => void publish(), back: () => { review = null; draw() }, cancelComposer: () => { composer = null; review = null; draw() },
       retry: () => void retry(), dismissResult: () => { result = null; draw() }, startNote, cancelSigning: () => signing?.abort(),
+      editBunker: (x) => { bunkerText = x }, setLinkOpen: (o) => { linkOpen = o },
     }, view(), true, !me || route.name === 'me' ? 'me' : 'feed') : null
     const pills = h('div', { class: 'lang', role: 'group', 'aria-label': 'Language' }, ...(['en', 'es'] as const).map((l) =>
       h('button', { type: 'button', 'aria-pressed': String(lang === l), onClick: () => { if (lang !== l) { lang = l; safeSet(kv, 'lang', lang); void load() } } }, l.toUpperCase())))

@@ -32,14 +32,18 @@ try {
   const notes = await page.locator('.note').count()
   notes > 10 ? ok(`following feed: ${notes} notes`) : fail(`few notes: ${notes}`)
 
-  // signing UI: the link for Clave appears, and nothing is signed or published (we never approve it)
-  await page.click('button:has-text("Connect Clave")')
+  // signing UI (on the Me page): the link for Clave appears, and nothing is signed or published (we never approve it)
+  await page.click('nav.tabbar a[href="#/me"]')
+  await page.click('button:has-text("Connect Clave")') // opens the panel: the bunker:// address comes first
+  await page.click('.by-link summary') // "Use a link instead" starts closed
+  await page.click('.by-link button:has-text("Connect Clave")')
   const href = await page.locator('a.button').getAttribute('href')
   ;/^https:\/\/clave\.casa\/connect\/\?uri=nostrconnect/.test(href ?? '') ? ok('Connect Clave offers a clave.casa link') : fail('no Clave link: ' + href)
   ;(await page.locator('.sign').innerText()).includes('Waiting for Clave') ? ok('and says it is waiting for Clave') : fail('no waiting message')
   await page.screenshot({ path: '.e2e/2b-connect.png' })
   await page.click('.connect button:has-text("Cancel")')
-  await page.click('a.tab:has-text("Mentions")'); await page.waitForSelector('.summary:has-text("shown")', { timeout: 40000 })
+  ;(await page.locator('.account .avatar').innerText()).length >= 1 ? ok('the Me page shows the account with its generated avatar') : fail('no avatar on Me')
+  await page.click('nav.tabbar a[href="#/mentions"]'); await page.waitForSelector('.summary:has-text("shown")', { timeout: 40000 })
   const summary = await page.locator('.summary').innerText()
   ok('mentions summary: ' + summary.replace(/\s+/g, ' '))
   const folds = await page.locator('details.folded').count()
@@ -49,16 +53,18 @@ try {
   ;(await page.locator('details.folded[open] .body').first().innerText()).length > 0 ? ok('a folded note opens and shows its text') : fail('folded note empty')
   await page.screenshot({ path: '.e2e/4-opened.png' })
 
-  await page.click('button:has-text("Filter settings")'); await page.screenshot({ path: '.e2e/5-settings.png', fullPage: true })
   const before = await page.locator('details.folded').count()
+  await page.click('button:has-text("Filter settings")') // goes to the Me page, where the settings live
   await page.uncheck('label:has-text("Outside your network") input')
-  await page.waitForFunction((n) => document.querySelectorAll('details.folded').length < n, before, { timeout: 15000 })
+  await page.screenshot({ path: '.e2e/5-settings.png' })
+  await page.click('nav.tabbar a[href="#/mentions"]'); await page.waitForSelector('.summary:has-text("shown")', { timeout: 40000 })
+  await page.waitForFunction((n) => document.querySelectorAll('details.folded').length < n, before, { timeout: 20000 })
   ok(`switching "outside your network" off shows more: ${before} -> ${await page.locator('details.folded').count()} folded`)
 
   await page.locator('a.thread-link').first().click(); await page.waitForSelector('h3', { timeout: 40000 })
   await page.screenshot({ path: '.e2e/6-thread.png', fullPage: true }); ok('thread view opens: ' + (await page.locator('h3').innerText()))
 
-  await page.click('button:has-text("Español")')
+  await page.click('.lang button:has-text("ES")')
   await page.waitForFunction(() => document.body.innerText.includes('respuestas'), null, { timeout: 5000 }).then(() => ok('Spanish works, on content already loaded'), () => fail('no Spanish'))
   await page.screenshot({ path: '.e2e/7-es.png' })
 

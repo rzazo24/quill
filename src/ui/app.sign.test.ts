@@ -134,6 +134,17 @@ describe('pasting the bunker:// address from Clave', () => {
   })
 })
 
+describe('the connect panel survives redraws', () => {
+  it('what was typed in the bunker field and the opened "use a link" section are still there after the page redraws', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await a.go('#/me'); await click(a.root, 'Connect Clave')
+    const input = a.root.querySelector('.bunker input') as HTMLInputElement; input.value = 'bunker://half-typed'; input.dispatchEvent(new Event('input'))
+    const det = a.root.querySelector('details.by-link') as HTMLDetailsElement; det.open = true; det.dispatchEvent(new Event('toggle'))
+    ;[...a.root.querySelectorAll('.lang button')].find((b) => b.textContent === 'ES')!.dispatchEvent(new Event('click')); await tick(100) // anything that redraws the page
+    expect((a.root.querySelector('.bunker input') as HTMLInputElement).value).toBe('bunker://half-typed')
+    expect((a.root.querySelector('details.by-link') as HTMLDetailsElement).open).toBe(true)
+  })
+})
+
 describe('reacting, one tap', () => {
   it('signs and publishes a kind 7 with the right tags, and says where it went', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)
