@@ -6,6 +6,9 @@ A small, **text-first** [Nostr](https://nostr.com) client that **tells you why i
 
 Live at **<https://quill.hivescope.xyz>**. Paste an `npub` to read; connect a signer ([Clave](https://clave.casa) on iPhone) to react, reply and write. Quill never sees your private key.
 
+![Quill on a phone: the feed of the people you follow, the mentions with what the filter hid and why, and the filter settings](docs/screenshot.png)
+<sub>Screenshots with demo data (made-up accounts), not real people.</sub>
+
 ## Three promises
 
 1. **Text first.** Nothing external is ever loaded: no images, no video, no link previews, no profile pictures from other servers (avatars are drawn from the account's key and name). Links are shown as plain text with the whole address visible, and only open when you click them. This is enforced by the browser, not just by the code: the page ships a Content-Security-Policy that allows its own script, style and icons, and `wss://` connections to relays, nothing else.
@@ -79,6 +82,7 @@ npm run e2e:pwa                        # is the page installable, is the manifes
 node test/e2e-shell.mjs <hex pubkey>   # the layout: the page never scrolls, only the content; the tab bar never moves
 node test/e2e-align.mjs <hex pubkey>   # desktop alignment with classic scrollbars shown
 npm run probe -- <npub>                # the data layer against the real relays: what the filter would do
+npm run screenshots                    # regenerates docs/screenshot*.png from made-up demo data (run npm run build first)
 ```
 
 Layout of the code: `src/core` pure logic (text safety, threads, the filter) · `src/data` loading follows, graph, mutes, feeds · `src/net` the only code that talks to relays (it drops events with a bad signature or that do not answer the question asked) · `src/sign` the NIP-46 signer, the signing policy and the sign-and-publish pipeline · `src/ui` the page (DOM built with `textContent`, never `innerHTML`). `CLAUDE.md` has the design rules that must not erode and what was learned about iOS, Android and Clave.

@@ -6,6 +6,9 @@ Un cliente pequeño de [Nostr](https://nostr.com), **pensado primero para el tex
 
 En marcha en **<https://quill.hivescope.xyz>**. Pega un `npub` para leer; conecta un firmador ([Clave](https://clave.casa) en iPhone) para reaccionar, responder y escribir. Quill nunca ve tu clave privada.
 
+![Quill en un móvil: el feed de la gente que sigues, las menciones con lo que el filtro ocultó y por qué, y los ajustes del filtro](docs/screenshot.es.png)
+<sub>Capturas con datos de demostración (cuentas inventadas), no personas reales.</sub>
+
 ## Tres promesas
 
 1. **El texto primero.** No se carga nada externo: ni imágenes, ni vídeo, ni vistas previas de enlaces, ni fotos de perfil de otros servidores (los avatares se dibujan a partir de la clave y el nombre de la cuenta). Los enlaces se muestran como texto con la dirección completa a la vista, y solo se abren cuando haces clic. Lo hace cumplir el navegador, no solo el código: la página lleva una política de seguridad (CSP) que permite su propio script, estilo e iconos, y conexiones `wss://` a los relés, y nada más.
@@ -79,6 +82,7 @@ npm run e2e:pwa                        # ¿es instalable?, ¿está bien el manif
 node test/e2e-shell.mjs <clave hex>    # la estructura: la página no se desplaza, solo el contenido; la barra de pestañas no se mueve
 node test/e2e-align.mjs <clave hex>    # alineación en escritorio con barras de desplazamiento clásicas visibles
 npm run probe -- <npub>                # la capa de datos contra los relés reales: qué haría el filtro
+npm run screenshots                    # regenera docs/screenshot*.png con datos de demostración inventados (antes, npm run build)
 ```
 
 Organización del código: `src/core` lógica pura (seguridad del texto, hilos, el filtro) · `src/data` carga de seguidos, grafo, silenciados y listas · `src/net` el único código que habla con los relés (descarta eventos con firma mala o que no responden a lo que se pidió) · `src/sign` el firmador NIP-46, la política de firma y el flujo firmar-y-publicar · `src/ui` la página (DOM construido con `textContent`, nunca con `innerHTML`). `CLAUDE.md` recoge las reglas de diseño que no deben erosionarse y lo aprendido sobre iOS, Android y Clave.
