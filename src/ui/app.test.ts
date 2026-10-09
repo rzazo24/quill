@@ -302,3 +302,16 @@ describe('the settings cog', () => {
     expect(a.root.querySelector('.settings')).not.toBeNull()
   })
 })
+
+describe('several loads starting at once (a saved signer session resuming starts a second one)', () => {
+  // The bug depended on the exact moment the second load started, so it is tried at many moments while the first one is still reading the account.
+  it('the feed still loads when the published relay list is adopted in the middle of it, whenever the second load starts', async () => {
+    const list = ev(me, '', { kind: 10002, created_at: 1000, tags: [['r', 'wss://x.example'], ['r', 'wss://y.example']] })
+    for (const startAt of [5, 15, 25, 35, 45, 55, 70, 90, 110, 140]) {
+      const a = boot({ events: [...world, list], stored: { me }, delayMs: 12 })
+      await tick(startAt); a.go('#/') // a second load, startAt ms into the first
+      await tick(1200)
+      expect(a.text(), `second load at ${startAt} ms`).not.toContain('Could not find that note'); expect(a.text(), `second load at ${startAt} ms`).toContain('a post from my friend')
+    }
+  }, 60_000)
+})

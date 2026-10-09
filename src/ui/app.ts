@@ -114,18 +114,34 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const ctx = () => contextOf(session!, { mutedWords: words, mutedKeys: [] })
   const who = () => (signer?.pubkey ? nameOf(view(), signer.pubkey) : '')
 
-  async function ensureSession(): Promise<boolean> {
-    if (session || !me) return !!session
+  // Loading what the reader's account needs (follows, mutes, what they already did, their published relay list) takes a few round trips, and several loads can
+  // start while it runs (the saved signer session resuming starts one). So there is ONE load in flight that all of them wait for, and `session` is only ever
+  // set once everything is ready: nobody can see it half-built or emptied.
+  let ensuring: Promise<boolean> | null = null
+  function ensureSession(): Promise<boolean> {
+    if (session || !me) return Promise.resolve(!!session)
+    return (ensuring ??= loadAccount().finally(() => { ensuring = null }))
+  }
+  async function loadAccount(): Promise<boolean> {
+    const who = me!
     status = t(lang, 'loadingFollows'); draw()
-    try { session = await loadSession(fetcher, me) } catch { status = null; return false }
-    engagement = await loadEngagement(fetcher, me).catch(() => new Engagement()) // a failure only means nothing is marked
-    published = await loadPublishedRelays(fetcher, me).catch(() => undefined)
-    if (!adoptTried) {
-      adoptTried = true
-      if (published && safeGet(kv, 'relays') === null && !sameList(published, relays)) { // a new device: start from the list the reader published
-        relays = published; deps.setRelays?.(relays); fetcher.clear(); session = null; say('info', t(lang, 'listAdopted')); return ensureSession()
-      }
+    const fetchAll = async () => {
+      const s = await loadSession(fetcher, who)
+      return { s, e: await loadEngagement(fetcher, who).catch(() => new Engagement()), p: await loadPublishedRelays(fetcher, who).catch(() => undefined) } // a failure only means nothing is marked / unknown
     }
+    let got: Awaited<ReturnType<typeof fetchAll>>
+    try {
+      got = await fetchAll()
+      if (!adoptTried) {
+        adoptTried = true
+        if (got.p && safeGet(kv, 'relays') === null && !sameList(got.p, relays)) { // a new device: start from the list the reader published
+          relays = got.p; deps.setRelays?.(relays); fetcher.clear(); say('info', t(lang, 'listAdopted'))
+          got = await fetchAll()
+        }
+      }
+    } catch { status = null; return false }
+    if (me !== who) return false // signed out or switched while loading
+    session = got.s; engagement = got.e; published = got.p
     return true
   }
 
@@ -138,7 +154,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   async function load(): Promise<void> {
     const mine = ++run
     if (!me) return draw()
-    if (!(await ensureSession()) || mine !== run) return
+    if (!(await ensureSession()) || mine !== run || !session) return
     const route = parseRoute(deps.location.hash)
     const key = JSON.stringify(route)
     if (key !== shownRoute) { body = null; shownRoute = key; scrollToTop = true; if (route.name !== 'mentions') markFrom = null }
