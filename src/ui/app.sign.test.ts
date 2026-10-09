@@ -302,7 +302,7 @@ describe('the relay list on Nostr', () => {
   const prefs = (a: ReturnType<typeof boot>) => a.root.querySelector('.prefs') as HTMLElement
   const urls = (a: ReturnType<typeof boot>) => [...prefs(a).querySelectorAll('.relay-list .url')].map((x) => x.textContent)
   const press = async (a: ReturnType<typeof boot>, label: string) => { const b = [...prefs(a).querySelectorAll('button')].find((x) => x.textContent === label)!; b.click(); await tick(150) }
-  const open = async (a: ReturnType<typeof boot>, sg?: ReturnType<typeof fakeSigner>) => { await tick(100); if (sg) await connectClave(a, sg); await a.go('#/me'); await tick(100) }
+  const open = async (a: ReturnType<typeof boot>, sg?: ReturnType<typeof fakeSigner>) => { await tick(100); if (sg) await connectClave(a, sg); await a.go('#/settings'); await tick(100) }
 
   it('with nothing published, and a signer connected, the list can be published after a confirmation that says it is public', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg }); await open(a, sg)
@@ -316,7 +316,7 @@ describe('the relay list on Nostr', () => {
   })
   it('without a signer it says what is needed and offers nothing to press', async () => {
     const a = boot(); await open(a)
-    expect(prefs(a).textContent).toContain('Connect Clave (above) to publish this list.'); expect([...prefs(a).querySelectorAll('button')].some((b) => b.textContent === 'Publish this list on Nostr')).toBe(false)
+    expect(prefs(a).textContent).toContain('Connect Clave (in Me) to publish this list.'); expect([...prefs(a).querySelectorAll('button')].some((b) => b.textContent === 'Publish this list on Nostr')).toBe(false)
   })
   it('a different published list is reported, and can be used here instead', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg, events: [...world, published(['wss://x.example', 'wss://y.example', 'wss://z.example'])], stored: { me, relays: JSON.stringify(['wss://r1.example']) } }); await open(a, sg)

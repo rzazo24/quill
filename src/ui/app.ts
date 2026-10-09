@@ -39,7 +39,7 @@ export interface Deps {
   onPoll?: (cb: () => void) => void
 }
 
-type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'note'; id: string }
+type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'settings' } | { name: 'note'; id: string }
 export function parseRoute(hash: string): Route {
   const m = /^#\/note\/(.+)$/.exec(hash)
   if (m) {
@@ -51,7 +51,7 @@ export function parseRoute(hash: string): Route {
       if (d.type === 'nevent') return { name: 'note', id: d.data.id }
     } catch { /* not a note id */ }
   }
-  return hash === '#/mentions' ? { name: 'mentions' } : hash === '#/me' ? { name: 'me' } : { name: 'following' }
+  return hash === '#/mentions' ? { name: 'mentions' } : hash === '#/me' ? { name: 'me' } : hash === '#/settings' ? { name: 'settings' } : { name: 'following' }
 }
 
 export function startApp(root: HTMLElement, deps: Deps): void {
@@ -142,6 +142,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const route = parseRoute(deps.location.hash)
     const key = JSON.stringify(route)
     if (key !== shownRoute) { body = null; shownRoute = key; scrollToTop = true; if (route.name !== 'mentions') markFrom = null }
+    if (route.name === 'settings') { status = null; body = null; draw(); return }
     status = t(lang, 'loadingFeed'); draw()
     let content: HTMLElement
     try {
@@ -208,7 +209,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     )
   }
 
-  function toggleSettings(): void { deps.setHash('#/me') } // the filter settings live on the Me page
+  function toggleSettings(): void { deps.setHash('#/settings') } // the filter settings live in Settings
   function changeSettings(s: Settings): void { settings = s; safeSet(kv, 'settings', JSON.stringify(s)); void load() }
   function changeFont(f: FontSize): void { font = f; safeSet(kv, 'font', f); applyFont(); draw() }
   /** A new relay list: stored, handed to the network code, and everything is read again from it. */
@@ -388,12 +389,13 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const statusEl = me && status ? h('p', { class: 'status', role: 'status' }, status) : null
     const signOut = h('button', { type: 'button', class: 'danger', onClick: () => { me = null; session = null; body = null; shownRoute = ''; safeSet(kv, 'me', null); void signer?.disconnect(); composer = review = result = null; flash = null; deps.setHash(''); draw() } }, t(lang, 'signOut'))
     const content: (HTMLElement | null)[] = !me ? [loginForm, signArea]
-      : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, renderPrefs({ font, relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
+      : route.name === 'settings' ? [signArea, renderPrefs({ font, relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
-        onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view()), h('h2', { class: 'section' }, t(lang, 'myNotes')), statusEl, body, h('p', { class: 'foot' }, signOut)]
+        onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
+      : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), statusEl, body, h('p', { class: 'foot' }, signOut)]
       : [signArea, statusEl, body]
     const page: (HTMLElement | null)[] = [
-      h('header', { class: 'top' }, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('div', { class: 'brand' }, h('h1', {}, h('a', { href: '#/' }, 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline'))), me ? h('button', { type: 'button', class: 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), onClick: refresh }, icon('refresh', 18)) : null, pills),
+      h('header', { class: 'top' }, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('div', { class: 'brand' }, h('h1', {}, h('a', { href: '#/' }, 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline'))), me ? h('button', { type: 'button', class: 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), onClick: refresh }, icon('refresh', 18)) : null, pills, me ? h('button', { type: 'button', class: route.name === 'settings' ? 'icon on' : 'icon', 'aria-label': t(lang, 'prefsTitle'), title: t(lang, 'prefsTitle'), 'aria-pressed': String(route.name === 'settings'), onClick: () => deps.setHash(route.name === 'settings' ? '' : '#/settings') }, icon('gear', 18)) : null),
       h('main', { class: 'view' }, ...content),
       me ? h('nav', { class: 'tabbar' }, tab('following', '#/'), tab('mentions', '#/mentions'), tab('me', '#/me')) : null,
     ]

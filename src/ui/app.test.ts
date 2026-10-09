@@ -104,12 +104,12 @@ describe('the app', () => {
     await a.go('#/me'); expect(tabs()).toEqual(['Following', 'Mentions', 'Me*'])
     const login = boot({}); await tick(40); expect(login.root.querySelector('nav.tabbar')).toBeNull() // no tabs before you are logged in
   })
-  it('the Me page shows who you are, your own notes (replies included), the settings and sign out', async () => {
+  it('the Me page shows who you are, your own notes (replies included) and sign out; the settings are NOT there any more', async () => {
     const mineRoot = ev(me, 'a note I wrote', { created_at: 3000 }), mineReply = ev(me, 'a reply I wrote', { created_at: 4000, tags: [['e', 'e'.repeat(64), '', 'root']] })
     const a = boot({ events: [...world, mineRoot, mineReply, ev(me, JSON.stringify({ name: 'Raúl' }), { kind: 0 })], stored: { me } }); await tick(80); await a.go('#/me'); await tick(60)
     expect(a.text()).toContain('Raúl'); expect(a.root.querySelector('.account .avatar')!.textContent).toBe('RA')
     expect(a.text()).toContain('My notes'); expect(a.text()).toContain('a note I wrote'); expect(a.text()).toContain('a reply I wrote')
-    expect(a.root.querySelector('.settings')).not.toBeNull(); expect(a.text()).toContain('Sign out')
+    expect(a.root.querySelector('.settings, .prefs')).toBeNull(); expect(a.text()).toContain('Sign out')
   })
   it('every note has a generated avatar: colour from the key, initials from the name, nothing loaded', async () => {
     const a = boot({ stored: { me } }); await tick(80)
@@ -243,42 +243,62 @@ describe('settings: text size and relays', () => {
   const press = async (a: ReturnType<typeof boot>, label: string) => { const b = [...prefs(a).querySelectorAll('button')].find((x) => x.textContent === label || x.getAttribute('aria-label')?.startsWith(label))!; b.click(); await tick(80) }
 
   it('the Me page has a Settings section with the default relays and the text-size choices', async () => {
-    const a = start(); await a.go('#/me'); await tick(80)
+    const a = start(); await a.go('#/settings'); await tick(80)
     expect(urls(a)).toHaveLength(6); expect(urls(a)).toContain('relay.hivescope.xyz'); expect([...prefs(a).querySelectorAll('.seg button')].map((b) => b.textContent)).toEqual(['Small', 'Normal', 'Large', 'Very large'])
     expect(a.setRelays.at(-1)).toHaveLength(6); expect(prefs(a).textContent).not.toContain('Restore the default relays')
   })
   it('text size is applied at once, remembered, and restored on the next start', async () => {
-    const a = start(); await a.go('#/me'); await tick(80); expect(document.documentElement.getAttribute('data-font')).toBe('normal')
+    const a = start(); await a.go('#/settings'); await tick(80); expect(document.documentElement.getAttribute('data-font')).toBe('normal')
     await press(a, 'Large'); expect(document.documentElement.getAttribute('data-font')).toBe('large'); expect(a.mem.get('font')).toBe('large'); expect(prefs(a).querySelector('button[aria-pressed=true]')!.textContent).toBe('Large')
     const b = start({ stored: { font: 'xlarge' } }); expect(document.documentElement.getAttribute('data-font')).toBe('xlarge'); void b
     start({ stored: { font: 'gigantic' } }); expect(document.documentElement.getAttribute('data-font')).toBe('normal')
   })
   it('adding a relay stores it, tells the network code, and reads everything again from the new list', async () => {
-    const a = start(); await a.go('#/me'); await tick(80); const before = a.calls.n
+    const a = start(); await a.go('#/settings'); await tick(80); const before = a.calls.n
     await add(a, 'Relay.Example.com/'); await tick(80)
     expect(urls(a)).toContain('relay.example.com'); expect(urls(a)).toHaveLength(7); expect(JSON.parse(a.mem.get('relays')!)).toContain('wss://relay.example.com'); expect(a.setRelays.at(-1)).toContain('wss://relay.example.com')
     expect(a.calls.n).toBeGreaterThan(before); expect(prefs(a).textContent).toContain('Restore the default relays')
   })
   it('refuses insecure, malformed and repeated addresses, says why, and changes nothing', async () => {
-    const a = start(); await a.go('#/me'); await tick(80); const sets = a.setRelays.length
+    const a = start(); await a.go('#/settings'); await tick(80); const sets = a.setRelays.length
     for (const [bad, msg] of [['ws://relay.example.com', 'not a valid secure relay'], ['localhost', 'not a valid secure relay'], ['wss://relay.primal.net', 'already in the list']] as const) {
       await add(a, bad); expect(prefs(a).querySelector('[role=alert]')!.textContent).toContain(msg); expect(urls(a)).toHaveLength(6)
     }
     expect(a.mem.has('relays')).toBe(false); expect(a.setRelays).toHaveLength(sets)
   })
   it('a relay can be removed, but never the last one; the defaults can be restored', async () => {
-    const a = start({ stored: { relays: JSON.stringify(['wss://a.example.com', 'wss://b.example.com']) } }); await a.go('#/me'); await tick(80)
+    const a = start({ stored: { relays: JSON.stringify(['wss://a.example.com', 'wss://b.example.com']) } }); await a.go('#/settings'); await tick(80)
     expect(urls(a)).toEqual(['a.example.com', 'b.example.com']); await press(a, 'Remove wss://a.example.com'); expect(urls(a)).toEqual(['b.example.com'])
     expect((prefs(a).querySelector('.relay-list button[aria-label^="Remove"]') as HTMLButtonElement).disabled).toBe(true)
     await press(a, 'Restore the default relays'); expect(urls(a)).toHaveLength(6); expect(a.setRelays.at(-1)).toHaveLength(6); expect(prefs(a).textContent).not.toContain('Restore the default relays')
   })
   it('a corrupt stored list falls back to the defaults', async () => {
-    const a = start({ stored: { relays: '{"not":"a list"}' } }); await a.go('#/me'); await tick(80); expect(urls(a)).toHaveLength(6)
+    const a = start({ stored: { relays: '{"not":"a list"}' } }); await a.go('#/settings'); await tick(80); expect(urls(a)).toHaveLength(6)
   })
   it('Test says whether a relay answers, per relay', async () => {
-    const a = start({ reachable: (u) => u.includes('nos.lol') }); await a.go('#/me'); await tick(80)
+    const a = start({ reachable: (u) => u.includes('nos.lol') }); await a.go('#/settings'); await tick(80)
     const row = (name: string) => [...prefs(a).querySelectorAll('.relay-list li')].find((li) => li.textContent!.includes(name))!
     ;(row('nos.lol').querySelector('button') as HTMLElement).click(); ;(row('nostr.mom').querySelector('button') as HTMLElement).click(); await tick(80)
     expect(row('nos.lol').querySelector('.probe')!.textContent).toBe('Answers'); expect(row('nostr.mom').querySelector('.probe')!.textContent).toBe('No answer'); expect(row('nos.lol').querySelector('.probe.up')).not.toBeNull()
+  })
+})
+
+describe('the settings cog', () => {
+  const gear = (a: ReturnType<typeof boot>) => a.root.querySelector('header.top button[aria-label="Settings"]') as HTMLButtonElement | null
+  it('sits in the header right after the language buttons, only when somebody is signed in', async () => {
+    const out = boot(); expect(gear(out)).toBeNull()
+    const a = boot({ stored: { me } }); await tick(80); const header = a.root.querySelector('header.top')!
+    const kids = [...header.querySelectorAll('button')]; expect(kids.at(-1)).toBe(gear(a)); expect(kids.at(-2)!.textContent).toBe('ES'); expect(gear(a)!.querySelector('svg')).not.toBeNull()
+  })
+  it('opens Settings (text size, relays and the filter together); pressing it again goes back to the feed', async () => {
+    const a = boot({ stored: { me } }); await tick(80); expect(gear(a)!.getAttribute('aria-pressed')).toBe('false')
+    gear(a)!.click(); await tick(80)
+    expect(a.root.querySelector('.prefs')).not.toBeNull(); expect(a.root.querySelector('.settings')).not.toBeNull(); expect(a.root.querySelector('.tabbar .tab.on')).toBeNull(); expect(gear(a)!.getAttribute('aria-pressed')).toBe('true')
+    gear(a)!.click(); await tick(80); expect(a.root.querySelector('.prefs')).toBeNull(); expect(a.text()).toContain('a post from my friend')
+  })
+  it('the filter summary button leads to the same Settings page', async () => {
+    const a = boot({ stored: { me } }); await tick(80); await a.go('#/mentions'); await tick(80)
+    ;(a.root.querySelector('.summary button, button.summary-settings') ?? [...a.root.querySelectorAll('button')].find((b) => b.textContent === 'Filter settings')!).dispatchEvent(new Event('click')); await tick(80)
+    expect(a.root.querySelector('.settings')).not.toBeNull()
   })
 })

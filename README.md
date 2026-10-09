@@ -37,7 +37,7 @@ Principles: behaviour is evidence, **missing data is not** (a key without a prof
 
 ### What it does not do (on purpose, or not yet)
 
-No direct messages, zaps, search, lists, media or long-form articles. The relay list is yours to edit in *Me → Settings* (secure `wss://` addresses only, 1 to 10, default six public relays), but it is one list for everything, not read per author (NIP-65). No system notifications (they would need a service worker and push); instead, while the app is open it looks once a minute and shows a number on *Mentions* for what is new since your last visit (replies, mentions and reactions to your notes; whatever the filter would hide is not counted, it is listed apart). No offline mode: the notes come live from the relays, so a cached copy would only show an empty shell.
+No direct messages, zaps, search, lists, media or long-form articles. The relay list is yours to edit in the ⚙ Settings (next to the language buttons) (secure `wss://` addresses only, 1 to 10, default six public relays), but it is one list for everything, not read per author (NIP-65). No system notifications (they would need a service worker and push); instead, while the app is open it looks once a minute and shows a number on *Mentions* for what is new since your last visit (replies, mentions and reactions to your notes; whatever the filter would hide is not counted, it is listed apart). No offline mode: the notes come live from the relays, so a cached copy would only show an empty shell.
 
 ## Writing: Quill never sees your private key
 

@@ -37,7 +37,7 @@ Principios: la conducta es una prueba, **la falta de datos no lo es** (una clave
 
 ### Lo que no hace (a propósito, o todavía)
 
-Ni mensajes directos, ni zaps, ni búsqueda, ni listas, ni multimedia, ni artículos largos. La lista de relés la editas tú en *Yo → Ajustes* (solo direcciones seguras `wss://`, de 1 a 10, seis relés públicos por defecto), pero es una lista única para todo, no se lee por autor (NIP-65). Sin notificaciones del sistema (necesitarían un service worker y avisos push); en su lugar, con la app abierta mira una vez por minuto y muestra un número en *Menciones* con lo nuevo desde tu última visita (respuestas, menciones y reacciones a tus notas; lo que el filtro ocultaría no cuenta, se lista aparte). Sin modo sin conexión: las notas llegan en vivo de los relés, así que una copia guardada solo mostraría una pantalla vacía.
+Ni mensajes directos, ni zaps, ni búsqueda, ni listas, ni multimedia, ni artículos largos. La lista de relés la editas tú en ⚙ Ajustes (junto a los botones de idioma) (solo direcciones seguras `wss://`, de 1 a 10, seis relés públicos por defecto), pero es una lista única para todo, no se lee por autor (NIP-65). Sin notificaciones del sistema (necesitarían un service worker y avisos push); en su lugar, con la app abierta mira una vez por minuto y muestra un número en *Menciones* con lo nuevo desde tu última visita (respuestas, menciones y reacciones a tus notas; lo que el filtro ocultaría no cuenta, se lista aparte). Sin modo sin conexión: las notas llegan en vivo de los relés, así que una copia guardada solo mostraría una pantalla vacía.
 
 ## Escribir: Quill nunca ve tu clave privada
 

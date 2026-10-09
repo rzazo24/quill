@@ -159,3 +159,5 @@ html[data-font=small] { font-size: 90% } html[data-font=large] { font-size: 112.
 .relay-list .url { flex: 1 1 100%; min-width: 0; overflow-wrap: anywhere }
 .relay-list .probe { font-size: .85rem } .relay-list .probe.up { color: var(--accent) } .relay-list .probe.down { color: var(--red) } .relay-list .probe.testing { color: var(--muted) }
 .relay-add { display: flex; gap: 8px; margin-top: 8px } .relay-add input { flex: 1; min-width: 0 }
+
+button.icon.on { color: var(--accent); border-color: var(--accent); background: rgba(45,212,191,.18) }
