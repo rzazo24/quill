@@ -173,3 +173,7 @@ button.icon.on { color: var(--accent); border-color: var(--accent); background: 
 .help-foot { margin: 14px 0 0; color: var(--muted); overflow-wrap: anywhere } .help-foot a { color: var(--accent) }
 .help-section p, .help-section ul { margin: 0 0 10px; color: var(--text) }
 .help-section ul { padding-left: 20px } .help-section li { margin: 0 0 6px }
+
+/* the quill next to the name */
+.top h1 a.wordmark { display: inline-flex; align-items: center; gap: 8px }
+.wordmark .logo { flex: none }

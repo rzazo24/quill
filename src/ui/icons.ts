@@ -26,3 +26,14 @@ export function icon(name: IconName, size = 16): SVGElement {
   for (const d of PATHS[name]) { const p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); svg.append(p) }
   return svg
 }
+
+/** The quill, as in the favicon (`public/favicon.svg`), drawn as page elements: nothing is loaded, so the "no images" rule and the page's img-src stay true. */
+export function logo(size = 24): SVGElement {
+  const svg = document.createElementNS(NS, 'svg')
+  for (const [k, v] of Object.entries({ viewBox: '0 0 64 64', width: String(size), height: String(size), class: 'logo', 'aria-hidden': 'true', focusable: 'false' })) svg.setAttribute(k, v)
+  const part = (tag: string, attrs: Record<string, string>) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); svg.append(e) }
+  part('path', { d: 'M53 9 C34 9 17 22 15 46 C32 47 50 34 53 9 Z', fill: '#2dd4bf' })
+  part('path', { d: 'M50 12 Q30 26 17 45', fill: 'none', stroke: '#0b0f16', 'stroke-width': '2.6', 'stroke-linecap': 'round' })
+  part('path', { d: 'M16 46 L9 57', fill: 'none', stroke: '#2dd4bf', 'stroke-width': '4.5', 'stroke-linecap': 'round' })
+  return svg
+}
