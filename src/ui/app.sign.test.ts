@@ -394,6 +394,21 @@ describe('the connection status on Me', () => {
     const row = a.root.querySelector('.signing-as')!
     expect([...row.children].map((c) => c.className)).toEqual(['dot', 'who', 'danger']); expect(row.querySelector('strong')!.textContent).toBe('Clave connected'); expect(row.querySelector('.who span')!.textContent).toContain('Signing as')
     expect(row.lastElementChild!.textContent).toBe('Disconnect'); expect(row.querySelector('.dot')!.getAttribute('aria-hidden')).toBe('true')
-    ;(row.lastElementChild as HTMLElement).click(); await tick(80); expect(sg.log).toContain('disconnect'); expect(a.root.querySelector('.signing-as')).toBeNull()
+    // one tap only asks; nothing is disconnected yet
+    ;(row.lastElementChild as HTMLElement).click(); await tick(60)
+    expect(a.root.querySelector('.confirm-disconnect')!.textContent).toContain('bunker://'); expect(sg.log).not.toContain('disconnect'); expect(a.root.querySelector('.signing-as button')).toBeNull()
+    await click(a.root, 'Cancel'); expect(a.root.querySelector('.confirm-disconnect')).toBeNull(); expect(a.root.querySelector('.signing-as button')).not.toBeNull(); expect(sg.log).not.toContain('disconnect')
+    ;(a.root.querySelector('.signing-as button') as HTMLElement).click(); await tick(60)
+    ;(a.root.querySelector('.confirm-disconnect button.danger') as HTMLElement).click(); await tick(80)
+    expect(sg.log).toContain('disconnect'); expect(a.root.querySelector('.signing-as')).toBeNull(); expect(a.root.querySelector('.confirm-disconnect')).toBeNull()
+  })
+})
+
+describe('a disconnect question left open is forgotten', () => {
+  it('leaving Me, or signing out, does not leave it waiting for the next visit', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg); await a.go('#/me'); await tick(80)
+    ;(a.root.querySelector('.signing-as button') as HTMLElement).click(); await tick(60); expect(a.root.querySelector('.confirm-disconnect')).not.toBeNull()
+    await a.go('#/'); await tick(80); await a.go('#/me'); await tick(80)
+    expect(a.root.querySelector('.confirm-disconnect')).toBeNull(); expect(a.root.querySelector('.signing-as button')).not.toBeNull()
   })
 })

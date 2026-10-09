@@ -190,3 +190,6 @@ button.icon.on { color: var(--accent); border-color: var(--accent); background: 
 
 /* a sign area whose parts all float (button, popup, panel, bar) has no card of its own */
 .sign.bare { display: contents }
+
+/* disconnecting asks first */
+.confirm-disconnect { display: grid; gap: 8px } .confirm-disconnect p { margin: 0 } .confirm-disconnect .buttons { display: flex; gap: 8px; flex-wrap: wrap }

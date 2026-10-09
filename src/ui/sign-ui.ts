@@ -31,10 +31,12 @@ export interface SignUiState {
   /** What the user has typed in the bunker:// field and whether "use a link instead" is open: kept in the app because the page is redrawn often. */
   bunkerText: string
   linkOpen: boolean
+  /** Disconnecting asks first: connecting again means pasting the bunker:// address again. */
+  confirmDisconnect: boolean
 }
 
 export interface SignUiHandlers {
-  openConnect(): void; cancelConnect(): void; bunker(text: string): void; disconnect(): void; copy(text: string): void
+  openConnect(): void; cancelConnect(): void; bunker(text: string): void; askDisconnect(): void; cancelDisconnect(): void; disconnect(): void; copy(text: string): void
   edit(text: string): void; review(): void; publish(): void; back(): void; cancelComposer(): void; retry(): void; dismissResult(): void
   startNote(): void; cancelSigning(): void; startLink(): void; pasteBunker(): void; editBunker(text: string): void; setLinkOpen(open: boolean): void
 }
@@ -55,7 +57,10 @@ export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, sign
   if (where === 'me' && s.signer === 'connected') parts.push(h('div', { class: 'signing-as' },
     h('span', { class: 'dot', 'aria-hidden': 'true' }),
     h('div', { class: 'who' }, h('strong', {}, t(v.lang, 'signerConnected')), h('span', {}, t(v.lang, 'signingAs', { who: s.who ?? '' }))),
-    h('button', { type: 'button', class: 'danger', onClick: hd.disconnect }, t(v.lang, 'disconnectSigner'))))
+    s.confirmDisconnect ? null : h('button', { type: 'button', class: 'danger', onClick: hd.askDisconnect }, t(v.lang, 'disconnectSigner'))))
+  if (where === 'me' && s.signer === 'connected' && s.confirmDisconnect) parts.push(h('div', { class: 'confirm-disconnect', role: 'alertdialog', 'aria-label': t(v.lang, 'disconnectSigner') },
+    h('p', {}, t(v.lang, 'confirmDisconnect')),
+    h('p', { class: 'buttons' }, h('button', { type: 'button', class: 'danger', onClick: hd.disconnect }, t(v.lang, 'disconnectSigner')), ' ', h('button', { type: 'button', onClick: hd.cancelDisconnect }, t(v.lang, 'cancel')))))
   if (s.signer === 'connected') {
     // while the signer works: a popup that stays as long as the wait lasts (it does not fade) and goes away when it is over
     if (s.step) parts.push(h('div', { class: 'popup stay', role: 'status' }, h('span', {}, t(v.lang, `step_${s.step}` as Parameters<typeof t>[1])), s.step === 'waiting' ? h('button', { type: 'button', class: 'link', onClick: hd.cancelSigning }, t(v.lang, 'cancel')) : null))
