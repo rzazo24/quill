@@ -91,6 +91,10 @@ describe('the app', () => {
     expect(a.root.querySelectorAll('details.folded').length).toBe(0)
     expect(JSON.parse(a.mem.get('settings')!).rules.outsideNetwork).toBe(false)
   })
+  it('the tagline is on the login card (the header hides it on a phone), in the reader\'s language', async () => {
+    const en = boot({}); await tick(40); expect(en.root.querySelector('.login .tagline')!.textContent).toBe('Text only. Tells you why it hides things.')
+    const es = boot({ languages: ['es'] }); await tick(40); expect(es.root.querySelector('.login .tagline')!.textContent).toBe('Solo texto. Te dice por qué oculta cosas.')
+  })
   it('has three tabs at the bottom: Following, Mentions and Me; the current one is marked', async () => {
     const a = boot({ stored: { me } }); await tick(80)
     const tabs = () => [...a.root.querySelectorAll('nav.tabbar a')].map((x) => `${x.textContent}${x.getAttribute('aria-current') ? '*' : ''}`)

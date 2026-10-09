@@ -257,7 +257,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const tab = (name: 'following' | 'mentions' | 'me', href: string) => h('a', { href, class: route.name === name ? 'tab on' : 'tab', ...(route.name === name ? { 'aria-current': 'page' } : {}), onClick: (e: Event) => { if (route.name === name) { e.preventDefault(); refresh() } } }, t(lang, name))
     const input = h('input', { type: 'text', placeholder: t(lang, 'loginPlaceholder'), autocomplete: 'off', spellcheck: 'false', 'aria-label': t(lang, 'loginTitle') })
     const loginForm = h('form', { class: 'login card', onSubmit: (e: Event) => { e.preventDefault(); login(input.value) } },
-      h('h2', {}, t(lang, 'loginTitle')), h('p', {}, t(lang, 'loginHelp')), input, ' ', h('button', { type: 'submit', class: 'primary' }, t(lang, 'loginButton')),
+      h('p', { class: 'tagline' }, t(lang, 'tagline')), h('h2', {}, t(lang, 'loginTitle')), h('p', {}, t(lang, 'loginHelp')), input, ' ', h('button', { type: 'submit', class: 'primary' }, t(lang, 'loginButton')),
       loginError ? h('p', { class: 'error', role: 'alert' }, loginError) : null)
     const signArea = signer ? renderSignArea({
       signer: signer.state, who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, flash, composer, review, step, result, relays, bunkerText, linkOpen,
