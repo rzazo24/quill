@@ -4,7 +4,9 @@ import { h } from './dom.js'
 import { refs, shortNpub } from '../core/refs.js'
 import { avatarOf } from '../core/avatar.js'
 import { showReaction, type ReactionGroup } from '../data/activity.js'
-import { FONT_SIZES, type FontSize } from './store.js'
+import { AVATAR_STYLES, FONT_SIZES, type AvatarStyle, type FontSize } from './store.js'
+import { robotEl } from './robot-el.js'
+import { pixelEl } from './pixel-el.js'
 import { HELP, helpBlocks } from './help-text.js'
 import type { ListState } from '../data/relaylist.js'
 import { icon } from './icons.js'
@@ -13,7 +15,7 @@ import type { Judged, RuleId, Settings } from '../core/verdict.js'
 import type { ThreadNode } from '../data/feed.js'
 import { ago, reason, t, tallyLabel, type Lang } from './i18n.js'
 
-export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; actions?: (j: Judged) => Child[]; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
+export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; actions?: (j: Judged) => Child[]; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
 
 export const nameOf = (v: View, pubkey: string): string => v.names.get(pubkey) ?? shortNpub(pubkey)
 
@@ -36,8 +38,10 @@ export function renderContent(raw: string, v: View, fromId?: string): DocumentFr
   return frag
 }
 
-/** A round picture made of colour and initials: nothing is loaded. The colour goes in through the style object (CSSOM), which the page's CSP allows. */
-export function avatarEl(pubkey: string, v: View, size: 'md' | 'lg' = 'md'): HTMLElement {
+/** A round picture: colour and initials, or a robot, or a pixel figure drawn from the key. Nothing is loaded. The colour goes in through the style object (CSSOM),
+ *  which the page's CSP allows. */
+export function avatarEl(pubkey: string, v: View, size: 'md' | 'lg' = 'md', style: AvatarStyle = v.avatars ?? 'initials'): HTMLElement {
+  if (style !== 'initials') return h('span', { class: size === 'lg' ? 'avatar lg art' : 'avatar art', 'aria-hidden': 'true' }, style === 'robots' ? robotEl(pubkey) : pixelEl(pubkey))
   const a = avatarOf(pubkey, v.names.get(pubkey))
   const el = h('span', { class: size === 'lg' ? 'avatar lg' : 'avatar', 'aria-hidden': 'true' }, a.letters)
   el.style.setProperty('--h', String(a.hue))
@@ -140,7 +144,7 @@ export function renderHelp(v: View, open: ReadonlySet<string>, onToggle: (id: st
 export const SOURCE_URL = 'https://github.com/rzazo24/quill'
 
 export interface PrefsProps {
-  font: FontSize; reposts: boolean; onReposts: (on: boolean) => void; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
+  font: FontSize; avatars: AvatarStyle; sampleKey: string; onAvatars: (s: AvatarStyle) => void; reposts: boolean; onReposts: (on: boolean) => void; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
   /** The list published on Nostr compared with this one, and what can be done about it. */
   list: { state: ListState; publishedCount: number; canSign: boolean; confirming: boolean }
   onAskPublish: () => void; onCancelPublish: () => void; onPublish: () => void; onUsePublished: () => void
@@ -155,6 +159,9 @@ export function renderPrefs(p: PrefsProps, v: View): HTMLElement {
     h('h3', {}, t(v.lang, 'fontTitle')),
     h('div', { class: 'seg', role: 'group', 'aria-label': t(v.lang, 'fontTitle') }, ...FONT_SIZES.map((f) =>
       h('button', { type: 'button', class: `size-${f}`, 'aria-pressed': String(p.font === f), onClick: () => { if (p.font !== f) p.onFont(f) } }, t(v.lang, `font_${f}` as Parameters<typeof t>[1])))),
+    h('h3', {}, t(v.lang, 'avatarsTitle')),
+    h('div', { class: 'seg avatars', role: 'group', 'aria-label': t(v.lang, 'avatarsTitle') }, ...AVATAR_STYLES.map((a) =>
+      h('button', { type: 'button', class: `avatar-${a}`, 'aria-pressed': String(p.avatars === a), onClick: () => { if (p.avatars !== a) p.onAvatars(a) } }, avatarEl(p.sampleKey, v, 'md', a), t(v.lang, `avatar_${a}` as Parameters<typeof t>[1])))),
     h('label', { class: 'check' }, h('span', {}, t(v.lang, 'showReposts')), h('input', { type: 'checkbox', role: 'switch', ...(p.reposts ? { checked: true } : {}), onChange: (e: Event) => p.onReposts((e.target as HTMLInputElement).checked) })),
     h('h3', {}, t(v.lang, 'relaysTitle')), h('p', { class: 'meta' }, t(v.lang, 'relaysHelp')),
     h('ul', { class: 'relay-list' }, ...p.relays.map((u) => h('li', {},

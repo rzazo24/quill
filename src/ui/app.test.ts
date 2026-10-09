@@ -247,7 +247,7 @@ describe('settings: text size and relays', () => {
 
   it('the Me page has a Settings section with the default relays and the text-size choices', async () => {
     const a = start(); await a.go('#/settings'); await tick(80)
-    expect(urls(a)).toHaveLength(6); expect(urls(a)).toContain('relay.hivescope.xyz'); expect([...prefs(a).querySelectorAll('.seg button')].map((b) => b.textContent)).toEqual(['Small', 'Normal', 'Large', 'Very large'])
+    expect(urls(a)).toHaveLength(6); expect(urls(a)).toContain('relay.hivescope.xyz'); expect([...prefs(a).querySelectorAll('.seg:not(.avatars) button')].map((b) => b.textContent)).toEqual(['Small', 'Normal', 'Large', 'Very large'])
     expect(a.setRelays.at(-1)).toHaveLength(6); expect(prefs(a).textContent).not.toContain('Restore the default relays')
   })
   it('text size is applied at once, remembered, and restored on the next start', async () => {
@@ -424,5 +424,32 @@ describe('the switches in Settings', () => {
     for (const r of rows) { const input = r.querySelector('input')!; expect(input.type).toBe('checkbox'); expect(input.getAttribute('role')).toBe('switch'); expect(r.firstElementChild!.tagName).toBe('SPAN'); expect(r.lastElementChild).toBe(input) }
     expect(a.root.querySelector('.settings .meta')!.textContent).toBe('On = the rule hides what meets its condition. Off = it hides nothing.')
     expect(rows.slice(0, 4).map((r) => (r.querySelector('input') as HTMLInputElement).checked)).toEqual([true, true, true, true]) // all on by default
+  })
+})
+
+describe('avatar style', () => {
+  const people = (a: ReturnType<typeof boot>) => [...a.root.querySelectorAll('article.note > .avatar')] as HTMLElement[]
+  const pick = async (a: ReturnType<typeof boot>, label: string) => { const b = [...a.root.querySelectorAll('.seg.avatars button')].find((x) => x.lastChild!.textContent === label) as HTMLElement; b.click(); await tick(150) }
+  it('starts with initials; Settings offers initials, robots and pixels, each with a sample of the reader\'s own picture', async () => {
+    const a = boot({ stored: { me } }); await tick(150)
+    expect(people(a).length).toBeGreaterThan(0); expect(people(a).every((x) => !x.classList.contains('art') && /^[A-Z0-9]{2}$/.test(x.textContent!))).toBe(true)
+    await a.go('#/settings'); await tick(100); const opts = [...a.root.querySelectorAll('.seg.avatars button')]
+    expect(opts.map((b) => b.lastChild!.textContent)).toEqual(['Initials', 'Robots', 'Pixels']); expect(opts.map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false'])
+    expect(opts[1]!.querySelector('.avatar.art svg.robot')).not.toBeNull(); expect(opts[2]!.querySelector('.avatar.art svg.pixel')).not.toBeNull(); expect(opts[0]!.querySelector('.avatar')!.classList.contains('art')).toBe(false)
+  })
+  it('robots and pixels replace the initials everywhere (cards and the account), as page elements and never as images, and the choice is remembered', async () => {
+    const a = boot({ stored: { me } }); await tick(150); await a.go('#/settings'); await tick(100); await pick(a, 'Robots')
+    expect(a.mem.get('avatars')).toBe('robots'); await a.go('#/'); await tick(200)
+    expect(people(a).length).toBeGreaterThan(0); expect(people(a).every((x) => x.classList.contains('art') && x.querySelector('svg.robot') && x.textContent === '')).toBe(true); expect(a.root.querySelectorAll('img').length).toBe(0)
+    await a.go('#/me'); await tick(150); expect(a.root.querySelector('.account .avatar.lg.art svg.robot')).not.toBeNull()
+    await a.go('#/settings'); await tick(100); await pick(a, 'Pixels'); expect(a.mem.get('avatars')).toBe('pixels'); await a.go('#/'); await tick(200); expect(people(a).every((x) => x.querySelector('svg.pixel'))).toBe(true)
+    const again = boot({ stored: { me, avatars: 'robots' } }); await tick(200); expect(people(again).every((x) => x.querySelector('svg.robot'))).toBe(true)
+    await again.go('#/settings'); await tick(100); await pick(again, 'Initials'); expect(again.mem.has('avatars')).toBe(false)
+  })
+  it('the same account gets the same robot in every card; a stored value that is not a style falls back to initials', async () => {
+    const a = boot({ stored: { me, avatars: 'robots' }, events: [...world, ev(friend, 'a second post of my friend', { created_at: 1_800_000_000 })] }); await tick(200)
+    const mine = people(a).filter((x) => x.closest('article')!.textContent!.includes('post of my friend') || x.closest('article')!.textContent!.includes('a post from my friend')); expect(mine.length).toBeGreaterThanOrEqual(2)
+    expect(new Set(mine.map((x) => x.innerHTML)).size).toBe(1)
+    const bad = boot({ stored: { me, avatars: 'photos' } }); await tick(150); expect(people(bad).every((x) => !x.classList.contains('art'))).toBe(true)
   })
 })

@@ -32,6 +32,7 @@ Principios: la conducta es una prueba, **la falta de datos no lo es** (una clave
 - **Notificaciones dentro de la app**: un número en *Menciones*, las notas nuevas marcadas y una lista de quién reaccionó a tus notas.
 - **Reaccionar** con un toque; lo que ya has reaccionado o respondido queda marcado; **responder** y **escribir una nota** con una pantalla de revisión que muestra el texto exacto, el tipo, las etiquetas y los relés antes de pedirle nada al firmador.
 - **Ayuda**: una página con secciones plegables (el filtro, escribir con Clave, ajustes, instalar), tras el botón ?, en los dos idiomas.
+- **Avatares**: iniciales sobre un color, robots o figuras de píxeles, todos dibujados a partir de la clave de la cuenta (no se carga nada).
 - **Ajustes**: tu propia lista de relés (con prueba de conexión; se puede publicar en Nostr como tu lista NIP-65, y se usa como punto de partida en un dispositivo nuevo) y cuatro tamaños de letra, ambos recordados en el dispositivo.
 - Inglés y español; tema oscuro; pensado primero para móvil, y también cómodo en un ordenador.
 - Instalable como app en iPhone y Android.
