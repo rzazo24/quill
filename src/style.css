@@ -25,7 +25,9 @@ main.view { max-width: 680px; margin: 0 auto; padding: 12px 14px 24px; display: 
 button { font: inherit; cursor: pointer; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 0 14px; min-height: 44px }
 @media (hover: hover) { button:hover { border-color: var(--accent) } } /* no sticky hover after a tap on a touch screen */
 button.primary, button[type=submit] { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 700 }
-button.link { background: none; border: 0; padding: 0 4px; min-height: 32px; color: var(--accent); text-decoration: underline }
+/* secondary actions: a quiet outlined pill, not an underlined hyperlink */
+button.link { background: transparent; border: 1px solid var(--border); border-radius: 999px; padding: 0 14px; min-height: 36px; color: var(--accent); text-decoration: none; font-size: .9rem; font-weight: 600 }
+@media (hover: hover) { button.link:hover { background: rgba(45,212,191,.08) } }
 button.danger { color: var(--red); border-color: #5a2230 }
 a.button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border: 1px solid var(--accent); border-radius: 8px; color: var(--accent); text-decoration: none; font-weight: 600 }
 input[type=text], textarea, select { font: inherit; font-size: 16px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; min-height: 44px; width: 100% }
@@ -50,17 +52,20 @@ h2.section { font-size: 1.05rem; margin-top: 8px } .foot { margin: 8px 0 0 }
 .note { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 10px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px }
 .note header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; font-size: .85rem; color: var(--muted) } .note header strong { color: var(--text); font-size: .95rem }
 .note .body { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 2px }
-.thread-link { font-size: .8rem }
+.thread-link { font-size: .75rem; color: var(--muted); text-decoration: none; border: 1px solid var(--border); border-radius: 999px; padding: 0 9px; line-height: 1.6 }
+@media (hover: hover) { .thread-link:hover { color: var(--accent); border-color: var(--accent) } }
 .ref { text-decoration: none; font-weight: 600 }
-.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 8px }
-.actions button.link { font-size: .9rem; padding: 0 8px 0 0; text-decoration: none }
-.actions button.react { min-height: 36px; min-width: 36px; padding: 0; border-radius: 18px; font-size: 1rem }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin-top: 8px }
+.actions button.link { margin-right: 0; padding: 0 9px; font-size: .8rem; min-height: 34px }
+.summary button.link { min-height: 32px; padding: 0 12px; font-size: .85rem }
+.stack { display: grid; gap: 12px }
+.actions button.react { min-height: 34px; min-width: 34px; padding: 0; border-radius: 17px; font-size: 1rem }
 .folded { border: 1px dashed #2b3a50; border-radius: 12px }
 .folded > summary { padding: 11px 14px; min-height: 44px; color: var(--muted); cursor: pointer; font-size: .9rem }
 .folded .why { color: var(--amber); font-weight: 700 } .folded .who { opacity: .75 }
 .folded[open] > summary { border-bottom: 1px dashed #2b3a50 } .folded .note { border: 0; background: none; border-radius: 0 0 12px 12px }
 .summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 10px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; color: var(--muted); font-size: .85rem }
-.summary .counts strong { color: var(--text); font-weight: 600 } .summary button.link { min-height: 36px }
+.summary .counts strong { color: var(--text); font-weight: 600 }
 .more { width: 100%; color: var(--accent); margin-top: 4px }
 .compose-start { width: 100%; text-align: left; color: var(--muted); background: var(--bg); min-height: 48px; padding: 0 14px }
 .back { display: inline-block; padding: 6px 0 } h3 { font-size: 1rem; color: var(--muted) }

@@ -112,7 +112,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         if (mine !== run) return
         await nameThem(items)
         if (route.name === 'me' && !names.has(me)) for (const [k, n] of await loadNames(fetcher, [me])) names.set(k, n)
-        content = route.name === 'me' ? renderList(items, view()) : h('div', {}, renderSummary(tally(items), view(), toggleSettings), renderList(items, view()))
+        content = route.name === 'me' ? renderList(items, view()) : h('div', { class: 'stack' }, renderSummary(tally(items), view(), toggleSettings), renderList(items, view()))
       }
     } catch { content = h('p', { class: 'empty' }, t(lang, 'noNote')) }
     if (mine !== run) return
@@ -126,7 +126,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
 
   function threadView(th: Thread): HTMLElement {
     const all = [...(th.root ? [th.root] : []), ...flat(th.replies)]
-    return h('div', {},
+    return h('div', { class: 'stack' },
       h('a', { class: 'back', href: '#/' }, t(lang, 'back')),
       renderSummary(tally(all), view(), toggleSettings),
       th.root ? renderJudged(th.root, view()) : null,
