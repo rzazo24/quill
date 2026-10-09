@@ -138,13 +138,14 @@ button.icon { display: inline-grid; place-items: center; min-height: 36px; min-w
 .reaction-line .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none }
 
 /* a short notice: a small pill above the tab bar that appears and fades by itself */
-.sign .popup { position: fixed; left: 50%; bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) * .5 + 14px); z-index: 8; max-width: calc(100% - 32px); padding: 8px 18px; border-radius: 999px; background: var(--panel); border: 1px solid var(--accent); color: var(--text); font-size: 15px; box-shadow: 0 4px 18px rgba(0,0,0,.45); pointer-events: none; transform: translateX(-50%); animation: popup 3s ease forwards }
-@keyframes popup { 0% { opacity: 0; transform: translate(-50%, 8px) } 8% { opacity: 1; transform: translate(-50%, 0) } 82% { opacity: 1 } 100% { opacity: 0 } }
+.sign .popup { position: fixed; left: 0; right: 0; margin-inline: auto; width: fit-content; bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) * .5 + 14px); z-index: 8; max-width: min(calc(100% - 32px), 460px); box-sizing: border-box; padding: 10px 18px; border-radius: 18px; background: var(--panel); border: 1px solid var(--accent); color: var(--text); font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; box-shadow: 0 4px 18px rgba(0,0,0,.45); pointer-events: none; animation: popup 3s ease forwards }
+@keyframes popup { 0% { opacity: 0; transform: translateY(8px) } 8% { opacity: 1; transform: translateY(0) } 82% { opacity: 1 } 100% { opacity: 0 } }
 @media (prefers-reduced-motion: reduce) { .sign .popup { animation: popup-fade 3s ease forwards } @keyframes popup-fade { 0%, 82% { opacity: 1 } 100% { opacity: 0 } } }
 
 /* the waiting popup stays until the signer answers, and its Cancel button must be tappable */
-.sign .popup.stay { animation: popup-in .2s ease both; pointer-events: auto; display: flex; align-items: center; gap: 12px }
-@keyframes popup-in { from { opacity: 0; transform: translate(-50%, 8px) } to { opacity: 1; transform: translate(-50%, 0) } }
+.sign .popup.stay { animation: popup-in .2s ease both; pointer-events: auto; display: flex; align-items: center; gap: 14px }
+.sign .popup.stay > span { flex: 1 1 auto; min-width: 0 } .sign .popup.stay > button { flex: none }
+@keyframes popup-in { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: translateY(0) } }
 @media (prefers-reduced-motion: reduce) { .sign .popup.stay { animation: none } }
 
 /* text size: everything sized in rem follows the page's base size */
