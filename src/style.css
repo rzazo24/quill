@@ -1,23 +1,27 @@
 /* Same family as the ephemeral chat and the relay's landing page: dark navy, teal accent, rounded cards. Mobile first: the base rules are for a phone,
    the media query at the end only widens things. Nothing here loads anything: no fonts, no images. */
-:root { --btn:#162030; --bg:#0b0f16; --panel:#111823; --border:#1f2a3a; --text:#e6edf3; --muted:#93a1b1; --accent:#2dd4bf; --amber:#fbbf24; --red:#ff9aa5; --tab-h:58px }
+:root { --col: 820px; --btn:#162030; --bg:#0b0f16; --panel:#111823; --border:#1f2a3a; --text:#e6edf3; --muted:#93a1b1; --accent:#2dd4bf; --amber:#fbbf24; --red:#ff9aa5; --tab-h:58px }
 * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: #2b3a50 transparent }
-html { color-scheme: dark; -webkit-text-size-adjust: 100% }
+html { color-scheme: dark; -webkit-text-size-adjust: 100%; height: 100% }
 body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  padding: 0 env(safe-area-inset-right) calc(var(--tab-h) + env(safe-area-inset-bottom)) env(safe-area-inset-left) }
+  /* An app shell: the PAGE never scrolls, only <main> does. A page that scrolls makes iPhone Safari show and hide its toolbar, which pushes fixed bars
+     around (the tab bar jumped up when a list was emptied and refilled). Header and tab bar are plain rows of this column instead. */
+  display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left) }
+#app { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column } /* the column of the app shell: header, scrolling <main>, tab bar */
 a { color: var(--accent) }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 h2, h3 { margin: 0 }
 
 /* header and tab bar */
-.top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top)) 14px 10px; background: rgba(11,15,22,.94); border-bottom: 1px solid var(--border) }
+.top { flex: none; position: relative; z-index: 5; display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top)) max(14px, calc((100% - var(--col)) / 2)) 10px; background: rgba(11,15,22,.94); border-bottom: 1px solid var(--border) }
 .top h1 { margin: 0; font-size: 1.25rem; line-height: 1.2 } .top h1 a { color: var(--text); text-decoration: none }
-.tag { flex: 1; min-width: 0; color: var(--muted); font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.lang { display: flex; gap: 4px; margin-left: auto }
+.brand { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px }
+.tag { min-width: 0; color: var(--muted); font-size: .8rem }
+.lang { display: flex; gap: 4px }
 .lang button { min-height: 32px; padding: 0 10px; font-size: .85rem; color: var(--muted) }
 .lang button[aria-pressed=true] { color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 700 }
-main.view { max-width: 680px; margin: 0 auto; padding: 12px 14px 24px; display: grid; gap: 12px; align-content: start }
-.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; justify-content: center; background: var(--panel); border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom) }
+main.view { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 12px max(14px, calc((100% - var(--col)) / 2)) 24px; display: grid; gap: 12px; align-content: start }
+.tabbar { flex: none; width: min(100%, var(--col)); margin: 0 auto; position: relative; z-index: 6; display: flex; justify-content: center; background: var(--panel); border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom) }
 .tabbar .tab { flex: 1; max-width: 226px; display: flex; align-items: center; justify-content: center; min-height: var(--tab-h); color: var(--muted); text-decoration: none; font-size: .9rem; font-weight: 600; border-top: 3px solid transparent }
 .tabbar .tab.on { color: var(--accent); border-top-color: var(--accent) }
 
@@ -86,16 +90,17 @@ h2.section { font-size: 1.05rem; margin-top: 8px } .foot { margin: 8px 0 0 }
 .result ul { margin: 0; padding-left: 0; list-style: none; font-size: .9rem }
 .sign .toast { position: fixed; left: 0; right: 0; bottom: calc(var(--tab-h) + env(safe-area-inset-bottom)); z-index: 7; max-height: 45vh; overflow: auto; padding: 10px 14px; background: var(--panel);
   border-top: 2px solid var(--accent); box-shadow: 0 -6px 16px rgba(0,0,0,.35); display: grid; gap: 6px }
-.sign .toast > * { max-width: 680px; margin: 0 auto; width: 100% }
+.sign .toast > * { max-width: var(--col); margin: 0 auto; width: 100% }
 .login input { margin-top: 2px } .graph { font-size: .85rem }
 
 /* the header has no room for the tagline on a phone: it is shown on the login card instead (hidden there when the header shows it) */
-@media (max-width: 559px) { .top .tag { display: none } .top h1 { margin-right: auto } .top .lang { margin-left: 0 } }
+@media (max-width: 559px) { .top .tag { display: none } }
 .login .tagline { display: none; color: var(--text); font-weight: 600 }
 @media (max-width: 559px) { .login .tagline { display: block } }
 @media (min-width: 760px) {
-  main.view { padding-top: 20px } .tag { flex: 0 1 auto } .lang { margin-left: auto }
-  .tabbar { left: 50%; right: auto; width: 680px; transform: translateX(-50%); border: 1px solid var(--border); border-bottom: 0; border-radius: 12px 12px 0 0 }
+  main.view { padding-top: 20px }
+  .brand { flex-direction: column; align-items: flex-start; gap: 0 } .tag { font-size: .85rem }
+  .tabbar { border: 1px solid var(--border); border-bottom: 0; border-radius: 12px 12px 0 0 }
 }
 button.icon { display: inline-grid; place-items: center; min-height: 36px; min-width: 36px; padding: 0; border-radius: 8px; color: var(--muted) }
 .install h2 { font-size: 1.05rem } .install p { margin: 6px 0 0 }

@@ -49,6 +49,24 @@ describe('both security policies allow the app\'s own manifest and icons, and no
   }
 })
 
+describe('the app shell: the page never scrolls, only <main> does', () => {
+  it('the layout rules that keep iPhone Safari\'s toolbar (and so the tab bar) still', () => {
+    const css = text('src/style.css')
+    expect(css).toMatch(/body \{[^}]*overflow: hidden/); expect(css).toMatch(/body \{[^}]*height: 100dvh/); expect(css).toMatch(/#app \{[^}]*flex-direction: column/)
+    expect(css).toMatch(/main\.view \{[^}]*overflow-y: auto/); expect(css).toMatch(/\.tabbar \{[^}]*flex: none/)
+    expect(css).not.toMatch(/\.tabbar \{[^}]*position: fixed/) // a fixed bar over a scrolling page is what jumped
+  })
+})
+
+describe('one column: header, content and tab bar share the same width', () => {
+  it('all three are sized by the same --col variable (a wide screen must not leave the brand at one edge and the notes in the middle)', () => {
+    const css = text('src/style.css')
+    expect(css).toMatch(/--col: \d+px/)
+    expect(css).toMatch(/\.top \{[^}]*var\(--col\)/); expect(css).toMatch(/main\.view \{[^}]*var\(--col\)/); expect(css).toMatch(/\.tabbar \{[^}]*var\(--col\)/)
+    expect(css).not.toMatch(/calc\(\(100% - 680px\)/) // no leftover hard-coded narrower column
+  })
+})
+
 describe('the installed app on a notched iPhone', () => {
   it('the header, not the body, is padded below the status bar (a sticky header would otherwise slide under it)', () => {
     const css = text('src/style.css')

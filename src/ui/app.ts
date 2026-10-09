@@ -76,6 +76,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let signing: AbortController | null = null // lets the user stop waiting for the signer
   let current: Promise<boolean> | null = null // the action in progress
   let lastLoadAt = 0
+  let scrollToTop = false // set when a different view is shown
   let updateReady = false
 
   const actions = (j: Judged) => (signer?.state === 'connected' ? [reactionBar(j.event, (emoji) => void react(j.event, emoji), () => startReply(j.event), view())] : [])
@@ -102,7 +103,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (!(await ensureSession()) || mine !== run) return
     const route = parseRoute(deps.location.hash)
     const key = JSON.stringify(route)
-    if (key !== shownRoute) { body = null; shownRoute = key }
+    if (key !== shownRoute) { body = null; shownRoute = key; scrollToTop = true }
     status = t(lang, 'loadingFeed'); draw()
     let content: HTMLElement
     try {
@@ -262,6 +263,9 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   function draw(): void {
+    // <main> is the only thing that scrolls and it is rebuilt on every draw. Read where the reader was FIRST: building the new one moves the list out of
+    // the old one, which then collapses to zero.
+    const kept = root.querySelector('main.view')?.scrollTop ?? 0
     const route = parseRoute(deps.location.hash)
     const tab = (name: 'following' | 'mentions' | 'me', href: string) => h('a', { href, class: route.name === name ? 'tab on' : 'tab', ...(route.name === name ? { 'aria-current': 'page' } : {}), onClick: (e: Event) => { if (route.name === name) { e.preventDefault(); refresh() } } }, t(lang, name))
     const input = h('input', { type: 'text', placeholder: t(lang, 'loginPlaceholder'), autocomplete: 'off', spellcheck: 'false', 'aria-label': t(lang, 'loginTitle') })
@@ -284,11 +288,15 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view()), h('h2', { class: 'section' }, t(lang, 'myNotes')), statusEl, body, h('p', { class: 'foot' }, signOut)]
       : [signArea, statusEl, body]
     const page: (HTMLElement | null)[] = [
-      h('header', { class: 'top' }, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('h1', {}, h('a', { href: '#/' }, 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline')), me ? h('button', { type: 'button', class: 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), onClick: refresh }, icon('refresh', 18)) : null, pills),
+      h('header', { class: 'top' }, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('div', { class: 'brand' }, h('h1', {}, h('a', { href: '#/' }, 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline'))), me ? h('button', { type: 'button', class: 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), onClick: refresh }, icon('refresh', 18)) : null, pills),
       h('main', { class: 'view' }, ...content),
       me ? h('nav', { class: 'tabbar' }, tab('following', '#/'), tab('mentions', '#/mentions'), tab('me', '#/me')) : null,
     ]
+    // put the reader back where they were (unless this is a new view)
     root.replaceChildren(...page.filter((x): x is HTMLElement => x !== null))
+    const main = root.querySelector('main.view')
+    if (main) main.scrollTop = scrollToTop ? 0 : kept
+    scrollToTop = false
   }
 
   deps.onHash(() => { void load() })
