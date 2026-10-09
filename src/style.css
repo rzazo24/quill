@@ -136,3 +136,8 @@ button.icon { display: inline-grid; place-items: center; min-height: 36px; min-w
 .reaction-line .what { display: grid; min-width: 0; flex: 1 }
 .reaction-line .what q { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; quotes: none }
 .reaction-line .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none }
+
+/* a short notice: a small pill above the tab bar that appears and fades by itself */
+.sign .popup { position: fixed; left: 50%; bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) * .5 + 14px); z-index: 8; max-width: calc(100% - 32px); padding: 8px 18px; border-radius: 999px; background: var(--panel); border: 1px solid var(--accent); color: var(--text); font-size: 15px; box-shadow: 0 4px 18px rgba(0,0,0,.45); pointer-events: none; transform: translateX(-50%); animation: popup 3s ease forwards }
+@keyframes popup { 0% { opacity: 0; transform: translate(-50%, 8px) } 8% { opacity: 1; transform: translate(-50%, 0) } 82% { opacity: 1 } 100% { opacity: 0 } }
+@media (prefers-reduced-motion: reduce) { .sign .popup { animation: popup-fade 3s ease forwards } @keyframes popup-fade { 0%, 82% { opacity: 1 } 100% { opacity: 0 } } }

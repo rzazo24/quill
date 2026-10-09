@@ -187,8 +187,8 @@ describe('what you already did to a note is marked', () => {
   it('a reaction that reached every relay shows one short line and no per-relay panel; the line fades by itself', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)
     ;(a.root.querySelector('button[aria-label="React ❤️"]') as HTMLElement).click(); await tick(120)
-    expect(a.root.querySelector('.toast .result')).toBeNull(); expect(a.root.querySelector('.toast')!.textContent).toMatch(/^❤️ → /)
-    await tick(3100); expect(a.root.querySelector('.toast')).toBeNull()
+    expect(a.root.querySelector('.toast')).toBeNull(); expect(a.root.querySelector('.popup')!.textContent).toMatch(/^❤️ → /)
+    await tick(3100); expect(a.root.querySelector('.popup')).toBeNull()
   })
   it('a failed reaction is not marked (nothing was published)', async () => {
     const sg = fakeSigner({ signError: 'user rejected the request' }); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)

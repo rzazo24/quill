@@ -200,7 +200,12 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   // ---- signing ----
-  const say = (kind: Flash['kind'], text: string) => { flash = { kind, text } }
+  const POPUP_MS = 3000
+  const say = (kind: Flash['kind'], text: string) => {
+    const mine = flash = { kind, text }
+    // a plain notice goes away by itself
+    if (kind === 'info') setTimeout(() => { if (flash === mine) { flash = null; draw() } }, POPUP_MS)
+  }
 
   /** The signer's key and the account being read must be the same one; with nobody logged in yet, the signer's key is who you are. */
   async function checkIdentity(): Promise<void> {
@@ -297,7 +302,6 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       // A like that reached every relay needs one quiet line that fades, not the per-relay panel. If some relay failed, the panel stays (it has the retry).
       if (result && !failedRelays(result.outcomes).length) {
         result = null; say('info', `${emoji === '+' ? '👍' : emoji} → ${nameOf(view(), target.pubkey)}`)
-        const mine = flash; setTimeout(() => { if (flash === mine) { flash = null; draw() } }, 3000)
       }
     }
     draw()
