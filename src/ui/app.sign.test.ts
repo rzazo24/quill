@@ -153,7 +153,7 @@ describe('reacting, one tap', () => {
     const e = a.pub.sent[0]!.event
     expect(e.kind).toBe(7); expect(e.content).toBe('❤️')
     expect(e.tags).toEqual([['e', post.id], ['p', friend], ['k', '1']])
-    expect(a.text()).toContain('Published to 2 of 2 relays')
+    expect(a.text()).toContain('❤️ → '); expect(a.text()).not.toContain('Published to')
   })
 })
 
@@ -184,6 +184,12 @@ describe('what you already did to a note is marked', () => {
     ;(a.root.querySelector('button[aria-label="React 🙏"]') as HTMLElement).click(); await tick(120) // a different reaction is allowed
     expect(a.pub.sent).toHaveLength(2); expect(lit(a)).toEqual(['❤️', '🙏'])
   })
+  it('a reaction that reached every relay shows one short line and no per-relay panel; the line fades by itself', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)
+    ;(a.root.querySelector('button[aria-label="React ❤️"]') as HTMLElement).click(); await tick(120)
+    expect(a.root.querySelector('.toast .result')).toBeNull(); expect(a.root.querySelector('.toast')!.textContent).toMatch(/^❤️ → /)
+    await tick(3100); expect(a.root.querySelector('.toast')).toBeNull()
+  })
   it('a failed reaction is not marked (nothing was published)', async () => {
     const sg = fakeSigner({ signError: 'user rejected the request' }); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)
     ;(a.root.querySelector('button[aria-label="React ❤️"]') as HTMLElement).click(); await tick(120)
@@ -206,7 +212,7 @@ describe('tapping again while Clave has not answered', () => {
     ;(a.root.querySelector('button[aria-label="React 🤙"]') as HTMLElement).click(); await tick(120)
     expect(sg.log.filter((l) => l.startsWith('sign'))).toHaveLength(2)
     expect(a.pub.sent).toHaveLength(1); expect(a.pub.sent[0]!.event.content).toBe('🤙')
-    expect(a.text()).toContain('Published to 2 of 2 relays'); expect(a.text()).not.toContain('Cancelled')
+    expect(a.text()).toContain('🤙 → '); expect(a.text()).not.toContain('Cancelled')
   })
   it('once the signature exists and the event is being sent, a second tap is ignored: no double posts', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg, pub: publisherFake(undefined, 150) }); await tick(100); await connectClave(a, sg)

@@ -292,7 +292,14 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (problem) { say('error', problemText(lang, problem)); return draw() }
     // the same reaction twice would only be a duplicate post: say so instead of asking the signer again
     if (engagement.of(target.id).reactions.has(normReaction(emoji))) { say('info', t(lang, 'alreadyReacted', { emoji: emoji === '+' ? '👍' : emoji })); return draw() }
-    if (await send(template)) { engagement.addReaction(target.id, emoji); rebar(target); say('info', `${emoji === '+' ? '👍' : emoji} → ${nameOf(view(), target.pubkey)}`) }
+    if (await send(template)) {
+      engagement.addReaction(target.id, emoji); rebar(target)
+      // A like that reached every relay needs one quiet line that fades, not the per-relay panel. If some relay failed, the panel stays (it has the retry).
+      if (result && !failedRelays(result.outcomes).length) {
+        result = null; say('info', `${emoji === '+' ? '👍' : emoji} → ${nameOf(view(), target.pubkey)}`)
+        const mine = flash; setTimeout(() => { if (flash === mine) { flash = null; draw() } }, 3000)
+      }
+    }
     draw()
   }
   async function retry(): Promise<void> {
