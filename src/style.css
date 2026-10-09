@@ -22,7 +22,10 @@ h2, h3 { margin: 0 }
 .lang { display: flex; gap: 4px }
 .lang button { min-height: 32px; padding: 0 10px; font-size: .85rem; color: var(--muted) }
 .lang button[aria-pressed=true] { color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 700 }
-main.view { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 12px max(14px, calc((100% - var(--col)) / 2)) 24px; display: grid; gap: 12px; align-content: start }
+main.view { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 12px 14px 24px; display: grid; gap: 12px; align-content: start;
+  /* the column is centred inside the scrolling area, and the scrollbar's width is reserved on BOTH sides: with a classic desktop scrollbar the feed would
+     otherwise sit off-centre against the header and tab bar by the width of the bar */
+  grid-template-columns: minmax(0, var(--col)); justify-content: center; scrollbar-gutter: stable both-edges }
 .tabbar { flex: none; width: min(100%, var(--col)); margin: 0 auto; position: relative; z-index: 6; display: flex; justify-content: center; background: var(--panel); border-top: 1px solid var(--border); padding-bottom: calc(env(safe-area-inset-bottom) * .5) }
 .tabbar .tab { flex: 1; max-width: 226px; display: flex; align-items: center; justify-content: center; min-height: var(--tab-h); color: var(--muted); text-decoration: none; font-size: .9rem; font-weight: 600; border-top: 3px solid transparent }
 .tabbar .tab.on { color: var(--accent); border-top-color: var(--accent) }

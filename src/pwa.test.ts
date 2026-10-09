@@ -62,7 +62,7 @@ describe('one column: header, content and tab bar share the same width', () => {
   it('all three are sized by the same --col variable (a wide screen must not leave the brand at one edge and the notes in the middle)', () => {
     const css = text('src/style.css')
     expect(css).toMatch(/--col: \d+px/)
-    expect(css).toMatch(/\.top \{[^}]*var\(--col\)/); expect(css).toMatch(/main\.view \{[^}]*var\(--col\)/); expect(css).toMatch(/\.tabbar \{[^}]*var\(--col\)/)
+    expect(css).toMatch(/\.top \{[^}]*var\(--col\)/); expect(css).toMatch(/main\.view \{[^}]*var\(--col\)/); expect(css).toMatch(/main\.view \{[^}]*scrollbar-gutter: stable both-edges/); expect(css).toMatch(/\.tabbar \{[^}]*var\(--col\)/)
     expect(css).not.toMatch(/calc\(\(100% - 680px\)/) // no leftover hard-coded narrower column
   })
 })
