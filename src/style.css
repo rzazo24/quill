@@ -186,3 +186,6 @@ button.icon.on { color: var(--accent); border-color: var(--accent); background: 
 .fab { position: fixed; z-index: 6; right: max(16px, calc((100% - var(--col)) / 2 + 16px)); bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) * .5 + 16px); width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: var(--accent); border-color: var(--accent); color: #04211d; box-shadow: 0 4px 16px rgba(0,0,0,.5) }
 .sheet { position: fixed; inset: 0; z-index: 9; display: flex; align-items: flex-start; justify-content: center; padding: calc(env(safe-area-inset-top) + 56px) 16px 16px; background: rgba(5,8,12,.72); overflow: auto }
 .sheet > * { width: min(100%, var(--col)); box-sizing: border-box; padding: 14px; border-radius: 14px; background: var(--panel); border: 1px solid var(--border); max-height: 100%; overflow: auto }
+
+/* a sign area whose parts all float (button, popup, panel, bar) has no card of its own */
+.sign.bare { display: contents }

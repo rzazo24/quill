@@ -64,7 +64,9 @@ export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, sign
   // what is happening shows at the bottom of the screen, where it is seen wherever the reader has scrolled to
   if (toast.some(Boolean)) parts.push(h('div', { class: 'toast' }, ...toast))
   const onlyHint = where === 'feed' && s.signer !== 'connected' && parts.length === 1 // a lone "connect Clave" button needs no card around it
-  return parts.some(Boolean) ? h('section', { class: onlyHint ? 'sign hint-only' : 'sign' }, ...parts) : null
+  // when everything in it floats over the page (the write button, a popup, the panel, the bar), the card around it would be an empty box: it is left out of the layout
+  const onlyFloating = parts.every((x) => !x || FLOATING.some((c) => x.classList.contains(c)))
+  return parts.some(Boolean) ? h('section', { class: onlyHint ? 'sign hint-only' : onlyFloating ? 'sign bare' : 'sign' }, ...parts) : null
 }
 
 function renderConnect(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement {
@@ -88,6 +90,8 @@ function renderConnect(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement
     h('p', {}, h('button', { type: 'button', class: 'link', onClick: hd.cancelConnect }, t(v.lang, 'cancel'))),
   )
 }
+
+const FLOATING = ['fab', 'popup', 'sheet', 'toast']
 
 /** Writing happens on top of the page, not in the middle of it: a panel at the top of the screen over a dimmed background, so the keyboard never covers it and the feed keeps its place. */
 const sheet = (inner: HTMLElement): HTMLElement => h('div', { class: 'sheet' }, inner)

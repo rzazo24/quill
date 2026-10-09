@@ -375,3 +375,15 @@ describe('the write button', () => {
     await click(a.root, 'Reply'); expect(a.root.querySelector('.sheet .composer .replying')).not.toBeNull(); expect(fab(a)).toBeNull()
   })
 })
+
+describe('no empty card when everything floats', () => {
+  const area = (a: ReturnType<typeof boot>) => a.root.querySelector('section.sign') as HTMLElement | null
+  it('with only the write button, while waiting for Clave, and with the panel open, the area has no card; with something inside it, it does', async () => {
+    const sg = fakeSigner({ hang: true }); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg); await a.go('#/'); await tick(80)
+    expect(area(a)!.className).toBe('sign bare') // only the button
+    ;(a.root.querySelector('button[aria-label="React ❤️"]') as HTMLElement).click(); await tick(60); expect(area(a)!.className).toBe('sign bare') // only the waiting popup
+    ;(a.root.querySelector('.popup.stay button') as HTMLElement).click(); await tick(80)
+    a.root.querySelector<HTMLElement>('button.fab')!.click(); await tick(60); expect(area(a)!.className).toBe('sign bare') // only the panel
+    await click(a.root, 'Cancel'); await a.go('#/me'); await tick(80); expect(area(a)!.className).toBe('sign') // "signing as …" is inside: a real card
+  })
+})
