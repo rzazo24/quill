@@ -52,6 +52,9 @@ await p.goto('http://localhost:4173/', { waitUntil: 'domcontentloaded' }); await
 // every button of the header (refresh, EN, ES, settings, help) is the same height
 { const hs = await p.evaluate(() => [...document.querySelectorAll('header.top button')].map((b) => Math.round(b.getBoundingClientRect().height * 10) / 10))
   say(hs.length >= 5 && new Set(hs).size === 1, `the header buttons are all the same height (${hs.join(', ')} px)`) }
+// EN | ES are one fused control: the two halves touch, and only the outer corners are round
+{ const l = await p.evaluate(() => { const [a, b] = [...document.querySelectorAll('.lang button')].map((x) => { const r = x.getBoundingClientRect(), c = getComputedStyle(x); return { l: r.left, r: r.right, rad: [c.borderTopLeftRadius, c.borderTopRightRadius] } }); return { gap: Math.round((b.l - a.r) * 10) / 10, leftHalf: a.rad, rightHalf: b.rad } })
+  say(l.gap <= 0 && l.leftHalf[1] === '0px' && l.rightHalf[0] === '0px' && l.leftHalf[0] !== '0px' && l.rightHalf[1] !== '0px', `EN | ES are one fused control (gap ${l.gap}px, inner corners square, outer corners round)`) }
 // the header: the logo and the name are at the same height as the buttons (the centre of what you see, not of a text line with room under it)
 await p.goto('http://localhost:4173/', { waitUntil: 'domcontentloaded' }); await p.waitForSelector('header.top svg.logo')
 const hd = await p.evaluate(() => { const mid = (r) => (r.top + r.bottom) / 2, rg = document.createRange(); rg.selectNodeContents([...document.querySelector('.wordmark').childNodes].find((x) => x.nodeType === 3)); return { logo: mid(document.querySelector('.wordmark .logo').getBoundingClientRect()), name: mid(rg.getBoundingClientRect()), button: mid(document.querySelector('header.top button.icon').getBoundingClientRect()) } })

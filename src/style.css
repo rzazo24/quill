@@ -19,9 +19,10 @@ h2, h3 { margin: 0 }
 .top h1 { margin: 0; font-size: 1.5rem; line-height: 1.2 } .top h1 a { color: var(--text); text-decoration: none }
 .brand { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px }
 .tag { min-width: 0; color: var(--muted); font-size: .8rem }
-.lang { display: flex; gap: 4px }
+.lang { display: flex; gap: 0 } /* EN | ES are one control: halves with a shared edge, rounded only on the outside */
 .lang button { min-height: var(--ctl-h); padding: 0 12px; font-size: .85rem; color: var(--muted) }
-.lang button[aria-pressed=true] { color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 700 }
+.lang button { border-radius: 0 } .lang button:first-child { border-radius: 8px 0 0 8px } .lang button:last-child { border-radius: 0 8px 8px 0 } .lang button + button { margin-left: -1px }
+.lang button[aria-pressed=true] { position: relative; z-index: 1; color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 700 }
 main.view { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 12px 14px 24px; display: grid; gap: 12px; align-content: start;
   /* the column is centred inside the scrolling area, and the scrollbar's width is reserved on BOTH sides: with a classic desktop scrollbar the feed would
      otherwise sit off-centre against the header and tab bar by the width of the bar */
