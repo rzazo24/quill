@@ -30,4 +30,8 @@ await p.locator(`article.note[data-id^="${before.id.slice(0, 6)}"] button.react`
 const after = await p.evaluate((id) => { const n = document.querySelector(`article.note[data-id="${id}"]`); return { top: Math.round(n.getBoundingClientRect().top), st: document.querySelector('main.view').scrollTop } }, before.id)
 say(after.top === before.top && after.st === before.st, `reacting does not move the note (top ${before.top} -> ${after.top}, scroll ${before.st} -> ${after.st})`)
 for (const hash of ['#/me', '#/mentions']) { await p.goto('http://localhost:4173/' + hash); await new Promise((r) => setTimeout(r, 2500)); s = await probe(); say(!s.docScrolls && s.barBottom === s.vh, `${hash}: page fixed, tab bar at the bottom`) }
+// the header: the logo and the name are at the same height as the buttons (the centre of what you see, not of a text line with room under it)
+await p.goto('http://localhost:4173/', { waitUntil: 'domcontentloaded' }); await p.waitForSelector('header.top svg.logo')
+const hd = await p.evaluate(() => { const mid = (r) => (r.top + r.bottom) / 2, rg = document.createRange(); rg.selectNodeContents([...document.querySelector('.wordmark').childNodes].find((x) => x.nodeType === 3)); return { logo: mid(document.querySelector('.wordmark .logo').getBoundingClientRect()), name: mid(rg.getBoundingClientRect()), button: mid(document.querySelector('header.top button.icon').getBoundingClientRect()) } })
+say(Math.abs(hd.logo - hd.button) <= 1 && Math.abs(hd.name - hd.button) <= 1, `header: logo ${hd.logo.toFixed(1)} / name ${hd.name.toFixed(1)} / buttons ${hd.button.toFixed(1)} are on the same line`)
 await b.close(); srv.kill(); process.exit(bad ? 1 : 0)

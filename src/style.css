@@ -183,7 +183,8 @@ button.icon.on { color: var(--accent); border-color: var(--accent); background: 
 .help-section ul { padding-left: 20px } .help-section li { margin: 0 0 6px }
 
 /* the quill next to the name */
-.top h1 a.wordmark { display: inline-flex; align-items: center; gap: 8px }
+.top h1 { display: flex; align-items: center } /* no text line (and its strut below the baseline) around the logo: the header centres what you see */
+.top h1 a.wordmark { display: flex; align-items: center; gap: 8px; line-height: 1 }
 .wordmark .logo { flex: none }
 
 /* the note a quoted-note button was tapped from, above the note it opened */
