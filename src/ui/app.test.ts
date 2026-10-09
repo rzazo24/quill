@@ -16,16 +16,17 @@ const relays = (events: Event[], delayMs = 0): Fetcher => ({ query: async (f: Fi
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms))
 const roots: HTMLElement[] = []
 
-function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number } } = {}) {
+function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean } } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
-  const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], base = relays(opts.events ?? world, opts.delayMs), calls = { n: 0 }
+  const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, base = relays(opts.events ?? world, opts.delayMs), calls = { n: 0 }
   startApp(root, {
-    fetcher: { query: (f) => { calls.n++; return base.query(f) } }, env: opts.env, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
+    fetcher: { query: (f) => { calls.n++; return base.query(f) } }, env: opts.env, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), reload: () => { reloads.n++ },
+    checkVersion: opts.newer ? async () => { asked.n++; return opts.newer!.value } : undefined, languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
     storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
   })
   const go = async (hash: string) => { location.hash = hash; listeners.forEach((l) => l()); await tick() }
-  return { root, go, mem, calls, comeBack: () => visible.forEach((v) => v()), text: () => root.textContent ?? '' }
+  return { root, go, mem, calls, reloads, asked, tick: () => ticks.forEach((t) => t()), comeBack: () => visible.forEach((v) => v()), text: () => root.textContent ?? '' }
 }
 afterEach(() => { roots.forEach((r) => r.remove()); roots.length = 0 })
 
@@ -138,6 +139,27 @@ describe('the app', () => {
     expect(await shows({ ios: true, standalone: true })).toBe(false)
     expect(await shows({ ios: false, standalone: false })).toBe(false)
     expect(await shows(undefined)).toBe(false)
+  })
+  it('tells you when a newer version of the app is on the server, and the button reloads it', async () => {
+    const newer = { value: false }; const a = boot({ stored: { me }, newer }); await tick(100)
+    expect(a.root.querySelector('.update')).toBeNull(); expect(a.asked.n).toBeGreaterThan(0) // asked once at start: nothing new
+    newer.value = true; a.tick(); await tick(60) // the clock ticks (every ten minutes in the real app)
+    const banner = a.root.querySelector('.update')!; expect(banner.textContent).toContain('A new version of Quill is available.')
+    ;(banner.querySelector('button') as HTMLElement).click(); expect(a.reloads.n).toBe(1)
+  })
+  it('it also asks when the app comes back to the foreground, and the banner speaks your language', async () => {
+    const newer = { value: false }; const a = boot({ stored: { me }, newer, languages: ['es'] }); await tick(100)
+    const before = a.asked.n; newer.value = true; a.comeBack(); await tick(60)
+    expect(a.asked.n).toBeGreaterThan(before); expect(a.root.querySelector('.update')!.textContent).toContain('Hay una nueva versión de Quill.')
+  })
+  it('no banner when the server has nothing newer, and once shown it does not ask again', async () => {
+    const newer = { value: false }; const a = boot({ stored: { me }, newer }); await tick(100)
+    a.tick(); a.comeBack(); await tick(60); expect(a.root.querySelector('.update')).toBeNull()
+    newer.value = true; a.tick(); await tick(60); const asked = a.asked.n; a.tick(); a.comeBack(); await tick(60)
+    expect(a.asked.n).toBe(asked); expect(a.root.querySelectorAll('.update').length).toBe(1)
+  })
+  it('without the check (a build that does not offer it) there is no banner and nothing breaks', async () => {
+    const a = boot({ stored: { me } }); await tick(100); a.tick(); a.comeBack(); expect(a.root.querySelector('.update')).toBeNull()
   })
   it('survives a hostile note, junk in storage, and relays that return nothing', async () => {
     const evil = ev(friend, '<img src=x onerror=alert(1)> <script>x</script>')

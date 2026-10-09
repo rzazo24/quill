@@ -43,7 +43,7 @@ describe('both security policies allow the app\'s own manifest and icons, and no
   for (const [where, src] of Object.entries(policies)) {
     it(where, () => {
       expect(src).toContain("img-src 'self'"); expect(src).toContain("manifest-src 'self'"); expect(src).toContain("default-src 'none'")
-      expect(src).toContain("connect-src wss:"); expect(src).toContain("script-src 'self'")
+      expect(src).toContain("connect-src 'self' wss:"); expect(src).toContain("script-src 'self'")
       expect(src).not.toMatch(/img-src[^;"]*(https:|data:|\*)/) // no external or inline images: pictures of strangers stay out
     })
   }

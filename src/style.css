@@ -94,3 +94,6 @@ h2.section { font-size: 1.05rem; margin-top: 8px } .foot { margin: 8px 0 0 }
 }
 button.icon { min-height: 36px; min-width: 36px; padding: 0; border-radius: 18px; font-size: 1.1rem; color: var(--muted) }
 .install h2 { font-size: 1.05rem } .install p { margin: 6px 0 0 }
+.top { flex-wrap: wrap }
+.update { flex-basis: 100%; order: -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 6px 6px 14px; margin: -2px 0 2px; background: rgba(45,212,191,.12); border: 1px solid var(--accent); border-radius: 12px; font-size: .9rem }
+.update button { min-height: 36px }

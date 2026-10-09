@@ -49,6 +49,8 @@ On an iPhone, in Safari: **Share → Add to Home Screen**. It opens full screen 
 - There is no pull-to-refresh: use the **↻** button, tap the current tab again, or just come back after a few minutes (it refreshes by itself after two).
 - It works with Clave the same way: paste the `bunker://` address.
 
+**New versions announce themselves.** Every build has an id, published as `/version.json`; the app compares it with its own when it starts, when you come back to it and every ten minutes, and shows an *Update* bar when they differ (the button just reloads the page).
+
 Nothing is cached for offline use (there is no service worker): the notes come live from the relays, so an offline copy would only show an empty shell.
 
 ## Develop

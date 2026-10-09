@@ -26,6 +26,8 @@ export interface Deps {
   readClipboard?: () => Promise<string>
   /** Facts about where the page runs (iPhone? installed?), and a hook for "the page came back to the foreground". */
   env?: Env; onVisible?: (cb: () => void) => void
+  /** Is there a newer build of the app on the server? Asked at start, whenever the app comes back to the foreground and on every `onTick`. */
+  checkVersion?: () => Promise<boolean>; onTick?: (cb: () => void) => void; reload?: () => void
 }
 
 type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'note'; id: string }
@@ -73,6 +75,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let signing: AbortController | null = null // lets the user stop waiting for the signer
   let current: Promise<boolean> | null = null // the action in progress
   let lastLoadAt = 0
+  let updateReady = false
 
   const actions = (j: Judged) => (signer?.state === 'connected' ? [reactionBar(j.event, (emoji) => void react(j.event, emoji), () => startReply(j.event), view())] : [])
   const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.() })
@@ -117,6 +120,11 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     } catch { content = h('p', { class: 'empty' }, t(lang, 'noNote')) }
     if (mine !== run) return
     status = null; body = content; lastLoadAt = deps.nowMs?.() ?? Date.now(); draw()
+  }
+
+  async function checkUpdate(): Promise<void> {
+    if (!deps.checkVersion || updateReady) return
+    try { if (await deps.checkVersion()) { updateReady = true; draw() } } catch { /* a failed check says nothing */ }
   }
 
   /** Reads everything again from the relays (an installed app has no pull-to-refresh). */
@@ -275,7 +283,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view()), h('h2', { class: 'section' }, t(lang, 'myNotes')), statusEl, body, h('p', { class: 'foot' }, signOut)]
       : [signArea, statusEl, body]
     const page: (HTMLElement | null)[] = [
-      h('header', { class: 'top' }, h('h1', {}, h('a', { href: '#/' }, 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline')), me ? h('button', { type: 'button', class: 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), onClick: refresh }, '↻') : null, pills),
+      h('header', { class: 'top' }, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('h1', {}, h('a', { href: '#/' }, 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline')), me ? h('button', { type: 'button', class: 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), onClick: refresh }, '↻') : null, pills),
       h('main', { class: 'view' }, ...content),
       me ? h('nav', { class: 'tabbar' }, tab('following', '#/'), tab('mentions', '#/mentions'), tab('me', '#/me')) : null,
     ]
@@ -284,7 +292,9 @@ export function startApp(root: HTMLElement, deps: Deps): void {
 
   deps.onHash(() => { void load() })
   // Coming back to the app after a while (an installed app stays alive in the background): show fresh notes, not what was there hours ago.
-  deps.onVisible?.(() => { if (me && !busy && (deps.nowMs?.() ?? Date.now()) - lastLoadAt > 120_000) refresh() })
+  deps.onVisible?.(() => { void checkUpdate(); if (me && !busy && (deps.nowMs?.() ?? Date.now()) - lastLoadAt > 120_000) refresh() })
+  deps.onTick?.(() => { void checkUpdate() })
+  void checkUpdate()
   draw()
   void load()
 }

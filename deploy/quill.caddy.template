@@ -10,7 +10,7 @@ __DOMAIN__ {
 	}
 	# Text only, enforced by the browser: own script and style, connections to relays (wss://) and nothing else. Images only from this very site (the app's own icon): none from anywhere else; no fonts, frames or media.
 	# (wss: is open because bunker:// addresses and signers bring their own relays.) frame-ancestors can only be a header, not a meta tag.
-	header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; manifest-src 'self'; connect-src wss:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+	header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; manifest-src 'self'; connect-src 'self' wss:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 	# hashed assets never change; the page itself must always be revalidated
 	@assets path /assets/*
 	header @assets Cache-Control "public, max-age=31536000, immutable"

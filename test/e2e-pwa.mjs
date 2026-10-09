@@ -29,6 +29,19 @@ try {
   }
   const icons = await page.evaluate(() => [...document.querySelectorAll('link[rel~=icon], link[rel=apple-touch-icon]')].map((l) => l.getAttribute('href')))
   icons.length >= 2 ? ok('the page links its icons: ' + icons.join(', ')) : fail('icon links missing')
+  // updates: /version.json names this build, the bundle carries the same id, and a newer id makes the app offer an update
+  const vr = await page.request.get(BASE + '/version.json'); const v = await vr.json()
+  ;/^[a-z0-9]{4,20}$/.test(v.build ?? '') ? ok(`/version.json -> build ${v.build} (cache-control: ${vr.headers()['cache-control'] ?? 'none'})`) : fail('bad version.json: ' + JSON.stringify(v))
+  const bundle = await (await page.request.get(BASE + (await page.evaluate(() => document.querySelector('script[type=module]').getAttribute('src'))))).text()
+  bundle.includes(v.build) ? ok('the running bundle carries the same build id') : fail('the bundle does not contain the build id from version.json')
+  ;(await page.locator('.update').count()) === 0 ? ok('no update banner when the server has the same build') : fail('banner shown for the same build')
+  await page.route('**/version.json', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ build: 'zznewbuild1' }) }))
+  await page.evaluate(() => { window.__marker = 1 })
+  await page.reload({ waitUntil: 'load' })
+  await page.waitForSelector('.update', { timeout: 10000 }).then(() => ok('a newer build on the server makes the banner appear'), () => fail('no banner for a newer build'))
+  await page.evaluate(() => { window.__marker = 1 })
+  await page.click('.update button'); await page.waitForLoadState('load'); await new Promise((r) => setTimeout(r, 500))
+  ;(await page.evaluate(() => window.__marker)) === undefined ? ok('the Update button reloads the page') : fail('the page was not reloaded')
   bad.length ? fail('console errors (a security policy blocking the manifest or an icon would show here): ' + bad.slice(0, 3).join(' | ')) : ok('no console errors')
 } catch (e) { fail(String(e)) } finally { await browser.close(); server.kill() }
 process.exit(code)
