@@ -169,5 +169,7 @@ button.icon.on { color: var(--accent); border-color: var(--accent); background: 
 .help-section summary::-webkit-details-marker { display: none }
 .help-section summary::after { content: '+'; color: var(--accent); font-size: 1.3rem; line-height: 1 }
 .help-section[open] summary::after { content: '−' }
+/* the repository link */
+.help-foot { margin: 14px 0 0; color: var(--muted); overflow-wrap: anywhere } .help-foot a { color: var(--accent) }
 .help-section p, .help-section ul { margin: 0 0 10px; color: var(--text) }
 .help-section ul { padding-left: 20px } .help-section li { margin: 0 0 6px }

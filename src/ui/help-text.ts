@@ -55,9 +55,7 @@ Installed, it opens full screen with its own icon. It keeps its own data, separa
   { id: 'trouble', title: 'If something does not work', body: `• The feed does not load: tap ↻. If it keeps failing, open Settings (⚙) and use Test on your relays; remove the ones that do not answer.
 • Clave does not sign: connect with a bunker:// address, open Clave and tap again (a new tap replaces the pending wait).
 • You changed something on another device: relays and text size are kept per device.
-• An installed app looks old: when a new version exists, tap Update in the bar at the top.
-
-Source code and issues: github.com/rzazo24/quill` },
+• An installed app looks old: when a new version exists, tap Update in the bar at the top.` },
 ]
 
 const es: HelpSection[] = [
@@ -111,9 +109,7 @@ Una vez instalada se abre a pantalla completa con su icono. Guarda sus propios d
   { id: 'trouble', title: 'Si algo no funciona', body: `• El feed no carga: toca ↻. Si sigue fallando, abre Ajustes (⚙) y usa Probar en tus relés; quita los que no respondan.
 • Clave no firma: conecta con una dirección bunker://, abre Clave y toca otra vez (un toque nuevo sustituye a la espera pendiente).
 • Cambiaste algo en otro dispositivo: los relés y el tamaño del texto se guardan en cada dispositivo.
-• Una app instalada se ve antigua: cuando hay una versión nueva, toca Actualizar en la barra de arriba.
-
-Código fuente e incidencias: github.com/rzazo24/quill` },
+• Una app instalada se ve antigua: cuando hay una versión nueva, toca Actualizar en la barra de arriba.` },
 ]
 
 export const HELP: Record<Lang, HelpSection[]> = { en, es }

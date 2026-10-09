@@ -340,6 +340,7 @@ describe('the help page', () => {
   })
   it('the text is shown as text, never as markup', async () => {
     const a = boot({ stored: { me } }); await tick(80); help(a).click(); await tick(60)
-    expect(a.root.querySelector('.help script, .help img, .help a')).toBeNull(); expect(a.root.querySelectorAll('.help li').length).toBeGreaterThan(20)
+    expect(a.root.querySelector('.help script, .help img')).toBeNull(); const links = [...a.root.querySelectorAll('.help a')] as HTMLAnchorElement[]
+    expect(links).toHaveLength(1); expect(links[0]!.getAttribute('href')).toBe('https://github.com/rzazo24/quill'); expect(links[0]!.getAttribute('target')).toBe('_blank'); expect(links[0]!.getAttribute('rel')).toBe('noopener noreferrer'); expect(links[0]!.textContent).toBe('github.com/rzazo24/quill'); expect(a.root.querySelectorAll('.help li').length).toBeGreaterThan(20)
   })
 })

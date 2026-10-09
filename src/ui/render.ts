@@ -131,8 +131,11 @@ export function renderHelp(v: View, open: ReadonlySet<string>, onToggle: (id: st
   return h('section', { class: 'help card' }, h('h2', {}, t(v.lang, 'helpTitle')),
     ...HELP[v.lang].map((s) => h('details', { class: 'help-section', 'data-id': s.id, ...(open.has(s.id) ? { open: true } : {}), onToggle: (e: Event) => onToggle(s.id, (e.target as HTMLDetailsElement).open) },
       h('summary', {}, s.title),
-      ...helpBlocks(s.body).map((b) => (b.kind === 'p' ? h('p', {}, b.text) : h('ul', {}, ...b.items.map((i) => h('li', {}, i))))))))
+      ...helpBlocks(s.body).map((b) => (b.kind === 'p' ? h('p', {}, b.text) : h('ul', {}, ...b.items.map((i) => h('li', {}, i))))))),
+    // the one real link in the app: it leaves Quill, so it opens in a new tab and tells the other site nothing about this one
+    h('p', { class: 'help-foot' }, t(v.lang, 'helpSource'), ' ', h('a', { href: SOURCE_URL, target: '_blank', rel: 'noopener noreferrer' }, SOURCE_URL.replace('https://', ''))))
 }
+export const SOURCE_URL = 'https://github.com/rzazo24/quill'
 
 export interface PrefsProps {
   font: FontSize; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
