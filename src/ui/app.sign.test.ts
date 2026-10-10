@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { nip19 } from 'nostr-tools'
 import { finalizeEvent, generateSecretKey, getPublicKey, type Event } from 'nostr-tools'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ev, pk } from '../core/testutil.js'
@@ -53,13 +54,14 @@ const publisherFake = (outcomes: Record<string, string> = { 'wss://r1.example': 
   return { p, sent }
 }
 
-function boot(o: { events?: Event[]; signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; stored?: Record<string, string>; clipboard?: string | Error; errorMs?: number; verifyWaits?: number[] } = {}) {
+function boot(o: { events?: Event[]; signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; stored?: Record<string, string>; clipboard?: string | Error; copied?: string[]; errorMs?: number; verifyWaits?: number[] } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = [], mem = new Map(Object.entries(o.stored ?? { me }))
   const pub = o.pub ?? publisherFake()
   startApp(root, {
     fetcher: relays(o.events ?? world), languages: ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) }, relays: ['wss://r1.example', 'wss://r2.example'], nowMs: () => 1_700_000_000_000,
     verifyWaitsMs: o.verifyWaits ?? [0], errorMs: o.errorMs, storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
+    copy: (x) => { o.copied?.push(x) },
     readClipboard: async () => { if (o.clipboard instanceof Error) throw o.clipboard; return o.clipboard ?? '' },
     ...(o.signer ? { signer: o.signer.s, publisher: pub.p } : {}),
   })
@@ -422,6 +424,13 @@ describe('sharing a note', () => {
   it('there is a Share button on notes the filter shows, only with a signer connected', async () => {
     const out = boot({ events: events(), signer: fakeSigner() }); await tick(100); expect(share(out)).toBeNull()
     const { a } = await ready(); expect(share(a)).not.toBeNull(); expect(share(a)!.getAttribute('aria-label')).toBe('Share'); expect(share(a)!.getAttribute('aria-pressed')).toBe('false'); expect(share(a)!.querySelector('svg')).not.toBeNull()
+  })
+  it('Copy offers the note id and a link; each copies exactly that and says so', async () => {
+    const copied: string[] = []; const { a } = await ready({ copied })
+    const bar = a.root.querySelector('.actions .copy')!; const id = (a.root.querySelector('article.note') as HTMLElement).dataset.id!
+    expect(bar.classList.contains('open')).toBe(false); await click(a.root, 'Copy'); expect(bar.classList.contains('open')).toBe(true)
+    await click(a.root, 'Note ID'); expect(copied).toEqual([nip19.noteEncode(id)]); expect(a.text()).toContain('Copied'); expect(bar.classList.contains('open')).toBe(false)
+    await click(a.root, 'Copy'); await click(a.root, 'Link'); expect(copied[1]).toMatch(/^https:\/\/njump\.me\/nevent1/); expect((nip19.decode(copied[1]!.split('/').pop()!).data as { id: string }).id).toBe(id)
   })
   it('a tap only asks: the note is shown with a warning that it is public, and nothing is signed until the second tap; Cancel closes it', async () => {
     const { a, sg } = await ready(); share(a)!.click(); await tick(60)

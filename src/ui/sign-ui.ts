@@ -2,7 +2,7 @@
 // Pure of state: give it the state and the handlers, get elements. The text of strangers (a reply's target) only ever goes in as text.
 import type { Event as NostrEvent } from 'nostr-tools'
 import { cleanText } from '../core/text.js'
-import { quoteReserve } from '../core/compose.js'
+import { noteId, noteLink, quoteReserve } from '../core/compose.js'
 import { failedRelays } from '../net/publisher.js'
 import type { Published, Step } from '../sign/pipeline.js'
 import { MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
@@ -180,7 +180,16 @@ function renderResult(r: Published, relays: string[], hd: SignUiHandlers, v: Vie
 
 /** One-tap reactions under a note, only while a signer is connected. What the reader already did to the note is marked: the reactions given (also ones from other
  *  apps, with emoji this bar does not offer) and whether they replied. */
-export function reactionBar(target: NostrEvent, onReact: (emoji: string) => void, onReply: () => void, v: View, mine: Mine = { reactions: new Set(), replied: false, reposted: false }, onShare?: () => void): HTMLElement {
+/** "Copy" opens two choices right under the bar: the note's id (note1…) or a link anyone can open. Nothing is stored; the choice closes after copying. */
+function copyMenu(target: NostrEvent, onCopy: (text: string) => void, v: View): HTMLElement {
+  const box = h('span', { class: 'copy' })
+  const choice = (label: string, text: () => string) => h('button', { type: 'button', class: 'link', onClick: () => { onCopy(text()); box.classList.remove('open') } }, label)
+  const toggle = h('button', { type: 'button', class: 'link copy-toggle', 'aria-expanded': 'false', onClick: () => { const open = box.classList.toggle('open'); toggle.setAttribute('aria-expanded', String(open)) } }, t(v.lang, 'copy'))
+  box.append(toggle, h('span', { class: 'copy-choices' }, choice(t(v.lang, 'copyNoteId'), () => noteId(target)), choice(t(v.lang, 'copyNoteLink'), () => noteLink(target))))
+  return box
+}
+
+export function reactionBar(target: NostrEvent, onReact: (emoji: string) => void, onReply: () => void, v: View, mine: Mine = { reactions: new Set(), replied: false, reposted: false }, onShare?: () => void, onCopy?: (text: string) => void): HTMLElement {
   const offered = REACTIONS.map((e) => normReaction(e))
   const extra = [...mine.reactions].filter((c) => !offered.includes(c)) // given from elsewhere, e.g. 🔥: shown too, so the bar tells the truth
   const chip = (content: string, label: string) => {
@@ -193,5 +202,6 @@ export function reactionBar(target: NostrEvent, onReact: (emoji: string) => void
     onShare ? h('button', { type: 'button', class: mine.reposted ? 'react share on' : 'react share', 'aria-pressed': String(mine.reposted), 'aria-label': t(v.lang, mine.reposted ? 'sharedByYou' : 'share'), title: t(v.lang, mine.reposted ? 'sharedByYou' : 'share'), onClick: onShare }, icon('repost', 16)) : null,
     ...REACTIONS.map((e) => chip(e, e === '+' ? '👍' : e)),
     ...extra.map((c) => chip(c, c)),
+    onCopy ? copyMenu(target, onCopy, v) : null,
   )
 }

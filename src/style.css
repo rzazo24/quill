@@ -247,4 +247,5 @@ button.icon.spinning svg { animation: spin .9s linear infinite }
 .profile-top { display: flex; align-items: center; gap: 14px } .profile h2 { margin: 0 } .profile .about { margin-top: 10px; overflow-wrap: anywhere } .profile .meta { margin: 6px 0 0 }
 
 /* share: an icon button among the reactions; lit once you shared the note */
+.actions .copy { margin-left: auto; display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 3px } .actions .copy-choices { display: none; gap: 3px } .actions .copy.open .copy-choices { display: inline-flex } .actions .copy.open .copy-toggle { color: var(--accent); border-color: var(--accent) }
 .actions button.share { display: inline-grid; place-items: center }

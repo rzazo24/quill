@@ -159,7 +159,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
 
-  const barFor = (e: NostrEvent) => reactionBar(e, (emoji) => void react(e, emoji), () => startReply(e), view(), engagement.of(e.id), shareable.has(e.id) ? () => startShare(e) : undefined)
+  const barFor = (e: NostrEvent) => reactionBar(e, (emoji) => void react(e, emoji), () => startReply(e), view(), engagement.of(e.id), shareable.has(e.id) ? () => startShare(e) : undefined, (x) => { deps.copy?.(x); say('info', t(lang, 'copied')); draw() })
   const actions = (j: Judged) => {
     if (signer?.state !== 'connected') return []
     // a note the filter hides is not amplified from here, and only text notes of a reasonable size can be shared
