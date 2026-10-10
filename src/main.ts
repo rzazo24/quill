@@ -27,6 +27,7 @@ startApp(document.getElementById('app')!, {
   onTick: (cb) => { setInterval(cb, 10 * 60_000) },
   onPoll: (cb) => { setInterval(() => { if (document.visibilityState === 'visible') cb() }, 60_000) },
   reload: () => location.reload(),
+  goBack: () => { if (history.length > 1) history.back(); else location.hash = '' },
   env: detectEnv(navigator as Navigator & { standalone?: boolean }, matchMedia('(display-mode: standalone)').matches),
   onVisible: (cb) => document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') cb() }),
 })

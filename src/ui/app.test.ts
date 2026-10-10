@@ -16,12 +16,12 @@ const relays = (events: Event[], delayMs = 0): Fetcher => ({ query: async (f: Fi
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms))
 const roots: HTMLElement[] = []
 
-function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean } = {}) {
+function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
   const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs), calls = { n: 0 }
   startApp(root, {
-    fetcher: { query: (f) => { calls.n++; return base.query(f) } }, env: opts.env, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), reload: () => { reloads.n++ },
+    fetcher: { query: (f) => { calls.n++; return base.query(f) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), reload: () => { reloads.n++ },
     checkVersion: opts.newer ? async () => { asked.n++; return opts.newer!.value } : undefined, languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
     storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
   })
@@ -428,7 +428,7 @@ describe('the switches in Settings', () => {
 })
 
 describe('avatar style', () => {
-  const people = (a: ReturnType<typeof boot>) => [...a.root.querySelectorAll('article.note > .avatar')] as HTMLElement[]
+  const people = (a: ReturnType<typeof boot>) => [...a.root.querySelectorAll('article.note > .avatar-link > .avatar')] as HTMLElement[]
   const pick = async (a: ReturnType<typeof boot>, label: string) => { const b = [...a.root.querySelectorAll('.seg.avatars button')].find((x) => x.lastChild!.textContent === label) as HTMLElement; b.click(); await tick(150) }
   it('starts with initials; Settings offers initials, robots and pixels, each with a sample of the reader\'s own picture', async () => {
     const a = boot({ stored: { me } }); await tick(150)
@@ -525,7 +525,7 @@ describe('new followers', () => {
     const events = [...base(), follower(1), profile(follower(1).pubkey, 'Ana')]; const a = start(events); await tick(250); expect(badge(a)).toBeNull()
     const newcomer = follower(2); events.push(newcomer, profile(newcomer.pubkey, 'Berta')); a.poll(); await tick(250); expect(badge(a)).toBe('1')
     await a.go('#/mentions'); await tick(250)
-    const card = a.root.querySelector('.followers')!; expect(card.querySelector('h2')!.textContent).toBe('New followers (1)'); expect([...card.querySelectorAll('li > span:not(.avatar)')].map((x) => x.textContent)).toEqual(['Berta']); expect(card.querySelector('li .avatar')).not.toBeNull()
+    const card = a.root.querySelector('.followers')!; expect(card.querySelector('h2')!.textContent).toBe('New followers (1)'); expect([...card.querySelectorAll('li a > span:not(.avatar)')].map((x) => x.textContent)).toEqual(['Berta']); expect(card.querySelector('li .avatar')).not.toBeNull()
     expect(badge(a)).toBeNull(); expect(known(a)).toContain(newcomer.pubkey)
     await a.go('#/'); await tick(200); await a.go('#/mentions'); await tick(250); expect(a.root.querySelector('.followers')).toBeNull() // seen: not shown again
   })
@@ -644,5 +644,56 @@ describe('followers who leave, and stale relays', () => {
     clock.now = NOW * 1000; const events = [...base(), list3(1, 9000), list3(2, 9000)]; const a = start(events); await tick(300)
     events.splice(events.findIndex((e) => e.pubkey === key(2) && e.created_at === 9000), 1) // the relay forgot their list entirely
     later(31); a.poll(); await tick(300); await a.go('#/me'); await tick(300); expect(counts(a)).toBe('1 following · ~2 followers') // no list anywhere: not proof of leaving
+  })
+})
+
+describe('accounts have a page', () => {
+  const bio = ev(friend, JSON.stringify({ name: 'Ana', about: 'I write about relays <script>alert(1)</script> and https://ana.example/notes', nip05: 'ana@example.com', website: 'https://ana.example', picture: 'https://evil.example/pic.png' }), { kind: 0, created_at: 50 })
+  const folList = ev(friend, '', { kind: 3, created_at: 60, tags: [['p', far], ['p', pk('7')]] })
+  const reply = ev(friend, 'a reply by ana', { created_at: 1_800_000_050, tags: [['e', 'e'.repeat(64), '', 'reply']] })
+  const events = (): Event[] => [list(me, 3, [['p', friend]]), bio, folList, ev(friend, 'a root note by ana', { created_at: 1_800_000_010 }), reply, ev(far, 'a note by a stranger', { created_at: 1_800_000_020 })]
+  const link = (a: ReturnType<typeof boot>, sel: string) => a.root.querySelector(sel) as HTMLAnchorElement
+
+  it('names and avatars in the cards open the account (the avatar link is left out of keyboards and screen readers, the name link says the same)', async () => {
+    const a = boot({ events: events(), stored: { me } }); await tick(150)
+    const card = [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('a root note by ana'))!
+    expect(card.querySelector('a.name-link')!.getAttribute('href')).toBe(`#/user/${friend}`); expect(card.querySelector('a.avatar-link')!.getAttribute('href')).toBe(`#/user/${friend}`)
+    expect(card.querySelector('a.avatar-link')!.getAttribute('aria-hidden')).toBe('true'); expect(card.querySelector('a.avatar-link')!.getAttribute('tabindex')).toBe('-1')
+  })
+  it('parses #/user/ in hex, npub and nprofile; anything else is not an account page', () => {
+    for (const id of [friend, nip19.npubEncode(friend), nip19.nprofileEncode({ pubkey: friend })]) expect(parseRoute(`#/user/${id}`), id.slice(0, 12)).toEqual({ name: 'user', pubkey: friend })
+    for (const bad of ['#/user/', '#/user/nonsense', '#/user/' + 'z'.repeat(64), '#/user/nsec1' + 'q'.repeat(58)]) expect(parseRoute(bad), bad).toEqual({ name: 'following' })
+  })
+  it('shows who it is as text: name, short key, claims, bio, how many it follows, and that you follow it', async () => {
+    const a = boot({ events: events(), stored: { me } }); await tick(100); await a.go(`#/user/${friend}`); await tick(250)
+    const head = a.root.querySelector('.profile')!; expect(head.querySelector('h2')!.textContent).toBe('Ana'); expect(head.textContent).toContain('ana@example.com'); expect(head.textContent).toContain('https://ana.example')
+    expect(head.querySelector('.about')!.textContent).toContain('I write about relays'); expect(head.querySelector('.relation')!.textContent).toBe('You follow this account · Follows 2'); expect(head.querySelector('.avatar.lg')).not.toBeNull()
+  })
+  it('the bio is only ever text: no markup, no pictures, nothing loaded from what the profile says', async () => {
+    const a = boot({ events: events(), stored: { me } }); await tick(100); await a.go(`#/user/${friend}`); await tick(250)
+    expect(a.root.querySelector('.profile script')).toBeNull(); expect(a.root.querySelectorAll('img, iframe, object, embed').length).toBe(0); expect(a.root.querySelector('.profile .about')!.textContent).toContain('<script>alert(1)</script>')
+    expect(a.root.innerHTML).not.toContain('evil.example')
+  })
+  it('lists its notes (and only its notes) with Notes | Replies, the replies apart, and says so when there is nothing', async () => {
+    const a = boot({ events: events(), stored: { me } }); await tick(100); await a.go(`#/user/${friend}`); await tick(250)
+    const seg = () => [...a.root.querySelectorAll('.seg.feedmode button')] as HTMLButtonElement[]
+    expect(seg().map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([['Notes', 'true'], ['Replies', 'false']])
+    expect(a.text()).toContain('a root note by ana'); expect(a.text()).not.toContain('a reply by ana'); expect(a.text()).not.toContain('a note by a stranger')
+    seg()[1]!.click(); await tick(200); expect(a.text()).toContain('a reply by ana'); expect(a.text()).not.toContain('a root note by ana')
+    await a.go(`#/user/${pk('6')}`); await tick(250); expect(a.text()).toContain('Nothing from this account on your relays.')
+  })
+  it('says how the account relates to you: not followed (and who of yours follows it), muted, or you', async () => {
+    const strangerPage = boot({ events: [...events(), list(friend, 3, [['p', far]])], stored: { me } }); await tick(100); await strangerPage.go(`#/user/${far}`); await tick(250)
+    expect(strangerPage.root.querySelector('.relation')!.textContent).toBe('You do not follow this account'); expect(strangerPage.text()).toContain('Followed by Ana')
+    expect(strangerPage.text()).toContain('a note by a stranger'); expect(strangerPage.root.querySelector('details.folded')).toBeNull() // "outside your network" does not hide an account you opened on purpose
+    const mine = boot({ events: events(), stored: { me } }); await tick(100); await mine.go(`#/user/${me}`); await tick(250); expect(mine.root.querySelector('.relation')!.textContent).toContain('This is you')
+    const muted = boot({ events: [...events(), ev(me, '', { kind: 10000, created_at: 5, tags: [['p', far]] })], stored: { me } }); await tick(100); await muted.go(`#/user/${far}`); await tick(250); expect(muted.root.querySelector('.relation')!.textContent).toContain('You muted this account')
+  })
+  it('mentions inside notes open the account, and Back goes where you came from (the history) or to the start', async () => {
+    const mention = ev(friend, `hello nostr:${nip19.npubEncode(far)} how are you`, { created_at: 1_800_000_090 })
+    const went = { n: 0 }; const a = boot({ events: [...events(), mention], stored: { me }, goBack: () => { went.n++ } }); await tick(150)
+    expect(link(a, 'a.ref').getAttribute('href')).toBe(`#/user/${far}`)
+    await a.go(`#/user/${friend}`); await tick(250); link(a, '.back').click(); await tick(50); expect(went.n).toBe(1) // uses the history, not a fixed place
+    const plain = boot({ events: events(), stored: { me } }); await tick(100); await plain.go(`#/user/${friend}`); await tick(250); link(plain, '.back').click(); await tick(100); expect(plain.root.querySelector('.profile')).toBeNull() // no history: the start
   })
 })

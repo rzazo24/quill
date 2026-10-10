@@ -33,6 +33,7 @@ Principles: behaviour is evidence, **missing data is not** (a key without a prof
 
 - **Following** (with what the people you follow repost, judged by the filter like everything else; a **Follows | Network** switch widens it to the notes of the people they follow, each saying who follows its author), **Mentions** (where the filter earns its keep), **Me** (your account, your Clave connection, the filter settings, your own notes) and any **thread**.
 - **In-app notifications**: a number on *Mentions*, new notes marked, a list of who reacted to or reposted your notes and of your new followers (accounts not seen following you on an earlier visit; a follower is whoever's newest follow list names you, and people who stop following you are noticed). Me shows how many you follow (exact) and about how many follow you (~: there is no official count, and every app counts its own way).
+- **Account pages**: tap a name, an avatar or an @mention to see that account's profile (as text: its pictures are never loaded), how you are connected to it, and its notes and replies.
 - **React** with one tap; what you already reacted to or replied to is marked; **reply** and **write a note** through a review screen that shows the exact text, kind, tags and relays before anything is asked of your signer.
 - **Help**: a page with folding sections (the filter, writing with Clave, settings, install), behind the ? button, in both languages.
 - **Avatars**: initials on a colour, robots or pixel figures, all drawn from the account's key (nothing is loaded).

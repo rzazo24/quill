@@ -4,8 +4,10 @@ import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { hashtagTags, mentionTags, mergeTags, reactionTags, replyTags } from '../core/compose.js'
 import { parseIdentity } from '../core/identity.js'
 import { mentionedKeys, shortNpub } from '../core/refs.js'
+import { isReply } from '../core/thread.js'
 import { judgeAll, tally, type Judged, type Settings } from '../core/verdict.js'
 import { loadNetwork } from '../data/network.js'
+import { loadProfile, type ProfileInfo } from '../data/profile.js'
 import { loadFollowing, loadMentions, loadMine, loadNames, loadNote, loadThread, type Thread, type ThreadNode } from '../data/feed.js'
 import { Engagement, loadEngagement, normReaction } from '../data/engaged.js'
 import { countNew, groupReactions, groupReposts, loadActivity, mergeKnown, newFollowers, parseKnown, type Activity } from '../data/activity.js'
@@ -17,7 +19,7 @@ import { checkTemplate, MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
 import { logo, icon } from './icons.js'
 import { detectLang, problemText, t, type Key, type Lang } from './i18n.js'
-import { renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
+import { renderProfileHead, renderProfileMode, renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type Review } from './sign-ui.js'
 import { installHint, type Env } from './install.js'
 import { parseAvatars, parseFeedMode, parseFont, parseLang, parseReposts, parseSettings, parseWords, safeGet, safeSet, type AvatarStyle, type FeedMode, type FontSize, type KV } from './store.js'
@@ -35,12 +37,14 @@ export interface Deps {
   /** Is there a newer build of the app on the server? Asked at start, whenever the app comes back to the foreground and on every `onTick`. */
   /** Tells the code that talks to relays which list to use now (called at start and whenever the reader changes it). */
   setRelays?: (relays: string[]) => void; /** Does something answer at this address? */ probeRelay?: (url: string) => Promise<boolean>
+  /** "Back" button: where the reader came from (the browser's history). */
+  goBack?: () => void
   checkVersion?: () => Promise<boolean>; onTick?: (cb: () => void) => void; reload?: () => void
   /** Called about once a minute while the page is visible: looks for new replies, mentions and reactions. */
   onPoll?: (cb: () => void) => void
 }
 
-type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'help' } | { name: 'note'; id: string; from?: string }
+type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'help' } | { name: 'user'; pubkey: string } | { name: 'note'; id: string; from?: string }
 export function parseRoute(hash: string): Route {
   const m = /^#\/note\/([^?]+)(?:\?from=([^&]*))?$/i.exec(hash)
   if (m) {
@@ -53,6 +57,8 @@ export function parseRoute(hash: string): Route {
       if (d.type === 'nevent') return note(d.data.id)
     } catch { /* not a note id */ }
   }
+  const u = /^#\/user\/(.+)$/.exec(hash)
+  if (u) { const r = parseIdentity(decodeURIComponent(u[1]!)); if (r.ok) return { name: 'user', pubkey: r.pubkey } } // an account: its key in hex, npub or nprofile
   return hash === '#/mentions' ? { name: 'mentions' } : hash === '#/me' ? { name: 'me' } : hash === '#/help' ? { name: 'help' } : hash === '#/settings' ? { name: 'settings' } : hash === '#/settings/filter' ? { name: 'settings', focus: 'filter' } : { name: 'following' }
 }
 
@@ -64,6 +70,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let relays = parseRelays(safeGet(kv, 'relays')) ?? defaultRelays
   let font: FontSize = parseFont(safeGet(kv, 'font'))
   let showReposts = parseReposts(safeGet(kv, 'reposts'))
+  let profileMode: 'notes' | 'replies' = 'notes' // what an account's page shows
   let avatarStyle: AvatarStyle = parseAvatars(safeGet(kv, 'avatars'))
   let feedMode: FeedMode = parseFeedMode(safeGet(kv, 'feed'))
   let relayError: string | null = null
@@ -187,7 +194,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (!(await ensureSession()) || mine !== run || !session) return
     const route = parseRoute(deps.location.hash)
     const key = JSON.stringify(route)
-    if (key !== shownRoute) { body = null; shownRoute = key; scrollToTop = true; if (route.name !== 'mentions') { markFrom = null; followersMark = null } }
+    if (key !== shownRoute) { body = null; shownRoute = key; scrollToTop = true; profileMode = 'notes'; if (route.name !== 'mentions') { markFrom = null; followersMark = null } }
     if (route.name === 'settings' || route.name === 'help') { status = null; body = null; draw(); return }
     status = t(lang, 'loadingFeed'); draw()
     let content: HTMLElement
@@ -197,6 +204,10 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         if (mine !== run) return
         if (!th) content = h('div', { class: 'stack' }, sourceCard(source), h('p', { class: 'empty' }, t(lang, 'noNote')))
         else { await nameThem([...(th.root ? [th.root] : []), ...flat(th.replies), ...(source ? [source] : [])]); content = threadView(th, source) }
+      } else if (route.name === 'user') {
+        const { info, notes } = await loadProfile(fetcher, route.pubkey, session!, ctx(), settings)
+        if (mine !== run) return
+        await nameThem(notes, [info.pubkey, ...info.via.slice(0, 3)]); content = profileView(info, notes)
       } else {
         let act: Activity | null = null
         if (route.name === 'mentions') {
@@ -264,10 +275,21 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   function sourceCard(source: Judged | null): HTMLElement | null {
     return source ? h('section', { class: 'quoted-from' }, h('p', { class: 'meta' }, t(lang, 'quotedFrom')), renderJudged(source, view())) : null
   }
+  /** "Back": to where you came from (the browser's history), or to the start when there is none. */
+  const backLink = () => h('a', { class: 'back', href: '#/', onClick: (e: Event) => { e.preventDefault(); if (deps.goBack) deps.goBack(); else deps.setHash('') } }, icon('back', 16), t(lang, 'back'))
+
+  /** The page of an account: its profile as text, how it relates to you, and its notes (or replies). */
+  function profileView(info: ProfileInfo, notes: Judged[]): HTMLElement {
+    const relation = info.pubkey === me ? 'you' : session!.muted.has(info.pubkey) ? 'muted' : session!.follows.has(info.pubkey) ? 'follow' : 'none'
+    const shown = notes.filter((n) => isReply(n.event) === (profileMode === 'replies'))
+    return h('div', { class: 'stack' }, backLink(), renderProfileHead(info, relation, view()), renderProfileMode(profileMode, (m) => { profileMode = m; void load() }, view()),
+      shown.length ? renderSummary(tally(shown), view(), toggleSettings) : null, shown.length ? renderList(shown, view()) : h('p', { class: 'empty' }, t(lang, 'profileEmpty')))
+  }
+
   function threadView(th: Thread, source: Judged | null = null): HTMLElement {
     const all = [...(th.root ? [th.root] : []), ...flat(th.replies)]
     return h('div', { class: 'stack' },
-      h('a', { class: 'back', href: '#/' }, icon('back', 16), t(lang, 'back')),
+      backLink(),
       sourceCard(source),
       renderSummary(tally(all), view(), toggleSettings),
       th.root ? renderJudged(th.root, view()) : null,
@@ -463,7 +485,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       edit: (x) => { if (composer) composer.text = x }, review: doReview, publish: () => void publish(), back: () => { review = null; draw() }, cancelComposer: () => { composer = null; review = null; draw() },
       retry: () => void retry(), dismissResult: () => { result = null; draw() }, startNote, cancelSigning: () => signing?.abort(),
       editBunker: (x) => { bunkerText = x }, setLinkOpen: (o) => { linkOpen = o },
-    }, view(), true, !me || route.name === 'me' ? 'me' : 'feed', !!me && ['following', 'mentions', 'note', 'me'].includes(route.name)) : null
+    }, view(), true, !me || route.name === 'me' ? 'me' : 'feed', !!me && ['following', 'mentions', 'note', 'user', 'me'].includes(route.name)) : null
     const pills = h('div', { class: 'lang', role: 'group', 'aria-label': 'Language' }, ...(['en', 'es'] as const).map((l) =>
       h('button', { type: 'button', 'aria-pressed': String(lang === l), onClick: () => { if (lang !== l) { lang = l; safeSet(kv, 'lang', lang); void load() } } }, l.toUpperCase())))
     const statusEl = me && status ? h('p', { class: 'status loading', role: 'status' }, h('span', {}, status)) : null

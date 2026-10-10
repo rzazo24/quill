@@ -41,7 +41,7 @@ describe('references', () => {
     const el = document.createElement('div')
     el.append(renderContent(`hi nostr:${nip19.npubEncode(pk('a'))} and nostr:${nip19.npubEncode(pk('d'))} see nostr:${nip19.noteEncode('e'.repeat(64))}`, v))
     const refs = [...el.querySelectorAll('a.ref, a.thread-link')].map((a) => [a.textContent, a.getAttribute('href')])
-    expect(refs[0]).toEqual(['@Ana', '#/mentions'])
+    expect(refs[0]).toEqual(['@Ana', '#/user/' + pk('a')]) // a mention opens that account's page
     expect(refs[1]![0]).toMatch(/^@npub1/)
     expect([refs[2]![0]!.trim(), refs[2]![1]]).toEqual(['Quoted note', '#/note/' + 'e'.repeat(64)])
   })

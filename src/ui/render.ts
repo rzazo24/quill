@@ -4,6 +4,7 @@ import { h } from './dom.js'
 import { refs, shortNpub } from '../core/refs.js'
 import { avatarOf } from '../core/avatar.js'
 import { showReaction, type ReactionGroup } from '../data/activity.js'
+import type { ProfileInfo } from '../data/profile.js'
 import { AVATAR_STYLES, FONT_SIZES, type AvatarStyle, type FeedMode, type FontSize } from './store.js'
 import { robotEl } from './robot-el.js'
 import { pixelEl } from './pixel-el.js'
@@ -19,6 +20,10 @@ export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: 
 
 export const nameOf = (v: View, pubkey: string): string => v.names.get(pubkey) ?? shortNpub(pubkey)
 
+/** Where an account's page is. */
+export const userHref = (pubkey: string): string => `#/user/${pubkey}`
+const isKey = (k: string) => /^[0-9a-f]{64}$/.test(k)
+
 /** The text of a note: plain text, readable references to people and notes, and links shown in full. Never markup. */
 /** The way to a thread: "Thread" in a note's header (this note's conversation) and "Quoted note" where the text points at another note, so the two are never confused. */
 export function threadChip(href: string, v: View, label: 'thread' | 'quotedNote' = 'thread'): HTMLElement {
@@ -29,7 +34,7 @@ export function threadChip(href: string, v: View, label: 'thread' | 'quotedNote'
 export function renderContent(raw: string, v: View, fromId?: string): DocumentFragment {
   const frag = document.createDocumentFragment()
   for (const part of refs(cleanText(raw, 4000))) {
-    if (part.type === 'person') frag.append(h('a', { class: 'ref', href: '#/mentions' }, '@' + nameOf(v, part.pubkey)))
+    if (part.type === 'person') frag.append(h('a', { class: 'ref', href: userHref(part.pubkey) }, '@' + nameOf(v, part.pubkey)))
     else if (part.type === 'note') frag.append(threadChip(`#/note/${part.id}${fromId && fromId !== part.id ? `?from=${fromId}` : ''}`, v, 'quotedNote'))
     else for (const seg of segments(part.value)) {
       frag.append(seg.type === 'link' ? h('a', { class: 'ext', href: seg.href, rel: 'noopener noreferrer nofollow', target: '_blank' }, seg.value) : seg.value)
@@ -51,14 +56,15 @@ export function avatarEl(pubkey: string, v: View, size: 'md' | 'lg' = 'md', styl
 function card(j: Judged, v: View, extra: Child[] = []): HTMLElement {
   const { event } = j
   return h('article', { class: v.isNew?.(event) ? 'note new' : 'note', 'data-id': event.id, ...(v.isNew?.(event) ? { 'data-new': t(v.lang, 'newMark') } : {}) },
-    avatarEl(event.pubkey, v),
+    // the picture and the name both open the account; the picture is skipped by keyboards and screen readers (the name link says the same)
+    isKey(event.pubkey) ? h('a', { class: 'avatar-link', href: userHref(event.pubkey), tabindex: '-1', 'aria-hidden': 'true' }, avatarEl(event.pubkey, v)) : avatarEl(event.pubkey, v),
     h('div', { class: 'note-main' },
       j.followedBy?.length ? h('p', { class: 'reposted' }, icon('people', 14), j.followedBy.length > 1 ? t(v.lang, 'followedByMany', { who: nameOf(v, j.followedBy[0]!), n: j.followedBy.length - 1 }) : t(v.lang, 'followedByOne', { who: nameOf(v, j.followedBy[0]!) })) : null,
       j.repostedBy?.length ? h('p', { class: 'reposted' }, icon('repost', 14), j.repostedBy.length > 1 ? t(v.lang, 'repostedMany', { who: nameOf(v, j.repostedBy[0]!), n: j.repostedBy.length - 1 }) : t(v.lang, 'repostedOne', { who: nameOf(v, j.repostedBy[0]!) })) : null,
       h('header', {},
         // name and time run together and may wrap onto two lines; the thread button stays at the top right, always
         h('span', { class: 'byline' },
-          h('strong', {}, nameOf(v, event.pubkey)), ' ',
+          isKey(event.pubkey) ? h('a', { class: 'name-link', href: userHref(event.pubkey) }, h('strong', {}, nameOf(v, event.pubkey))) : h('strong', {}, nameOf(v, event.pubkey)), ' ',
           h('time', { datetime: new Date(event.created_at * 1000).toISOString() }, ago(v.lang, event.created_at, v.nowMs))),
         threadChip(`#/note/${event.id}`, v),
       ),
@@ -148,12 +154,31 @@ export function renderRepostGroups(groups: ReactionGroup[], v: View): HTMLElemen
     })))
 }
 
+/** The head of an account's page: who it is, as text. */
+export function renderProfileHead(info: ProfileInfo, relation: 'you' | 'follow' | 'muted' | 'none', v: View): HTMLElement {
+  const rel = relation === 'you' ? 'profileYou' : relation === 'follow' ? 'profileFollowed' : relation === 'muted' ? 'profileMuted' : 'profileNotFollowed'
+  const via = info.via.length > 1 ? t(v.lang, 'followedByMany', { who: nameOf(v, info.via[0]!), n: info.via.length - 1 }) : info.via.length === 1 ? t(v.lang, 'followedByOne', { who: nameOf(v, info.via[0]!) }) : null
+  return h('section', { class: 'profile card' },
+    h('div', { class: 'profile-top' }, avatarEl(info.pubkey, v, 'lg'),
+      h('div', {}, h('h2', {}, nameOf(v, info.pubkey)), h('div', { class: 'meta' }, shortNpub(info.pubkey)), info.nip05 ? h('div', { class: 'meta' }, info.nip05) : null)),
+    info.about ? h('div', { class: 'about' }, renderContent(info.about, v)) : null,
+    info.website ? h('p', { class: 'meta' }, info.website) : null,
+    h('p', { class: 'meta relation' }, [t(v.lang, rel), info.following === null ? null : t(v.lang, 'profileFollowing', { n: info.following })].filter(Boolean).join(' · ')),
+    via ? h('p', { class: 'meta' }, via) : null)
+}
+
+/** Notes | Replies on an account's page. */
+export function renderProfileMode(mode: 'notes' | 'replies', onChange: (m: 'notes' | 'replies') => void, v: View): HTMLElement {
+  return h('div', { class: 'seg feedmode', role: 'group', 'aria-label': t(v.lang, 'feedModeTitle') }, ...(['notes', 'replies'] as const).map((m) =>
+    h('button', { type: 'button', 'aria-pressed': String(mode === m), onClick: () => { if (mode !== m) onChange(m) } }, t(v.lang, m === 'notes' ? 'profileNotes' : 'profileReplies'))))
+}
+
 /** Accounts that started following the reader since the last visit: the first few, with a count of the rest. */
 export function renderFollowers(keys: string[], v: View): HTMLElement | null {
   if (!keys.length) return null
   const SHOWN = 8
   return h('section', { class: 'followers card' }, h('h2', {}, `${t(v.lang, 'followersTitle')} (${keys.length})`),
-    h('ul', {}, ...keys.slice(0, SHOWN).map((k) => h('li', {}, avatarEl(k, v), h('span', {}, nameOf(v, k)))), keys.length > SHOWN ? h('li', { class: 'more-followers' }, t(v.lang, 'followersMore', { n: keys.length - SHOWN })) : null))
+    h('ul', {}, ...keys.slice(0, SHOWN).map((k) => h('li', {}, h('a', { class: 'follower-link', href: userHref(k) }, avatarEl(k, v), h('span', {}, nameOf(v, k))))), keys.length > SHOWN ? h('li', { class: 'more-followers' }, t(v.lang, 'followersMore', { n: keys.length - SHOWN })) : null))
 }
 
 /** Following can show the people you follow or the wider network; two buttons, the open one is lit. */

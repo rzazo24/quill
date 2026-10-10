@@ -17,7 +17,7 @@ const en: HelpSection[] = [
 • Mentions: replies and mentions from anyone. This is where the filter works hardest.
 • Me: your account (with how many you follow, exact, and about how many follow you, with a ~: there is no official count, relays each know only part of them, and every app counts in its own way, so it will not match other apps exactly), your Clave connection, your own notes and sign out.
 
-Tap Thread on a note to see the whole conversation. The ↻ button, or tapping the tab you are already on, reads everything again from the relays. When you come back to the app after a couple of minutes it refreshes by itself.` },
+Tap a name, an avatar or an @mention to open that account: its profile as text (its pictures are never loaded), how many accounts it follows, whether you follow it and which of your follows do, and its notes, with a Notes | Replies switch. Tap Thread on a note to see the whole conversation. The ↻ button, or tapping the tab you are already on, reads everything again from the relays. When you come back to the app after a couple of minutes it refreshes by itself.` },
   { id: 'filter', title: 'How the filter decides', body: `Every note gets a verdict: shown or hidden, by which rule, and the numbers behind it. In order of priority:
 
 • Muted account or word: you muted it. Applies to everybody.
@@ -74,7 +74,7 @@ const es: HelpSection[] = [
 • Menciones: respuestas y menciones de cualquiera. Aquí es donde más trabaja el filtro.
 • Yo: tu cuenta (con a cuántos sigues, exacto, y aproximadamente cuántos te siguen, con una ~: no hay un contador oficial, cada relé conoce solo una parte y cada app cuenta a su manera, así que no coincidirá exactamente con otras apps), tu conexión con Clave, tus propias notas y cerrar sesión.
 
-Toca Hilo en una nota para ver toda la conversación. El botón ↻, o tocar la pestaña en la que ya estás, vuelve a leer todo de los relés. Al volver a la app pasados un par de minutos se actualiza sola.` },
+Toca un nombre, un avatar o una @mención para abrir esa cuenta: su perfil como texto (sus imágenes nunca se cargan), a cuántas cuentas sigue, si la sigues y cuáles de tus seguidos la siguen, y sus notas, con un interruptor Notas | Respuestas. Toca Hilo en una nota para ver toda la conversación. El botón ↻, o tocar la pestaña en la que ya estás, vuelve a leer todo de los relés. Al volver a la app pasados un par de minutos se actualiza sola.` },
   { id: 'filter', title: 'Cómo decide el filtro', body: `Cada nota recibe un veredicto: visible u oculta, por qué regla y con qué números. Por orden de prioridad:
 
 • Cuenta o palabra silenciada: la silenciaste tú. Vale para todo el mundo.
