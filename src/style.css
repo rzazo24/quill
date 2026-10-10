@@ -73,6 +73,7 @@ h2.section { font-size: 1.05rem; margin-top: 8px } .foot { margin: 8px 0 0 }
 .note { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 10px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px }
 .note header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px; font-size: .85rem; color: var(--muted) }
 .note header .byline { overflow-wrap: anywhere } .note header strong { color: var(--text); font-size: .95rem } .note header time { white-space: nowrap } /* the thread button is always the right column of the header, whatever the length of the name */
+.note .body.tappable { cursor: pointer }
 .note .body { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 2px }
 /* the chip that leads to a thread: the same look as every button, only smaller */
 .thread-link { display: inline-flex; align-items: center; gap: 5px; flex: none; font-size: .78rem; line-height: 1.7; padding: 0 9px 0 8px; background: var(--btn); color: var(--muted); text-decoration: none; border: 1px solid var(--border); border-radius: 8px; vertical-align: baseline }

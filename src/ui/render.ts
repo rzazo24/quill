@@ -53,6 +53,15 @@ export function avatarEl(pubkey: string, v: View, size: 'md' | 'lg' = 'md', styl
   return el
 }
 
+/** A tap on the text of a note opens its conversation. Links, buttons and a text selection keep their own meaning, and the thread you are already in stays put. */
+function openThread(e: Event, id: string): void {
+  const target = e.target as Element | null
+  if (target?.closest('a, button, summary, input, textarea, video, audio')) return
+  if (String(window.getSelection?.() ?? '') !== '') return
+  if (location.hash.startsWith(`#/note/${id}`)) return
+  location.hash = `#/note/${id}`
+}
+
 function card(j: Judged, v: View, extra: Child[] = []): HTMLElement {
   const { event } = j
   return h('article', { class: v.isNew?.(event) ? 'note new' : 'note', 'data-id': event.id, ...(v.isNew?.(event) ? { 'data-new': t(v.lang, 'newMark') } : {}) },
@@ -68,7 +77,7 @@ function card(j: Judged, v: View, extra: Child[] = []): HTMLElement {
           h('time', { datetime: new Date(event.created_at * 1000).toISOString() }, ago(v.lang, event.created_at, v.nowMs))),
         threadChip(`#/note/${event.id}`, v),
       ),
-      h('div', { class: 'body' }, renderContent(event.content, v, event.id)),
+      h('div', { class: 'body tappable', onclick: (e: Event) => openThread(e, event.id) }, renderContent(event.content, v, event.id)),
       ...extra, ...(v.actions?.(j) ?? []),
     ),
   )

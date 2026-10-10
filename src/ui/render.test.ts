@@ -114,3 +114,21 @@ describe('summary', () => {
     expect(renderSummary({ shown: 3, hidden: 0, byRule: {} }, v, () => {}).textContent).toContain('Nothing hidden')
   })
 })
+
+describe('a tap on the text opens the conversation', () => {
+  const tap = (el: Element) => el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  it('opens the thread of the tapped note', () => {
+    const e = ev(pk('a'), 'hello'); location.hash = '#/mentions'
+    const card = renderJudged(shown(e), v); document.body.append(card)
+    tap(card.querySelector('.body')!)
+    expect(location.hash).toBe(`#/note/${e.id}`); card.remove()
+  })
+  it('leaves links alone and stays in the thread you are already in', () => {
+    const e = ev(pk('a'), 'see https://example.com/x'); location.hash = '#/mentions'
+    const card = renderJudged(shown(e), v); document.body.append(card)
+    tap(card.querySelector('.body a')!)
+    expect(location.hash).toBe('#/mentions')
+    location.hash = `#/note/${e.id}?from=zz`; tap(card.querySelector('.body')!)
+    expect(location.hash).toBe(`#/note/${e.id}?from=zz`); card.remove()
+  })
+})
