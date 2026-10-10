@@ -7,6 +7,10 @@ Un cliente pequeño de [Nostr](https://nostr.com), **pensado primero para el tex
 En marcha en **<https://quill.hivescope.xyz>**. Pega un `npub` para leer; conecta un firmador ([Clave](https://clave.casa) en iPhone) para reaccionar, responder y escribir. Quill nunca ve tu clave privada.
 
 ![Quill en un móvil: el feed de la gente que sigues, las menciones con lo que el filtro ocultó y por qué, y los ajustes del filtro](docs/screenshot.es.png)
+
+En un ordenador las tres pestañas van una al lado de otra y un hilo, una cuenta o una lista se abre en un panel a la derecha:
+
+![Quill en un ordenador: Siguiendo, Menciones y Yo en tres columnas, con el hilo de una nota abierto a la derecha](docs/screenshot.es.desktop.png)
 <sub>Capturas con datos de demostración (cuentas inventadas), no personas reales.</sub>
 
 ## Tres promesas

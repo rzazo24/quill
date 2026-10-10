@@ -1,4 +1,4 @@
-// Makes the screenshots of the README (docs/screenshot.png and docs/screenshot.es.png) with the real, built app (run `npm run build` first) over DEMO data:
+// Makes the screenshots of the README (docs/screenshot[.es].png on a phone, docs/screenshot[.es].desktop.png on a computer) with the real, built app (run `npm run build` first) over DEMO data:
 // invented accounts with valid signatures, served by a pretend relay inside the browser. Nobody real appears in the pictures.
 //   node scripts/screenshots.mjs
 import { createHash } from 'node:crypto'
@@ -50,6 +50,16 @@ const PORT = 4174
 const srv = spawn('node', ['node_modules/vite/bin/vite.js', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore' })
 for (let i = 0; i < 40; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break } catch { /* not up yet */ } await new Promise((r) => setTimeout(r, 250)) }
 const browser = await chromium.launch()
+// the same demo on a computer: Following, Mentions and Me side by side, with the thread of the reader's own note open in the panel on the right
+const desktop = async (lang, file) => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 800 }, deviceScaleFactor: 1 }); const p = await ctx.newPage()
+  await p.routeWebSocket(`${RELAY}/`, serve)
+  await p.addInitScript(({ me, lang, relay }) => { localStorage.setItem('me', me); localStorage.setItem('lang', lang); localStorage.setItem('relays', JSON.stringify([relay])); localStorage.setItem('avatars', 'robots') }, { me: people['Lucía'].pk, lang, relay: RELAY })
+  await p.goto(`http://localhost:${PORT}/#/`, { waitUntil: 'domcontentloaded' })
+  await p.waitForSelector('.col[data-col=me] article.note', { timeout: 20000, state: 'attached' }); await p.waitForSelector('.col[data-col=mentions] article.note', { timeout: 20000, state: 'attached' }); await new Promise((r) => setTimeout(r, 1500))
+  await p.click('.col[data-col=me] article.note a.thread-link'); await p.waitForSelector('.col.detail article.note', { timeout: 20000 }); await new Promise((r) => setTimeout(r, 1500))
+  await p.screenshot({ path: file, type: 'png' }); console.log('wrote', file); await ctx.close()
+}
 const shots = async (lang) => {
   const out = []
   for (const hash of ['#/', '#/mentions', '#/settings/filter']) {
@@ -67,5 +77,6 @@ for (const [lang, file] of [['en', 'docs/screenshot.png'], ['es', 'docs/screensh
   const page = await (await browser.newContext({ viewport: { width: 1290, height: 810 }, deviceScaleFactor: 2 })).newPage()
   await page.setContent(`<!doctype html><body style="margin:0;background:#0b0f16;display:flex;gap:30px;justify-content:center;align-items:center;height:100vh">${imgs.map((b) => `<img src="data:image/png;base64,${b}" width="390" style="border-radius:22px;border:1px solid #1f2a3a;display:block">`).join('')}</body>`)
   await new Promise((r) => setTimeout(r, 300)); await page.screenshot({ path: file, type: 'png' }); console.log('wrote', file)
+  await desktop(lang, file.replace('.png', '.desktop.png'))
 }
 await browser.close(); srv.kill()

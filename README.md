@@ -7,6 +7,10 @@ A small, **text-first** [Nostr](https://nostr.com) client that **tells you why i
 Live at **<https://quill.hivescope.xyz>**. Paste an `npub` to read; connect a signer ([Clave](https://clave.casa) on iPhone) to react, reply and write. Quill never sees your private key.
 
 ![Quill on a phone: the feed of the people you follow, the mentions with what the filter hid and why, and the filter settings](docs/screenshot.png)
+
+On a computer the three tabs sit side by side and a thread, an account or a list opens in a panel on the right:
+
+![Quill on a computer: Following, Mentions and Me in three columns, with the thread of a note open on the right](docs/screenshot.desktop.png)
 <sub>Screenshots with demo data (made-up accounts), not real people.</sub>
 
 ## Three promises
