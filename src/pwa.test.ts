@@ -53,8 +53,15 @@ describe('the app shell: the page never scrolls, only <main> does', () => {
   it('the layout rules that keep iPhone Safari\'s toolbar (and so the tab bar) still', () => {
     const css = text('src/style.css')
     expect(css).toMatch(/body \{[^}]*overflow: hidden/); expect(css).toMatch(/body \{[^}]*position: fixed[^}]*inset: 0/); expect(css).not.toMatch(/body \{[^}]*100d?vh/); expect(css).toMatch(/#app \{[^}]*flex-direction: column/)
-    expect(css).toMatch(/main\.view \{[^}]*overflow-y: auto/); expect(css).toMatch(/\.tabbar \{[^}]*flex: none/)
-    expect(css).not.toMatch(/\.tabbar \{[^}]*position: fixed/) // a fixed bar over a scrolling page is what jumped
+    expect(css).toMatch(/main\.view \{[^}]*overflow-y: auto/); expect(css).not.toMatch(/\.tabbar \{[^}]*position: fixed/) // a bar fixed to the window over a scrolling page is what jumped
+    expect(css).toMatch(/\.tabbar \{[^}]*position: absolute/); expect(css).toMatch(/#app \{[^}]*position: relative/) // it floats inside the shell, which never scrolls: hiding it does not resize what scrolls
+  })
+})
+
+describe('the buttons of a panel are one size', () => {
+  it('a group of buttons is a grid of equal columns, and the "link" buttons of the signing panels are as tall as the others', () => {
+    const css = text('src/style.css')
+    expect(css).toMatch(/\.sign \.buttons[^{]*\{[^}]*grid-auto-columns: 1fr/); expect(css).toMatch(/\.sign button\.link \{[^}]*min-height: 44px/)
   })
 })
 

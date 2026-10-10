@@ -16,6 +16,7 @@ let s = await probe(); say(!s.docScrolls && s.barBottom === s.vh, `Following: th
 // scroll the content, then switch to Mentions and sample the footer all through the loading
 await p.evaluate(() => { document.querySelector('main.view').scrollTop = 2500 }); await new Promise((r) => setTimeout(r, 300))
 s = await probe(); say(s.mainTop > 1000 && s.windowScrollY === 0, `scrolling moves <main> (${s.mainTop}px), never the window (${s.windowScrollY})`)
+await p.evaluate(() => { document.querySelector('main.view').scrollTop = 2400 }); await new Promise((r) => setTimeout(r, 600)) // a little back up, as a reader does: the tab bar comes back (it hides while reading down)
 const samples = []; const t0 = Date.now()
 const sampler = (async () => { while (Date.now() - t0 < 12000) { samples.push(await probe()); await new Promise((r) => setTimeout(r, 40)) } })()
 await p.click('nav.tabbar a[href="#/mentions"]'); await p.waitForSelector('.summary', { timeout: 40000 }); await sampler

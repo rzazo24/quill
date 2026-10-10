@@ -755,6 +755,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     root.replaceChildren(...page.filter((x): x is HTMLElement => x !== null))
     root.classList.toggle('bars-hidden', barsHidden && !isWide)
     root.classList.toggle('wide', isWide)
+    root.classList.toggle('has-tabs', !!me && !isWide)
     root.classList.toggle('wide-screen', wide()) // the screen is wide, whatever page is shown: the header keeps its place
     for (const c of root.querySelectorAll<HTMLElement>('.col[data-col]')) {
       const id = c.dataset.col as keyof typeof panes

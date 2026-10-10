@@ -178,7 +178,7 @@ function renderReview(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement 
     r.mentions ? h('p', { class: 'meta' }, t(v.lang, 'previewMentions', { n: r.mentions })) : null,
     h('p', { class: 'meta' }, t(v.lang, 'previewRelays', { n: s.relays.length }), ` · kind ${r.template.kind} (${kind}) · ${r.template.tags.length} tags`),
     h('p', { class: 'meta' }, t(v.lang, 'previewPublic')),
-    h('p', {}, h('button', { type: 'button', onClick: hd.publish }, t(v.lang, 'publish')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.back }, t(v.lang, 'backEdit'))),
+    h('p', { class: 'buttons' }, h('button', { type: 'button', onClick: hd.publish }, t(v.lang, 'publish')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.back }, t(v.lang, 'backEdit'))),
   )
 }
 
@@ -188,7 +188,7 @@ function renderResult(r: Published, relays: string[], hd: SignUiHandlers, v: Vie
   return h('div', { class: 'result', role: 'status' },
     h('p', { class: failed.length === Object.keys(r.outcomes).length ? 'error' : 'status' }, ok ? t(v.lang, 'published', { ok, total: Object.keys(r.outcomes).length }) : t(v.lang, 'publishedNone')),
     h('ul', {}, ...relays.map((url) => h('li', {}, `${r.outcomes[url] === 'ok' ? '✓' : '✗'} ${url.replace(/^wss:\/\//, '')}`, r.outcomes[url] === 'ok' ? null : ` — ${r.outcomes[url] ?? ''}`))),
-    h('p', {}, failed.length ? h('button', { type: 'button', onClick: hd.retry }, t(v.lang, 'retryFailed')) : null, ' ', h('button', { type: 'button', class: 'link', onClick: hd.dismissResult }, t(v.lang, 'dismiss'))),
+    h('p', { class: 'buttons' }, failed.length ? h('button', { type: 'button', onClick: hd.retry }, t(v.lang, 'retryFailed')) : null, ' ', h('button', { type: 'button', class: 'link', onClick: hd.dismissResult }, t(v.lang, 'dismiss'))),
   )
 }
 
