@@ -12,7 +12,7 @@ import { icon } from './icons.js'
 import { nameOf, type View } from './render.js'
 import { normReaction, type Mine } from '../data/engaged.js'
 
-export const REACTIONS = ['+', '❤️', '🤙', '😂', '🙏']
+export const REACTIONS = ['+', '❤️', '🤙', '😂', '🙏', '🔥', '😮', '😢', '🎉', '💯']
 
 export interface Composer { mode: 'note' | 'reply' | 'quote'; target?: NostrEvent; text: string }
 export interface Review { template: Template; target?: NostrEvent; mentions: number; quote?: boolean }
