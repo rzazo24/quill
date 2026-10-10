@@ -8,7 +8,7 @@ import { judgeAll, tally, type Judged, type Settings } from '../core/verdict.js'
 import { loadNetwork } from '../data/network.js'
 import { loadFollowing, loadMentions, loadMine, loadNames, loadNote, loadThread, type Thread, type ThreadNode } from '../data/feed.js'
 import { Engagement, loadEngagement, normReaction } from '../data/engaged.js'
-import { countNew, groupReactions, loadActivity, mergeKnown, newFollowers, parseKnown, type Activity } from '../data/activity.js'
+import { countNew, groupReactions, groupReposts, loadActivity, mergeKnown, newFollowers, parseKnown, type Activity } from '../data/activity.js'
 import { contextOf, loadSession, type Session } from '../data/session.js'
 import { DEFAULT_RELAYS, memo, type Fetcher } from '../net/fetcher.js'
 import { failedRelays, type Publisher } from '../net/publisher.js'
@@ -17,7 +17,7 @@ import { checkTemplate, MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
 import { logo, icon } from './icons.js'
 import { detectLang, problemText, t, type Key, type Lang } from './i18n.js'
-import { renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
+import { renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type Review } from './sign-ui.js'
 import { installHint, type Env } from './install.js'
 import { parseAvatars, parseFeedMode, parseFont, parseLang, parseReposts, parseSettings, parseWords, safeGet, safeSet, type AvatarStyle, type FeedMode, type FontSize, type KV } from './store.js'
@@ -194,7 +194,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         const baseline = act ? (loadKnown() ?? new Set(act.followers)) : null
         if (act && followersMark === null) followersMark = baseline
         const fresher = act ? newFollowers(act, followersMark!) : []
-        await nameThem(act ? [...items, ...act.reactions] : items, fresher.slice(0, 8))
+        await nameThem(act ? [...items, ...act.reactions, ...act.reposts] : items, fresher.slice(0, 8))
         if (route.name === 'me' && !names.has(me)) for (const [k, n] of await loadNames(fetcher, [me])) names.set(k, n)
         if (act) {
           if (markFrom === null) markFrom = seenAt ?? nowSec() // first ever visit: nothing is "new"
@@ -202,7 +202,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
           markSeen(); saveKnown(mergeKnown(baseline!, act))
           const block = renderReactionGroups(groupReactions(act, markFrom), view())
           const line = fresh.shown || fresh.hidden ? h('p', { class: 'meta new-line', role: 'status' }, [fresh.shown ? t(lang, 'newItems', { n: fresh.shown }) : '', fresh.hidden ? t(lang, 'newHidden', { n: fresh.hidden }) : ''].filter(Boolean).join(' · ')) : null
-          content = h('div', { class: 'stack' }, renderSummary(tally(items), view(), toggleSettings), line, renderFollowers(fresher, view()), block, renderList(items, view()))
+          content = h('div', { class: 'stack' }, renderSummary(tally(items), view(), toggleSettings), line, renderFollowers(fresher, view()), block, renderRepostGroups(groupReposts(act, markFrom), view()), renderList(items, view()))
         } else if (route.name === 'me') content = renderList(items, view())
         else {
           // Following: the people you follow, or the network; in the network an empty list says why (no follow lists arrived, or just nothing new)

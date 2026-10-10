@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { ev, pk } from '../core/testutil.js'
 import { contextOf } from './session.js'
 import { buildGraph } from './graph.js'
-import { countNew, followersOf, groupReactions, loadActivity, MAX_KNOWN_FOLLOWERS, mergeKnown, newFollowers, parseKnown, reactionTarget, showReaction } from './activity.js'
+import { countNew, followersOf, groupReactions, groupReposts, loadActivity, MAX_KNOWN_FOLLOWERS, mergeKnown, newFollowers, parseKnown, reactionTarget, showReaction } from './activity.js'
 import { answers, type Fetcher } from '../net/fetcher.js'
 
 const me = pk('1'), friend = pk('a'), stranger = pk('f'), other = pk('b')
@@ -81,10 +81,40 @@ describe('followers', () => {
     expect((await loadActivity(hostile, sess())).followers).toEqual([])
   })
   it('the ones not known before count as new (never as hidden); the known set only grows and has a limit; junk in storage is ignored', () => {
-    const a = { notes: [], reactions: [], targets: new Map(), followers: [friend, other, stranger] }
+    const a = { notes: [], reactions: [], reposts: [], targets: new Map(), followers: [friend, other, stranger] }
     expect(newFollowers(a, new Set([friend]))).toEqual([other, stranger]); expect(countNew(a, 0, new Set([friend]))).toEqual({ shown: 2, hidden: 0 }); expect(countNew(a, 0)).toEqual({ shown: 0, hidden: 0 })
     expect([...mergeKnown(new Set([pk('1'), friend]), a)].sort()).toEqual([friend, other, pk('1'), stranger].sort())
     const many = new Set(Array.from({ length: 25_000 }, (_, i) => i.toString(16).padStart(64, '0'))); expect(mergeKnown(many, a).size).toBe(MAX_KNOWN_FOLLOWERS)
     expect([...parseKnown(JSON.stringify([friend, 'junk', 7, null]))!]).toEqual([friend]); for (const bad of [null, '', 'nope', '{}', '"x"']) expect(parseKnown(bad), String(bad)).toBeNull()
+  })
+})
+
+describe('reposts of the reader\'s notes', () => {
+  const repost = (who: string, target: string, at = 200, over: Partial<ReturnType<typeof ev>> = {}) => ev(who, JSON.stringify(myNote), { kind: 6, created_at: at, tags: [['e', target], ['p', me]], ...over })
+  it('are the reposts that point at a note the reader wrote, from other people, judged like everything else; a repost that merely tags the reader is nothing', async () => {
+    const a = await loadActivity(world([repost(friend, myNote.id), repost(stranger, myNote.id), repost(other, someoneElses.id), repost(me, myNote.id), ev(friend, '', { kind: 6, created_at: 1, tags: [['p', me]] })]), sess())
+    expect(a.reposts.map((j) => [j.event.pubkey, j.verdict.hidden])).toEqual([[friend, false], [stranger, true]]) // the stranger is outside the network: hidden, with the reason
+    expect(a.targets.has(myNote.id)).toBe(true)
+  })
+  it('a generic repost of something that is not a text note is not a repost of the note; a repost of a note found nowhere is nothing', async () => {
+    const a = await loadActivity(world([ev(friend, '', { kind: 16, created_at: 200, tags: [['e', myNote.id], ['p', me], ['k', '30023']] }), ev(friend, '', { kind: 16, created_at: 201, tags: [['e', myNote.id], ['p', me], ['k', '1']] }), repost(other, 'c'.repeat(64))]), sess())
+    expect(a.reposts.map((j) => j.event.kind)).toEqual([16]); expect(a.reposts[0]!.event.tags.some((t) => t[0] === 'k' && t[1] === '1')).toBe(true)
+  })
+  it('a relay that returns the reposts of other people\'s notes, or that fails on reposts, cannot break or inflate anything', async () => {
+    const hostile: Fetcher = { query: async (f) => (f.kinds?.includes(6) ? [repost(friend, someoneElses.id)] : f.ids ? [someoneElses] : []) }
+    expect((await loadActivity(hostile, sess())).reposts).toEqual([])
+    const broken: Fetcher = { query: async (f) => { if (f.kinds?.includes(6)) throw new Error('boom'); return [] } }
+    expect((await loadActivity(broken, sess())).reposts).toEqual([])
+  })
+  it('the text of a repost (a copy of the reader\'s own note) does not decide the verdict: a muted word in it hides nothing', async () => {
+    const note = ev(me, 'a note mentioning forbiddenword here', { created_at: 100 })
+    const f: Fetcher = { query: async (q) => [note, ev(friend, JSON.stringify(note), { kind: 6, created_at: 200, tags: [['e', note.id], ['p', me]] })].filter((e) => answers(q, e)) }
+    const ctx = contextOf({ me, follows: new Set([friend]), muted: new Set(), mutedWords: ['forbiddenword'], graphInfo: buildGraph(me, new Set([friend]), new Map([[friend, []]])) })
+    expect((await loadActivity(f, ctx)).reposts.map((j) => j.verdict.hidden)).toEqual([false])
+  })
+  it('count once per person and note, only if new, and hidden ones apart; they are grouped by note, newest first, visible ones only', async () => {
+    const a = await loadActivity(world([repost(friend, myNote.id, 300), repost(friend, myNote.id, 310), repost(stranger, myNote.id, 320), repost(other, myNote.id, 50)]), sess({ [other]: 1 }))
+    expect(countNew(a, 100)).toEqual({ shown: 1, hidden: 1 }) // friend (once), stranger hidden; other is old
+    const groups = groupReposts(a, 100); expect(groups).toHaveLength(1); expect(groups[0]).toMatchObject({ emojis: [], latest: 310, fresh: true }); expect(groups[0]!.by).toEqual([friend, other])
   })
 })

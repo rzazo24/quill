@@ -133,6 +133,21 @@ export interface SettingsPanelProps {
   onWords: (words: string) => void
 }
 
+/** "Reposts of your notes": one line per note, who shared it; a line is marked when something in it is new. */
+export function renderRepostGroups(groups: ReactionGroup[], v: View): HTMLElement | null {
+  if (!groups.length) return null
+  return h('section', { class: 'reacted card' },
+    h('h2', {}, t(v.lang, 'repostsTitle')),
+    h('ul', {}, ...groups.slice(0, 5).map((g) => {
+      const who = nameOf(v, g.by[0]!)
+      const said = g.by.length > 1 ? t(v.lang, 'repostedYourMany', { who, n: g.by.length - 1 }) : t(v.lang, 'repostedYourOne', { who })
+      return h('li', {}, h('a', { href: `#/note/${g.target.id}`, class: g.fresh ? 'reaction-line fresh' : 'reaction-line' },
+        h('span', { class: 'emojis', 'aria-hidden': 'true' }, icon('repost', 18)),
+        h('span', { class: 'what' }, h('strong', {}, said), h('q', {}, cleanText(g.target.content, 90).replace(/\s+/g, ' '))),
+        g.fresh ? h('span', { class: 'dot', 'aria-label': t(v.lang, 'newMark') }) : null))
+    })))
+}
+
 /** Accounts that started following the reader since the last visit: the first few, with a count of the rest. */
 export function renderFollowers(keys: string[], v: View): HTMLElement | null {
   if (!keys.length) return null

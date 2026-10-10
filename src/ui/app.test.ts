@@ -558,3 +558,26 @@ describe('new followers', () => {
     expect(a.mem.get(`followers:${friend}`)).toBeDefined(); expect(a.mem.get(`followers:${me}`)).toBeDefined(); expect(badge(a)).toBeNull()
   })
 })
+
+describe('reposts of your notes', () => {
+  const NOW = 10_000
+  const myNote = ev(me, 'a note of mine worth sharing', { created_at: 100 })
+  const repost = (who: string, at: number) => ev(who, JSON.stringify(myNote), { kind: 6, created_at: at, tags: [['e', myNote.id], ['p', me]] })
+  const base = (): Event[] => [list(me, 3, [['p', friend]]), list(friend, 3, []), ev(friend, JSON.stringify({ name: 'Ana' }), { kind: 0 }), myNote]
+  const start = (events: Event[]) => boot({ events, clock: { now: NOW * 1000 }, stored: { me, [`seen:${me}`]: '5000' } })
+  const badge = (a: ReturnType<typeof boot>) => a.root.querySelector('.tabbar .badge')?.textContent ?? null
+  it('are a number on Mentions and a card that names who shared which of your notes, linking to it', async () => {
+    const events = base(); const a = start(events); await tick(250); expect(badge(a)).toBeNull()
+    events.push(repost(friend, 9000)); a.poll(); await tick(250); expect(badge(a)).toBe('1')
+    await a.go('#/mentions'); await tick(250)
+    const card = [...a.root.querySelectorAll('section.reacted')].find((c) => c.querySelector('h2')!.textContent === 'Your notes, reposted')!
+    expect(card.querySelector('.what strong')!.textContent).toBe('Ana reposted your note'); expect(card.querySelector('.what q')!.textContent).toContain('a note of mine'); expect(card.querySelector('a')!.getAttribute('href')).toBe(`#/note/${myNote.id}`)
+    expect(card.querySelector('a.fresh')).not.toBeNull(); expect(card.querySelector('.emojis svg')).not.toBeNull(); expect(badge(a)).toBeNull()
+  })
+  it('several people are one line, a stranger\'s repost is counted apart and not listed, and with none there is no card', async () => {
+    const none = start(base()); await none.go('#/mentions'); await tick(250); expect([...none.root.querySelectorAll('section.reacted h2')].some((h) => h.textContent === 'Your notes, reposted')).toBe(false)
+    const a = start([...base(), repost(friend, 9000), repost(far, 9100)]); await tick(250); await a.go('#/mentions'); await tick(250)
+    expect(a.root.querySelector('.new-line')!.textContent).toBe('1 new · hidden by the filter: 1')
+    const card = [...a.root.querySelectorAll('section.reacted')].find((c) => c.querySelector('h2')!.textContent === 'Your notes, reposted')!; expect(card.querySelectorAll('li')).toHaveLength(1); expect(card.textContent).not.toContain('Someone')
+  })
+})

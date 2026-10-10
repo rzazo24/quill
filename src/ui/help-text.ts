@@ -38,9 +38,9 @@ The summary at the top says how many notes are hidden and why. Every rule can be
 • After signing, the result is shown relay by relay, with a retry for the ones that failed that needs no new signature.` },
   { id: 'marks', title: 'What you already did', body: `• A reaction you already gave is lit under the note (also ones you gave from other apps). Tapping it again does nothing: it would only be a duplicate.
 • A note you already replied to says Replied, with a tick.` },
-  { id: 'news', title: 'What is new', body: `While the app is open it looks once a minute and shows a number on the Mentions tab (up to 9+) with what is new since you last opened it: replies, mentions and reactions to your notes.
+  { id: 'news', title: 'What is new', body: `While the app is open it looks once a minute and shows a number on the Mentions tab (up to 9+) with what is new since you last opened it: replies, mentions, reactions and reposts of your notes.
 
-• Opening Mentions marks the new notes and lists who reacted to your notes.
+• Opening Mentions marks the new notes and lists who reacted to your notes and who reposted them.
 • New followers are announced too: accounts that follow you now and did not the last time you looked. Quill cannot know WHEN they followed you, and each relay knows only some of your followers, so a follower may take a while to show up. The first time it only learns who follows you, without announcing anyone.
 • What the filter would hide is not counted in the number; it is listed apart.
 • There are no system notifications: nothing reaches you while the app is closed.` },
@@ -95,9 +95,9 @@ El resumen de arriba dice cuántas notas se ocultan y por qué. Cada regla se pu
 • Tras firmar, el resultado se muestra relé por relé, con un reintento para los que fallaron que no necesita una firma nueva.` },
   { id: 'marks', title: 'Lo que ya has hecho', body: `• Una reacción que ya diste queda encendida bajo la nota (también las que diste desde otras apps). Tocarla otra vez no hace nada: solo sería un duplicado.
 • Una nota que ya respondiste dice Respondida, con un check.` },
-  { id: 'news', title: 'Qué hay de nuevo', body: `Con la app abierta mira una vez por minuto y muestra un número en la pestaña Menciones (hasta 9+) con lo nuevo desde la última vez que la abriste: respuestas, menciones y reacciones a tus notas.
+  { id: 'news', title: 'Qué hay de nuevo', body: `Con la app abierta mira una vez por minuto y muestra un número en la pestaña Menciones (hasta 9+) con lo nuevo desde la última vez que la abriste: respuestas, menciones, reacciones y reposts de tus notas.
 
-• Al abrir Menciones se marcan las notas nuevas y se lista quién reaccionó a tus notas.
+• Al abrir Menciones se marcan las notas nuevas y se lista quién reaccionó a tus notas y quién las compartió.
 • También avisa de los seguidores nuevos: cuentas que te siguen ahora y no te seguían la última vez que miraste. Quill no puede saber CUÁNDO empezaron a seguirte, y cada relé conoce solo a una parte de tus seguidores, así que alguno puede tardar en aparecer. La primera vez solo aprende quién te sigue, sin avisar de nadie.
 • Lo que el filtro ocultaría no cuenta en el número; se lista aparte.
 • No hay notificaciones del sistema: no te llega nada con la app cerrada.` },

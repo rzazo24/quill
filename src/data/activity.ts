@@ -15,7 +15,9 @@ export interface Activity {
   notes: Judged[]
   /** Reactions from other people to notes that really are the reader's. */
   reactions: Judged[]
-  /** The reader's notes that were reacted to, by id (for their text). */
+  /** Reposts (NIP-18) of notes that really are the reader's, from other people. */
+  reposts: Judged[]
+  /** The reader's notes that were reacted to or reposted, by id (for their text). */
   targets: Map<string, Event>
   /** Accounts whose follow list includes the reader (newest list first), not the reader and not muted. Relays each hold only part of them, so this is what the ones asked returned. */
   followers: string[]
@@ -25,17 +27,22 @@ export interface Activity {
 export const reactionTarget = (e: Pick<Event, 'tags'>): string | undefined => [...e.tags].reverse().find((t) => t[0] === 'e' && HEX64.test(t[1] ?? ''))?.[1]
 
 export async function loadActivity(f: Fetcher, ctx: Context, settings: Settings = DEFAULT_SETTINGS): Promise<Activity> {
-  const [mentions, reacts, lists] = await Promise.all([f.query({ kinds: [1], '#p': [ctx.me], limit: LIMIT }), f.query({ kinds: [7], '#p': [ctx.me], limit: LIMIT }), f.query({ kinds: [3], '#p': [ctx.me], limit: FOLLOWER_LIMIT }).catch(() => [])])
+  const [mentions, reacts, lists, reposted] = await Promise.all([f.query({ kinds: [1], '#p': [ctx.me], limit: LIMIT }), f.query({ kinds: [7], '#p': [ctx.me], limit: LIMIT }), f.query({ kinds: [3], '#p': [ctx.me], limit: FOLLOWER_LIMIT }).catch(() => []), f.query({ kinds: [6, 16], '#p': [ctx.me], limit: LIMIT }).catch(() => [])])
   const notes = mentions.filter((e) => e.pubkey !== ctx.me).sort(byNewest)
   // Anyone can put the reader's key in a `p` tag of a reaction to somebody else's note: only reactions to notes the reader really wrote count.
   const candidate = reacts.filter((e) => e.pubkey !== ctx.me && reactionTarget(e))
-  const ids = [...new Set(candidate.map((e) => reactionTarget(e)!))].slice(0, LIMIT)
+  // the same goes for reposts: a repost that merely tags the reader (a `p` tag) is nothing unless it points at a note the reader wrote; a generic repost of something that is not a text note is not one
+  const repostCandidate = reposted.filter((e) => (e.kind === 6 || (e.kind === 16 && !e.tags.some((t) => t[0] === 'k' && t[1] !== '1'))) && e.pubkey !== ctx.me && reactionTarget(e))
+  const ids = [...new Set([...candidate, ...repostCandidate].map((e) => reactionTarget(e)!))].slice(0, LIMIT * 2)
   const mine = ids.length ? (await f.query({ ids, kinds: [1], limit: ids.length })).filter((n) => n.pubkey === ctx.me && ids.includes(n.id)) : []
   const targets = new Map(mine.map((n) => [n.id, n]))
   const reactions = candidate.filter((e) => targets.has(reactionTarget(e)!)).sort(byNewest)
+  const reposts = repostCandidate.filter((e) => targets.has(reactionTarget(e)!)).sort(byNewest)
   const signals = analyse([...notes, ...reactions])
   const judged = (e: Event): Judged => ({ event: e, verdict: judge(e, ctx, signals, settings) })
-  return { notes: notes.map(judged), reactions: reactions.map(judged), targets, followers: followersOf(lists, ctx) }
+  // a repost carries a copy of the reader's own note: it is judged by who reposted, not by that text
+  const judgedRepost = (e: Event): Judged => ({ event: e, verdict: judge({ ...e, content: '' }, ctx, signals, settings) })
+  return { notes: notes.map(judged), reactions: reactions.map(judged), reposts: reposts.map(judgedRepost), targets, followers: followersOf(lists, ctx) }
 }
 
 /** Who follows the reader: the author of each follow list (kind 3) that really names them in a `p` tag. The newest list of each author counts once. */
@@ -48,8 +55,8 @@ export function followersOf(lists: Event[], ctx: Pick<Context, 'me' | 'muted'>):
   return [...newest.values()].sort(byNewest).map((e) => e.pubkey)
 }
 
-/** New since `seenAt` (unix seconds): what the filter shows and what it hides. A reaction counts once per (person, note), however many emoji. */
-/** `known`: the followers already seen on an earlier visit; each follower not in it counts as one new thing (a follower is never "hidden": only muted accounts are left out). */
+/** New since `seenAt` (unix seconds): what the filter shows and what it hides. A reaction counts once per (person, note), however many emoji; so does a repost.
+ *  `known`: the followers already seen on an earlier visit; each follower not in it counts as one new thing (a follower is never "hidden": only muted accounts are left out). */
 export function countNew(a: Activity, seenAt: number, known?: ReadonlySet<string>): { shown: number; hidden: number } {
   let shown = 0, hidden = 0
   if (known) shown += newFollowers(a, known).length
@@ -59,6 +66,12 @@ export function countNew(a: Activity, seenAt: number, known?: ReadonlySet<string
   for (const { event, verdict } of a.reactions) {
     if (event.created_at <= seenAt) continue
     const key = `${event.pubkey}:${reactionTarget(event)}`
+    if (seen.has(key)) continue
+    seen.add(key); tally(verdict.hidden)
+  }
+  for (const { event, verdict } of a.reposts) {
+    if (event.created_at <= seenAt) continue
+    const key = `repost:${event.pubkey}:${reactionTarget(event)}`
     if (seen.has(key)) continue
     seen.add(key); tally(verdict.hidden)
   }
@@ -88,6 +101,20 @@ export function groupReactions(a: Activity, seenAt: number): ReactionGroup[] {
     const g = groups.get(id) ?? { target, emojis: [], by: [], latest: 0, fresh: false }
     const emoji = showReaction(event.content)
     if (!have.has(`${id}:${normReaction(emoji)}`)) { have.add(`${id}:${normReaction(emoji)}`); g.emojis.push(emoji) }
+    if (!g.by.includes(event.pubkey)) g.by.push(event.pubkey)
+    g.latest = Math.max(g.latest, event.created_at); g.fresh ||= event.created_at > seenAt
+    groups.set(id, g)
+  }
+  return [...groups.values()].sort((x, y) => y.latest - x.latest)
+}
+
+/** The visible reposts of the reader's notes, grouped by note (who reposted it), the most recent group first. `emojis` stays empty: a repost has no emoji. */
+export function groupReposts(a: Activity, seenAt: number): ReactionGroup[] {
+  const groups = new Map<string, ReactionGroup>()
+  for (const { event, verdict } of a.reposts) {
+    if (verdict.hidden) continue
+    const id = reactionTarget(event)!, target = a.targets.get(id)!
+    const g = groups.get(id) ?? { target, emojis: [], by: [], latest: 0, fresh: false }
     if (!g.by.includes(event.pubkey)) g.by.push(event.pubkey)
     g.latest = Math.max(g.latest, event.created_at); g.fresh ||= event.created_at > seenAt
     groups.set(id, g)
