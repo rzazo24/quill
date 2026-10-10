@@ -139,6 +139,7 @@ button.icon { display: inline-grid; place-items: center; min-height: var(--ctl-h
 .sign.hint-only { background: none; border: 0; padding: 0 }
 
 /* what you already did to a note: the reaction you gave is lit, the reply shows a tick */
+.actions .more-reactions { display: contents } .actions .more-reactions-list { display: none } .actions .more-reactions.open .more-reactions-list { display: contents } .actions .more-toggle { color: var(--muted); font-size: 1.15rem } .actions .more-reactions.open .more-toggle { color: var(--accent); border-color: var(--accent) }
 .actions button.react.on { background: rgba(45,212,191,.18); border-color: var(--accent) }
 .actions button.link.on { color: var(--accent); border-color: var(--accent); display: inline-flex; align-items: center; gap: 5px }
 

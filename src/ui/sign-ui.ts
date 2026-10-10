@@ -180,6 +180,15 @@ function renderResult(r: Published, relays: string[], hd: SignUiHandlers, v: Vie
 
 /** One-tap reactions under a note, only while a signer is connected. What the reader already did to the note is marked: the reactions given (also ones from other
  *  apps, with emoji this bar does not offer) and whether they replied. */
+const VISIBLE_REACTIONS = 3
+/** The other reactions, folded behind a "+" that opens them in the same row. */
+function moreReactions(chips: HTMLElement[], v: View): HTMLElement {
+  const box = h('span', { class: 'more-reactions' })
+  const toggle = h('button', { type: 'button', class: 'react more-toggle', 'aria-expanded': 'false', 'aria-label': t(v.lang, 'moreReactions'), title: t(v.lang, 'moreReactions'), onClick: () => { const open = box.classList.toggle('open'); toggle.setAttribute('aria-expanded', String(open)) } }, '+')
+  box.append(toggle, h('span', { class: 'more-reactions-list' }, ...chips))
+  return box
+}
+
 export function reactionBar(target: NostrEvent, onReact: (emoji: string) => void, onReply: () => void, v: View, mine: Mine = { reactions: new Set(), replied: false, reposted: false }, onShare?: () => void): HTMLElement {
   const offered = REACTIONS.map((e) => normReaction(e))
   const extra = [...mine.reactions].filter((c) => !offered.includes(c)) // given from elsewhere, e.g. 🔥: shown too, so the bar tells the truth
@@ -187,11 +196,15 @@ export function reactionBar(target: NostrEvent, onReact: (emoji: string) => void
     const given = mine.reactions.has(normReaction(content))
     return h('button', { type: 'button', class: given ? 'react on' : 'react', 'aria-pressed': String(given), 'aria-label': given ? t(v.lang, 'reactedWith', { emoji: label }) : `${t(v.lang, 'react')} ${label}`, title: given ? t(v.lang, 'reactedWith', { emoji: label }) : t(v.lang, 'react'), onClick: () => onReact(content) }, label)
   }
+  // three reactions are always at hand; the rest wait behind a "+" next to them. One you have already given is always shown (lit), so the bar tells the truth
+  const all: [string, string][] = [...REACTIONS.map((e): [string, string] => [e, e === '+' ? '👍' : e]), ...extra.map((c): [string, string] => [c, c])]
+  const given = (c: string) => mine.reactions.has(normReaction(c))
+  const shown = all.filter(([c], i) => i < VISIBLE_REACTIONS || given(c)), folded = all.filter(([c], i) => i >= VISIBLE_REACTIONS && !given(c))
   return h('div', { class: 'actions' },
     h('button', { type: 'button', class: mine.replied ? 'link on' : 'link', onClick: onReply }, ...(mine.replied ? [icon('check', 14), t(v.lang, 'replied')] : [t(v.lang, 'reply')])),
     // sharing: only for notes that can be (a text note the filter shows); lit when you already shared it
     onShare ? h('button', { type: 'button', class: mine.reposted ? 'react share on' : 'react share', 'aria-pressed': String(mine.reposted), 'aria-label': t(v.lang, mine.reposted ? 'sharedByYou' : 'share'), title: t(v.lang, mine.reposted ? 'sharedByYou' : 'share'), onClick: onShare }, icon('repost', 16)) : null,
-    ...REACTIONS.map((e) => chip(e, e === '+' ? '👍' : e)),
-    ...extra.map((c) => chip(c, c)),
+    ...shown.map(([c, label]) => chip(c, label)),
+    folded.length ? moreReactions(folded.map(([c, label]) => chip(c, label)), v) : null,
   )
 }
