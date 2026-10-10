@@ -17,7 +17,7 @@ import { noteId, noteLink } from '../core/compose.js'
 import type { ThreadNode } from '../data/feed.js'
 import { ago, reason, t, tallyLabel, type Lang } from './i18n.js'
 
-export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
+export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** The relays put in a copied id/link as places to look for the note. */ hints?: readonly string[]; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
 
 export const nameOf = (v: View, pubkey: string): string => v.names.get(pubkey) ?? shortNpub(pubkey)
 
@@ -70,7 +70,7 @@ function moreMenu(event: Judged['event'], v: View): HTMLElement | null {
   const box = h('span', { class: 'more-menu' })
   // the answer is on the choice itself (the page's message bar only exists with a signer): it says "Copied" for a moment, then the menu closes
   const choice = (label: string, text: () => string) => { const b = h('button', { type: 'button', role: 'menuitem', onClick: () => { copy(text()); b.textContent = t(v.lang, 'copied'); setTimeout(() => { close(); b.textContent = label }, 900) } }, label); return b }
-  const list = h('span', { class: 'more-list', role: 'menu' }, choice(t(v.lang, 'copyNoteId'), () => noteId(event)), choice(t(v.lang, 'copyNoteLink'), () => noteLink(event)))
+  const list = h('span', { class: 'more-list', role: 'menu' }, choice(t(v.lang, 'copyNoteId'), () => noteId(event, v.hints)), choice(t(v.lang, 'copyNoteLink'), () => noteLink(event, v.hints)))
   const toggle = h('button', { type: 'button', class: 'more-btn', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': t(v.lang, 'more'), title: t(v.lang, 'more'), onClick: () => (box.classList.contains('open') ? close() : open()) }, icon('more', 22))
   const away = (e: Event) => { if (!box.contains(e.target as Node)) close() }
   const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }

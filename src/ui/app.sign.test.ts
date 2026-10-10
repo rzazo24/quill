@@ -429,7 +429,7 @@ describe('sharing a note', () => {
     const copied: string[] = []; const a = boot({ events: events(), copied }); await tick(100)
     const menu = a.root.querySelector('.more-menu')!; const id = (a.root.querySelector('article.note') as HTMLElement).dataset.id!
     expect(menu.classList.contains('open')).toBe(false); (menu.querySelector('.more-btn') as HTMLElement).click(); expect(menu.classList.contains('open')).toBe(true)
-    await click(a.root, 'Copy note ID'); expect(copied).toEqual([nip19.noteEncode(id)]); expect(menu.textContent).toContain('Copied'); await tick(1000); expect(menu.classList.contains('open')).toBe(false); expect(menu.textContent).toContain('Copy note ID')
+    await click(a.root, 'Copy note ID'); expect(copied[0]).toMatch(/^nevent1/); expect(nip19.decode(copied[0]!).data).toMatchObject({ id, relays: ['wss://r1.example', 'wss://r2.example'] }); expect(menu.textContent).toContain('Copied'); await tick(1000); expect(menu.classList.contains('open')).toBe(false); expect(menu.textContent).toContain('Copy note ID')
     ;(menu.querySelector('.more-btn') as HTMLElement).click(); await click(a.root, 'Copy note link'); expect(copied[1]).toMatch(/^https:\/\/njump\.me\/nevent1/); expect((nip19.decode(copied[1]!.split('/').pop()!).data as { id: string }).id).toBe(id)
   })
   it('the menu closes on a tap anywhere else and on Escape', async () => {
