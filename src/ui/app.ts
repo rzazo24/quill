@@ -447,8 +447,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
 
   const sayPipelineError = (e: unknown): void => {
     if (e instanceof PipelineError && e.code === 'cancelled') say('info', t(lang, 'cancelledSigning'))
-    else if (e instanceof PipelineError) say('error', t(lang, e.code === 'rate' ? 'e_rate' : e.code === 'no-signer' ? 'e_no_signer' : /did not answer within/.test(e.message) ? 'e_asleep' : 'e_not_signed', { why: e.message }))
-    else say('error', t(lang, 'e_not_signed', { why: e instanceof Error ? e.message : String(e) }))
+    else if (e instanceof PipelineError) say('error', t(lang, e.code === 'rate' ? 'e_rate' : e.code === 'no-signer' ? 'e_no_signer' : /did not answer within/.test(e.message) ? 'e_asleep' : 'e_not_signed', { why: e.message.trim() || t(lang, 'noReason') }))
+    else say('error', t(lang, 'e_not_signed', { why: (e instanceof Error ? e.message : String(e)).trim() || t(lang, 'noReason') }))
   }
 
   async function send(template: Template, opts: { followBase?: NostrEvent } = {}): Promise<boolean> {

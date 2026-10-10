@@ -277,6 +277,10 @@ describe('writing a reply', () => {
     await click(a.root, 'Cancel'); await tick(30)
     expect(a.text()).toContain('Cancelled. Nothing was published.'); expect(a.pub.sent).toEqual([]); expect(a.root.querySelector('pre.preview')).not.toBeNull()
   })
+  it('a rejection with no reason says so and what to check, instead of a blank', async () => {
+    const a = await toReview(fakeSigner({ signError: ' ' })); await click(a.root, 'Publish'); await tick(40)
+    expect(a.text()).toContain('Clave did not sign: it gave no reason.'); expect(a.text()).toContain('follow lists'); expect(a.text()).toContain('Nothing was published'); expect(a.pub.sent).toEqual([])
+  })
   it('a rejection in Clave publishes nothing', async () => {
     const a = await toReview(fakeSigner({ signError: 'user rejected the request' })); await click(a.root, 'Publish'); await tick(40)
     expect(a.text()).toMatch(/Clave did not sign: user rejected the request. Nothing was published/); expect(a.pub.sent).toEqual([])
