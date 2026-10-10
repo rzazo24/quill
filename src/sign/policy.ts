@@ -2,18 +2,20 @@
 // so that even a signer set to approve everything is only ever asked for notes, reactions, reposts of a real note and the reader's relay list, in the shapes Quill builds itself.
 import { isReactionContent } from '../core/compose.js'
 import { nip19 } from 'nostr-tools'
+import { followChange, FOLLOW_LIST_KIND } from '../core/follow.js'
 import { checkRepost, REPOST_KIND, type RepostProblem } from '../core/repost.js'
+import type { Event } from 'nostr-tools'
 import { MAX_RELAYS, normalizeRelay } from '../net/relays.js'
 
 /** NIP-65: the list of relays a person writes to and reads from. */
 export const RELAY_LIST_KIND = 10002
-export const ALLOWED_KINDS = [1, REPOST_KIND, 7, RELAY_LIST_KIND] as const
+export const ALLOWED_KINDS = [1, FOLLOW_LIST_KIND, REPOST_KIND, 7, RELAY_LIST_KIND] as const
 export const MAX_NOTE_CHARS = 1000
 export const MAX_SIGNATURES_PER_HOUR = 20
 
 export interface Template { kind: number; content: string; tags: string[][]; created_at: number }
 
-export type Problem = 'kind' | 'empty' | 'too-long' | 'reaction' | 'tags' | 'reaction-target' | 'relay-list' | 'quote' | RepostProblem
+export type Problem = 'kind' | 'empty' | 'too-long' | 'reaction' | 'tags' | 'reaction-target' | 'relay-list' | 'quote' | 'follow' | RepostProblem
 
 const TAG_NAMES = new Set(['e', 'p', 't', 'k', 'a', 'q'])
 const HEX64 = /^[0-9a-f]{64}$/
@@ -31,9 +33,13 @@ function checkQuote(t: Template): boolean {
   return t.content.replace(/nostr:(nevent1|note1)[a-z0-9]+/g, '').trim() !== '' // a comment of its own: a quote with none is just a share
 }
 
+/** What a check can need besides the template: the reader's follow list a follow-list change was built from. */
+export interface CheckContext { followBase?: Event }
+
 /** Null when the template is fine, otherwise why not. */
-export function checkTemplate(t: Template): Problem | null {
+export function checkTemplate(t: Template, ctx: CheckContext = {}): Problem | null {
   if (!(ALLOWED_KINDS as readonly number[]).includes(t.kind)) return 'kind'
+  if (t.kind === FOLLOW_LIST_KIND) return ctx.followBase && followChange(ctx.followBase, t) ? null : 'follow' // only ONE account more or less than the list it was built from
   if (t.kind === REPOST_KIND) return checkRepost(t) // the copy of a real note and exactly its pointer
   if (t.kind === RELAY_LIST_KIND) { // exactly `["r", "wss://…"]` per relay, each one valid and tidy, no repeats, nothing else
     const urls = t.tags.map((x) => (x.length === 2 && x[0] === 'r' ? x[1]! : ''))

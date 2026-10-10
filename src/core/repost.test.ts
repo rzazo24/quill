@@ -38,5 +38,5 @@ describe('everything else is refused', () => {
   bad('an untidy relay hint', { ...good(), tags: [['e', n.id, 'wss://Relay.Example.com/'], ['p', n.pubkey]] })
   bad('a hint with more fields', { ...good(), tags: [['e', n.id, hint, 'extra'], ['p', n.pubkey]] })
   bad('a copy that is too big', { ...good(), content: JSON.stringify(note('x'.repeat(MAX_REPOST_JSON))) }, 'repost-too-long')
-  it('other kinds are still refused (the repost kind is the only new one, and the generic repost 16 is not)', () => { for (const kind of [5, 16, 3, 4, 30023]) expect(checkTemplate({ kind, content: JSON.stringify(n), tags: good().tags, created_at: 1 }), String(kind)).toBe('kind') })
+  it('other kinds are still refused (the repost kind is the only new one, and the generic repost 16 is not)', () => { for (const kind of [5, 16, 4, 30023]) expect(checkTemplate({ kind, content: JSON.stringify(n), tags: good().tags, created_at: 1 }), String(kind)).toBe('kind') })
 })

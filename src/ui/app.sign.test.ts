@@ -498,3 +498,81 @@ describe('quoting a note', () => {
     const { a, sg } = await open(); await click(a.root, 'Quote with a comment'); await click(a.root, 'Cancel'); expect(a.root.querySelector('.sheet')).toBeNull(); expect(a.pub.sent).toEqual([]); expect(sg.log.filter((l) => l.startsWith('sign'))).toHaveLength(0)
   })
 })
+
+describe('following and unfollowing', () => {
+  const key = (n: number) => ('a' + n.toString(16).padStart(3, '0')).repeat(16)
+  const target = key(9), baseTags = (): string[][] => [['p', friend], ['p', key(1), 'wss://hint.example'], ['t', 'nostr']]
+  const myList = (tags = baseTags(), at = 1000) => ev(me, '{"old":"relays"}', { kind: 3, created_at: at, tags })
+  const prof = ev(target, JSON.stringify({ name: 'Quinn' }), { kind: 0, created_at: 5 })
+  /** A relay world that LEARNS what Quill publishes, like a real relay (so the check after publishing can see it). */
+  const world2 = (events: Event[]) => { const pub = publisherFake(); const real = pub.p.publish; pub.p.publish = async (e, o) => { if (e.kind === 3) { const i = events.findIndex((x) => x.kind === 3 && x.pubkey === e.pubkey); if (i >= 0) events.splice(i, 1); events.push(e) } return real(e, o) }; return pub }
+  const button = (a: ReturnType<typeof boot>, label: string) => [...a.root.querySelectorAll('.profile button')].find((b) => b.textContent === label) as HTMLButtonElement | undefined
+  const open = async (o: { events?: Event[]; stored?: Record<string, string>; signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; at?: string } = {}) => {
+    const events = o.events ?? [myList(), list(friend, 3, []), prof]; const sg = o.signer ?? fakeSigner(); const pub = o.pub ?? world2(events)
+    const a = boot({ events, signer: sg, pub, stored: o.stored }); await tick(100); await connectClave(a, sg); await a.go(o.at ?? `#/user/${target}`); await tick(250); return { a, sg, events, pub }
+  }
+  const signs = (sg: ReturnType<typeof fakeSigner>) => sg.log.filter((l) => l.startsWith('sign')).length
+
+  it('the button is there only with a signer connected, says Follow or Unfollow by what you do now, and never on your own page', async () => {
+    const out = boot({ events: [myList(), list(friend, 3, []), prof], signer: fakeSigner() }); await tick(100); await out.go(`#/user/${target}`); await tick(250); expect(button(out, 'Follow')).toBeUndefined()
+    const { a } = await open(); expect(button(a, 'Follow')).toBeDefined(); expect(button(a, 'Unfollow')).toBeUndefined()
+    await a.go(`#/user/${friend}`); await tick(250); expect(button(a, 'Unfollow')).toBeDefined(); await a.go(`#/user/${me}`); await tick(250); expect(button(a, 'Follow') ?? button(a, 'Unfollow')).toBeUndefined()
+  })
+  it('a tap reads the list and asks: exactly what changes (from N to N+1 accounts), that it is public, and nothing is signed yet; Cancel closes it', async () => {
+    const { a, sg } = await open(); button(a, 'Follow')!.click(); await tick(200)
+    const box = a.root.querySelector('.sheet .review')!; expect(box.querySelector('h2')!.textContent).toBe('Follow Quinn?'); expect(box.textContent).toContain('goes from 2 to 3 accounts'); expect(box.textContent).toContain('public')
+    expect(a.pub.sent).toEqual([]); expect(signs(sg)).toBe(0); await click(a.root, 'Cancel'); expect(a.root.querySelector('.sheet')).toBeNull(); expect(a.pub.sent).toEqual([])
+  })
+  it('confirming signs the list as it is on the relays with ONE account added at the end, keeps a backup of the old one, remembers the new list, checks the relays and says so', async () => {
+    const { a, sg } = await open(); button(a, 'Follow')!.click(); await tick(200); const base = myList(); await click(a.root.querySelector('.sheet')! as HTMLElement, 'Follow'); await tick(400)
+    expect(a.pub.sent).toHaveLength(1); const e = a.pub.sent[0]!.event
+    expect(e.kind).toBe(3); expect(e.tags).toEqual([...baseTags(), ['p', target]]); expect(e.content).toBe('{"old":"relays"}'); expect(e.created_at).toBeGreaterThan(base.created_at); expect(signs(sg)).toBe(1)
+    const backup = JSON.parse(a.mem.get(`followbackup:${me}`)!) as Event[]; expect(backup).toHaveLength(1); expect(backup[0]!.tags).toEqual(baseTags())
+    expect(JSON.parse(a.mem.get(`following:${me}`)!).sort()).toEqual([friend, key(1), target].sort()); expect(a.text()).toContain('Now following Quinn'); expect(button(a, 'Unfollow')).toBeDefined()
+  })
+  it('unfollowing removes only that account and keeps everything else of the list, hints included', async () => {
+    const { a } = await open({ events: [myList([...baseTags(), ['p', target, 'wss://x.example', 'Quinn']]), list(friend, 3, []), prof] }); await a.go(`#/user/${target}`); await tick(250)
+    button(a, 'Unfollow')!.click(); await tick(200); expect(a.root.querySelector('.sheet h2')!.textContent).toBe('Stop following Quinn?'); expect(a.root.querySelector('.sheet')!.textContent).toContain('goes from 3 to 2 accounts')
+    await click(a.root.querySelector('.sheet')! as HTMLElement, 'Unfollow'); await tick(400); expect(a.pub.sent[0]!.event.tags).toEqual(baseTags()); expect(a.text()).toContain('No longer following Quinn')
+  })
+  it('if the list changed while you were deciding, you see the new numbers and confirm again; the signature uses the NEW list, never the old one', async () => {
+    const { a, events } = await open(); button(a, 'Follow')!.click(); await tick(200)
+    events.splice(events.findIndex((x) => x.kind === 3 && x.pubkey === me), 1, myList([...baseTags(), ['p', key(5)]], 2000)) // another app followed somebody
+    await click(a.root.querySelector('.sheet')! as HTMLElement, 'Follow'); await tick(200)
+    expect(a.root.querySelector('.sheet .error')!.textContent).toContain('changed while you were deciding'); expect(a.root.querySelector('.sheet')!.textContent).toContain('goes from 3 to 4 accounts'); expect(a.pub.sent).toEqual([])
+    await click(a.root.querySelector('.sheet')! as HTMLElement, 'Follow'); await tick(400); expect(a.pub.sent[0]!.event.tags).toEqual([...baseTags(), ['p', key(5)], ['p', target]])
+  })
+  it('a list that turns out to be much shorter when read again right before signing is refused, and nothing is signed', async () => {
+    const tenFollows = (): string[][] => Array.from({ length: 10 }, (_, i) => ['p', key(200 + i)])
+    const { a, sg, events } = await open({ events: [myList(tenFollows()), list(friend, 3, []), prof] }); button(a, 'Follow')!.click(); await tick(200)
+    expect(a.root.querySelector('.sheet')!.textContent).toContain('goes from 10 to 11 accounts')
+    events.splice(events.findIndex((x) => x.kind === 3 && x.pubkey === me), 1, myList(tenFollows().slice(0, 2), 2000)) // a relay now answers with a stale, shorter list
+    await click(a.root.querySelector('.sheet')! as HTMLElement, 'Follow'); await tick(250)
+    expect(a.root.querySelector('.sheet h2')!.textContent).toBe('Quill will not change your follow list'); expect(a.pub.sent).toEqual([]); expect(signs(sg)).toBe(0)
+  })
+  it('no list of yours found: Quill refuses (it could erase the real one) and signs nothing', async () => {
+    const { a, sg } = await open({ events: [list(friend, 3, []), prof] }); button(a, 'Follow')!.click(); await tick(250)
+    expect(a.root.querySelector('.sheet h2')!.textContent).toBe('Quill will not change your follow list'); expect(a.root.querySelector('.sheet')!.textContent).toContain('No follow list of yours was found'); expect(a.root.querySelector('.sheet')!.textContent).not.toContain('Accept the current list')
+    expect(a.pub.sent).toEqual([]); expect(signs(sg)).toBe(0)
+  })
+  it('a list much shorter than the one Quill saw is refused; accepting the current list makes it the reference and goes on', async () => {
+    const seen = JSON.stringify(Array.from({ length: 100 }, (_, i) => key(100 + i)))
+    const { a, sg } = await open({ stored: { me, [`following:${me}`]: seen } }); button(a, 'Follow')!.click(); await tick(250)
+    const sheet = () => a.root.querySelector('.sheet')!; expect(sheet().textContent).toContain('has 2 accounts, but Quill had seen 100'); expect(a.pub.sent).toEqual([]); expect(signs(sg)).toBe(0)
+    await click(a.root, 'Accept the current list'); await tick(300); expect(sheet().querySelector('h2')!.textContent).toBe('Follow Quinn?'); expect(sheet().textContent).toContain('goes from 2 to 3 accounts')
+  })
+  it('a failed signature changes nothing: the list the reader is remembered to have, and the button, stay as they were', async () => {
+    const sg = fakeSigner({ signError: 'user rejected the request' }); const { a } = await open({ signer: sg }); const before = a.mem.get(`following:${me}`)
+    button(a, 'Follow')!.click(); await tick(200); await click(a.root.querySelector('.sheet')! as HTMLElement, 'Follow'); await tick(400)
+    expect(a.pub.sent).toEqual([]); expect(a.mem.get(`following:${me}`)).toBe(before); expect(button(a, 'Follow')).toBeDefined()
+  })
+  it('if the relays do not show the new list afterwards it says so instead of claiming success', async () => {
+    const events = [myList(), list(friend, 3, []), prof]; const pub = publisherFake() // a relay that never learns it
+    const { a } = await open({ events, pub }); button(a, 'Follow')!.click(); await tick(200); await click(a.root.querySelector('.sheet')! as HTMLElement, 'Follow'); await tick(400)
+    expect(a.pub.sent).toHaveLength(1); expect(a.text()).toContain('your relays do not show it yet')
+  })
+  it('a panel left open is forgotten when the signer disconnects', async () => {
+    const { a } = await open(); button(a, 'Follow')!.click(); await tick(200); expect(a.root.querySelector('.sheet .review')).not.toBeNull()
+    await a.go('#/me'); await tick(80); ;(a.root.querySelector('.signing-as button') as HTMLElement).click(); await tick(60); ;(a.root.querySelector('.confirm-disconnect button.danger') as HTMLElement).click(); await tick(100); expect(a.root.querySelector('.sheet')).toBeNull()
+  })
+})

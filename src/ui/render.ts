@@ -155,7 +155,8 @@ export function renderRepostGroups(groups: ReactionGroup[], v: View): HTMLElemen
 }
 
 /** The head of an account's page: who it is, as text. */
-export function renderProfileHead(info: ProfileInfo, relation: 'you' | 'follow' | 'muted' | 'none', v: View): HTMLElement {
+/** `follow`: the Follow / Unfollow button (only offered with a signer connected, never for yourself). */
+export function renderProfileHead(info: ProfileInfo, relation: 'you' | 'follow' | 'muted' | 'none', v: View, follow?: { following: boolean; busy: boolean; onToggle: () => void }): HTMLElement {
   const rel = relation === 'you' ? 'profileYou' : relation === 'follow' ? 'profileFollowed' : relation === 'muted' ? 'profileMuted' : 'profileNotFollowed'
   const via = info.via.length > 1 ? t(v.lang, 'followedByMany', { who: nameOf(v, info.via[0]!), n: info.via.length - 1 }) : info.via.length === 1 ? t(v.lang, 'followedByOne', { who: nameOf(v, info.via[0]!) }) : null
   return h('section', { class: 'profile card' },
@@ -164,7 +165,8 @@ export function renderProfileHead(info: ProfileInfo, relation: 'you' | 'follow' 
     info.about ? h('div', { class: 'about' }, renderContent(info.about, v)) : null,
     info.website ? h('p', { class: 'meta' }, info.website) : null,
     h('p', { class: 'meta relation' }, [t(v.lang, rel), info.following === null ? null : t(v.lang, 'profileFollowing', { n: info.following })].filter(Boolean).join(' · ')),
-    via ? h('p', { class: 'meta' }, via) : null)
+    via ? h('p', { class: 'meta' }, via) : null,
+    follow ? h('p', { class: 'buttons' }, h('button', { type: 'button', class: follow.following ? '' : 'primary', ...(follow.busy ? { disabled: true } : {}), onClick: follow.onToggle }, t(v.lang, follow.following ? 'unfollowButton' : 'followButton'))) : null)
 }
 
 /** Notes | Replies on an account's page. */

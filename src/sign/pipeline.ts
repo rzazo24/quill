@@ -18,7 +18,8 @@ export class PipelineError extends Error {
   constructor(readonly code: FailCode, message: string) { super(message) }
 }
 
-export interface PipelineDeps { signer: SignerApi; publisher: Publisher; kv?: KV; now?: () => number; signTimeoutMs?: number; signal?: AbortSignal }
+/** `followBase`: the reader's follow list a follow-list change was built from (the policy checks the change against it). */
+export interface PipelineDeps { signer: SignerApi; publisher: Publisher; kv?: KV; now?: () => number; signTimeoutMs?: number; signal?: AbortSignal; followBase?: Event }
 export interface Published { event: Event; outcomes: Record<string, Outcome> }
 
 const stampsOf = (kv: KV | undefined): number[] => { try { const v = JSON.parse(safeGet(kv, 'signed') ?? '[]') as unknown; return Array.isArray(v) ? v.filter((x): x is number => typeof x === 'number') : [] } catch { return [] } }
@@ -31,7 +32,7 @@ export async function signAndPublish(d: PipelineDeps, t: Template, onStep: (s: S
   // preliminary ping would never find out; a sleeping one just leaves the request waiting (with a Cancel button) until it is opened or the time runs out.
   onStep('waiting')
   let event: Event
-  try { ({ event } = await d.signer.sign(t, d.signTimeoutMs ?? SIGN_WAIT_MS, d.signal)) } catch (e) {
+  try { ({ event } = await d.signer.sign(t, d.signTimeoutMs ?? SIGN_WAIT_MS, d.signal, { followBase: d.followBase })) } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     throw new PipelineError(d.signal?.aborted || msg === 'cancelled' ? 'cancelled' : 'not-signed', msg)
   }

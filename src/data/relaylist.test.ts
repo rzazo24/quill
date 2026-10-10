@@ -34,5 +34,5 @@ describe('the policy for signing a relay list', () => {
       t([['r', 'wss://A.example.com']]), t([['r', 'wss://a.example.com/']]), t([['r', 'ws://a.example.com']]), t([['r', 'wss://127.0.0.1']]), t([]), t(Array.from({ length: 11 }, (_, i) => ['r', `wss://r${i}.example.com`])), t([['r']])]
     for (const x of bad) expect(checkTemplate(x), JSON.stringify(x)).toBe('relay-list')
   })
-  it('other kinds are still refused', () => { for (const k of [0, 3, 5, 30023]) expect(checkTemplate(t([['r', 'wss://a.example.com']], '', k)), String(k)).toBe('kind') })
+  it('other kinds are still refused', () => { for (const k of [0, 5, 30023]) expect(checkTemplate(t([['r', 'wss://a.example.com']], '', k)), String(k)).toBe('kind') })
 })

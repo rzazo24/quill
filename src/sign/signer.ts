@@ -1,6 +1,6 @@
 // The NIP-46 session with the user's remote signer (Clave, nsec.app, a bunker). Quill never sees the user's private key: it holds only an
 // app key that identifies it to the signer, saved in this browser, and asks the signer to sign. Everything that comes back is checked.
-import { generateSecretKey, getPublicKey, verifyEvent, type VerifiedEvent } from 'nostr-tools'
+import { generateSecretKey, getPublicKey, verifyEvent, type Event as NostrEvent, type VerifiedEvent } from 'nostr-tools'
 import { BunkerSigner, createNostrConnectURI, type BunkerPointer } from 'nostr-tools/nip46'
 import { SimplePool } from 'nostr-tools/pool'
 import { bytesToHex, hexToBytes } from 'nostr-tools/utils'
@@ -191,10 +191,12 @@ export class Signer {
    * Asks the signer to sign `t`, and checks what comes back: a valid signature, by the connected key, and exactly the kind, content and tags that
    * were asked for (a compromised or confused signer could return something else). Also refuses anything Quill's own policy does not allow.
    */
-  async sign(t: Template, timeoutMs: number, signal?: AbortSignal): Promise<{ event: VerifiedEvent; ms: number }> {
-    const problem = checkTemplate(t)
+  async sign(t: Template, timeoutMs: number, signal?: AbortSignal, opts: { followBase?: NostrEvent } = {}): Promise<{ event: VerifiedEvent; ms: number }> {
+    const problem = checkTemplate(t, opts)
     if (problem) throw new Error(`Quill will not sign this (${problem})`)
     if (this.state !== 'connected' || !this.bunker || !this.pubkey) throw new Error('no signer is connected')
+    // a follow-list change is built from the reader's OWN list, validly signed: anything else is refused whatever the template says
+    if (t.kind === 3 && !(opts.followBase && opts.followBase.pubkey === this.pubkey && verifyEvent(opts.followBase))) throw new Error('Quill will not sign this (follow)')
     const t0 = this.now()
     const asked = this.bunker.signEvent(t)
     // A user who cancels stops waiting; the request itself cannot be recalled, but its answer is ignored and nothing is published.

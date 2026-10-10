@@ -1,6 +1,6 @@
 // The signer against a REAL relay (the khatru build, RELAY_BIN) and a pretend Clave that speaks the real NIP-46 protocol. Skipped without the binary.
 import { useWebSocketImplementation } from 'nostr-tools/pool'
-import { generateSecretKey, getPublicKey, type Event } from 'nostr-tools'
+import { finalizeEvent, generateSecretKey, getPublicKey, type Event } from 'nostr-tools'
 import WebSocket from 'ws'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { FakeSigner } from '../../test/support/fake-signer.js'
@@ -8,6 +8,7 @@ import { relayBinary, startRelay, type TestRelay } from '../../test/support/rela
 import { poolPublisher, failedRelays } from '../net/publisher.js'
 import { accept } from '../net/fetcher.js'
 import { Signer } from './signer.js'
+import { followTemplate } from '../core/follow.js'
 
 useWebSocketImplementation(WebSocket)
 const bin = relayBinary()
@@ -42,10 +43,10 @@ describe.skipIf(!bin)('Signer with a pretend Clave through a real relay', () => 
     expect(JSON.stringify([...store.m.values()])).not.toContain(Buffer.from(fake.userSk).toString('hex')) // the user's private key never reaches the app
   }, 30_000)
 
-  it('requests ask for sign_event for notes (1), reposts (6), reactions (7) and the relay list (10002) only', async () => {
+  it('requests ask for sign_event for notes (1), the follow list (3), reposts (6), reactions (7) and the relay list (10002) only', async () => {
     const store = mem(); const signer = new Signer({ kv: store.kv, relays: [relay.url] }); signers.push(signer)
     const u = new URL(signer.startConnect().uri)
-    expect(u.searchParams.get('perms')).toBe('get_public_key,sign_event:1,sign_event:6,sign_event:7,sign_event:10002'); expect(u.searchParams.get('name')).toBe('Quill'); expect(u.searchParams.has('url')).toBe(false)
+    expect(u.searchParams.get('perms')).toBe('get_public_key,sign_event:1,sign_event:3,sign_event:6,sign_event:7,sign_event:10002'); expect(u.searchParams.get('name')).toBe('Quill'); expect(u.searchParams.has('url')).toBe(false)
     const withUrl = new URL(new Signer({ kv: mem().kv, relays: [relay.url], appUrl: 'https://quill.example' }).startConnect().uri)
     expect(withUrl.searchParams.get('url')).toBe('https://quill.example')
     expect(new URL(new Signer({ kv: mem().kv, relays: [relay.url], appUrl: 'http://insecure.example' }).startConnect().uri).searchParams.has('url')).toBe(false)
@@ -67,6 +68,20 @@ describe.skipIf(!bin)('Signer with a pretend Clave through a real relay', () => 
     for (const bad of [{ ...note(), kind: 5 }, { ...note(), kind: 3 }, note('  '), { ...note(), tags: [['p', 'x'], ['weird', 'y']] }]) await expect(signer.sign(bad, 2000)).rejects.toThrow(/will not sign/)
     expect(fake.signRequests).toBe(0)
   }, 30_000)
+
+  it('a follow-list change is signed only when it comes with the reader\'s OWN validly signed list it was built from, and with exactly one account more or less', async () => {
+    const { signer, fake } = await connected(); const base = finalizeEvent({ kind: 3, created_at: NOW() - 100, tags: [['p', 'a'.repeat(64)], ['p', 'b'.repeat(64)]], content: '' }, fake.userSk)
+    const add = followTemplate(base, 'c'.repeat(64), 'follow', NOW())!
+    await expect(signer.sign(add, 5000)).rejects.toThrow(/follow/) // no base: refused before the signer is asked
+    expect(fake.signRequests).toBe(0)
+    const stranger = finalizeEvent({ kind: 3, created_at: NOW() - 100, tags: [['p', 'a'.repeat(64)], ['p', 'b'.repeat(64)]], content: '' }, generateSecretKey()) // somebody else's list
+    await expect(signer.sign(add, 5000, undefined, { followBase: stranger })).rejects.toThrow(/follow/)
+    await expect(signer.sign(add, 5000, undefined, { followBase: JSON.parse(JSON.stringify({ ...base, sig: '0'.repeat(128) })) as Event })).rejects.toThrow(/follow/) // not validly signed
+    await expect(signer.sign({ ...add, tags: [] }, 5000, undefined, { followBase: base })).rejects.toThrow(/follow/) // a wiped list
+    await expect(signer.sign({ ...add, tags: [['p', 'a'.repeat(64)], ['p', 'c'.repeat(64)]] }, 5000, undefined, { followBase: base })).rejects.toThrow(/follow/) // one removed AND one added
+    expect(fake.signRequests).toBe(0) // none of that reached the signer
+    const { event } = await signer.sign(add, 5000, undefined, { followBase: base }); expect(event.kind).toBe(3); expect(event.tags).toEqual([...base.tags, ['p', 'c'.repeat(64)]]); expect(fake.signRequests).toBe(1)
+  }, 40_000)
 
   it('discards a signer that alters the content or signs with another key', async () => {
     const t = await connected({ tamper: true })

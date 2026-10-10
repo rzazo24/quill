@@ -9,6 +9,8 @@ import { isReply } from '../core/thread.js'
 import { judgeAll, tally, type Judged, type Settings } from '../core/verdict.js'
 import { loadNetwork } from '../data/network.js'
 import { loadProfile, type ProfileInfo } from '../data/profile.js'
+import { followPubkeys, followTemplate, type FollowAction } from '../core/follow.js'
+import { addBackup, checkBase, loadFollowList, nextKnown, parseBackups } from '../data/followlist.js'
 import { loadFollowing, loadMentions, loadMine, loadNames, loadNote, loadThread, type Thread, type ThreadNode } from '../data/feed.js'
 import { Engagement, loadEngagement, normReaction } from '../data/engaged.js'
 import { countNew, groupReactions, groupReposts, loadActivity, mergeKnown, newFollowers, parseKnown, type Activity } from '../data/activity.js'
@@ -21,7 +23,7 @@ import { h } from './dom.js'
 import { logo, icon } from './icons.js'
 import { detectLang, problemText, t, type Key, type Lang } from './i18n.js'
 import { renderProfileHead, renderProfileMode, renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
-import { reactionBar, renderSignArea, type Composer, type Flash, type Review } from './sign-ui.js'
+import { reactionBar, renderSignArea, type Composer, type Flash, type FollowPanel, type Review } from './sign-ui.js'
 import { installHint, type Env } from './install.js'
 import { parseAvatars, parseFeedMode, parseFont, parseLang, parseReposts, parseSettings, parseWords, safeGet, safeSet, type AvatarStyle, type FeedMode, type FontSize, type KV } from './store.js'
 import { addRelay, parseRelays, removeRelay } from '../net/relays.js'
@@ -79,6 +81,13 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let published: string[] | null | undefined // the relay list on Nostr: undefined = not read (yet), null = none
   let confirmingList = false
   let confirmingDisconnect = false
+  // following: the list as the reader was seen to have it (a new list is refused if the one found lacks many of these), and the panel in progress
+  const followingKey = () => `following:${me}`
+  let knownFollowing: Set<string> | null = null
+  const loadKnownFollowing = () => { knownFollowing ??= parseKnown(safeGet(kv, followingKey())); return knownFollowing }
+  const saveKnownFollowing = (s: Set<string>) => { knownFollowing = s; safeSet(kv, followingKey(), JSON.stringify([...s])) }
+  type FollowFlow = { stage: 'checking'; pubkey: string; action: FollowAction } | { stage: 'confirm'; pubkey: string; action: FollowAction; base: NostrEvent; changed: boolean } | { stage: 'refuse'; pubkey: string; action: FollowAction; why: 'none' | 'shrunk'; known: number; found: number; base: NostrEvent | null }
+  let followFlow: FollowFlow | null = null
   let shareConfirm: NostrEvent | null = null // the note about to be shared (sharing asks first: it is public)
   const shareable = new Set<string>() // ids of the notes whose bar offers Share (visible to the filter, shareable)
   const helpOpen = new Set<string>(['about']) // which Help sections are unfolded
@@ -141,7 +150,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const followersSeen = new Set<string>() // everybody seen following you since this page opened (the known ones are in `knownFollowers`)
   /** How many accounts have been seen following the reader: only a lower bound (each relay knows part of them), and it only grows. Null while nothing has been looked at yet. */
   const followerCount = (): number | null => { const k = loadKnown(); return k === null && followersSeen.size === 0 ? null : new Set([...(k ?? []), ...followersSeen]).size }
-  const forgetAccount = () => { shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
+  const forgetAccount = () => { followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
   const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
@@ -187,6 +196,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     } catch { status = null; return false }
     if (me !== who) return false // signed out or switched while loading
     session = got.s; engagement = got.e; published = got.p
+    saveKnownFollowing(nextKnown(loadKnownFollowing(), got.s.follows)) // what the reader follows, as far as it is trusted
     return true
   }
 
@@ -283,6 +293,16 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   function sourceCard(source: Judged | null): HTMLElement | null {
     return source ? h('section', { class: 'quoted-from' }, h('p', { class: 'meta' }, t(lang, 'quotedFrom')), renderJudged(source, view())) : null
   }
+  /** What the sign area shows of a follow / unfollow in progress. */
+  function followPanel(): FollowPanel | null {
+    const f = followFlow
+    if (!f) return null
+    if (f.stage === 'checking') return { stage: 'checking' }
+    if (f.stage === 'refuse') return { stage: 'refuse', why: f.why, known: f.known, found: f.found }
+    const before = followPubkeys(f.base).length
+    return { stage: 'confirm', who: nameOf(view(), f.pubkey), action: f.action, before, after: before + (f.action === 'follow' ? 1 : -1), changed: f.changed }
+  }
+
   /** "Back": to where you came from (the browser's history), or to the start when there is none. */
   const backLink = () => h('a', { class: 'back', href: '#/', onClick: (e: Event) => { e.preventDefault(); if (deps.goBack) deps.goBack(); else deps.setHash('') } }, icon('back', 16), t(lang, 'back'))
 
@@ -290,7 +310,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   function profileView(info: ProfileInfo, notes: Judged[]): HTMLElement {
     const relation = info.pubkey === me ? 'you' : session!.muted.has(info.pubkey) ? 'muted' : session!.follows.has(info.pubkey) ? 'follow' : 'none'
     const shown = notes.filter((n) => isReply(n.event) === (profileMode === 'replies'))
-    return h('div', { class: 'stack' }, backLink(), renderProfileHead(info, relation, view()), renderProfileMode(profileMode, (m) => { profileMode = m; void load() }, view()),
+    const canFollow = signer?.state === 'connected' && info.pubkey !== me
+    return h('div', { class: 'stack' }, backLink(), renderProfileHead(info, relation, view(), canFollow ? { following: relation === 'follow', busy: !!followFlow || busy, onToggle: () => void startFollow(info.pubkey, relation === 'follow' ? 'unfollow' : 'follow') } : undefined), renderProfileMode(profileMode, (m) => { profileMode = m; void load() }, view()),
       shown.length ? renderSummary(tally(shown), view(), toggleSettings) : null, shown.length ? renderList(shown, view()) : h('p', { class: 'empty' }, t(lang, 'profileEmpty')))
   }
 
@@ -404,7 +425,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     else say('error', t(lang, 'e_not_signed', { why: e instanceof Error ? e.message : String(e) }))
   }
 
-  async function send(template: Template): Promise<boolean> {
+  async function send(template: Template, opts: { followBase?: NostrEvent } = {}): Promise<boolean> {
     if (!signer || !publisher) return false
     // Still waiting for the signer to answer an earlier tap (e.g. Clave was closed): a new tap replaces it, so opening Clave and tapping again works.
     // Once the signature is made and the event is being sent, a second tap is ignored (no double posts).
@@ -412,7 +433,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     busy = true; flash = null; result = null; const mine = signing = new AbortController(); draw()
     current = (async () => {
       try {
-        result = await signAndPublish({ signer, publisher, kv, now: deps.nowMs, signal: mine.signal }, template, (s) => { step = s; draw() })
+        result = await signAndPublish({ signer, publisher, kv, now: deps.nowMs, signal: mine.signal, followBase: opts.followBase }, template, (s) => { step = s; draw() })
         step = null; fetcher.clear()
         return true
       } catch (e) { step = null; if (!(mine.signal.aborted && signing !== mine)) sayPipelineError(e); return false } finally { if (signing === mine) { busy = false; signing = null } draw() }
@@ -461,6 +482,55 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     }
     draw()
   }
+  const sameFollows = (a: ReadonlySet<string>, b: ReadonlySet<string>) => a.size === b.size && [...a].every((k) => b.has(k))
+  /** Following or unfollowing: read the newest list NOW, check it looks like the list the reader has been seen to have, and show exactly what will change. */
+  async function startFollow(pubkey: string, action: FollowAction): Promise<void> {
+    if (!signer || signer.state !== 'connected' || busy || !me || pubkey === me) return
+    followFlow = { stage: 'checking', pubkey, action }; draw()
+    fetcher.clear()
+    let base: NostrEvent | null = null
+    try { base = await loadFollowList(fetcher, me) } catch { base = null }
+    if (!followFlow || followFlow.stage !== 'checking') return // cancelled meanwhile
+    const verdict = checkBase(base, loadKnownFollowing())
+    if (!verdict.ok) { followFlow = { stage: 'refuse', pubkey, action, why: verdict.why, known: verdict.known, found: verdict.found, base }; return draw() }
+    if (!followTemplate(base!, pubkey, action, nowSec())) { followFlow = null; say('info', t(lang, action === 'follow' ? 'profileFollowed' : 'profileNotFollowed')); return draw() } // already so
+    followFlow = { stage: 'confirm', pubkey, action, base: base!, changed: false }; draw()
+  }
+  /** The reader says the list they have now is the right one (they removed many accounts on purpose): it becomes the reference, and the change goes on. */
+  function acceptList(): void {
+    const f = followFlow
+    if (!f || f.stage !== 'refuse' || !f.base) return
+    saveKnownFollowing(new Set(followPubkeys(f.base))); void startFollow(f.pubkey, f.action)
+  }
+  async function confirmFollow(): Promise<void> {
+    const f = followFlow
+    if (!f || f.stage !== 'confirm' || !me || !signer || signer.state !== 'connected') return
+    // the list is read AGAIN right before signing: if it changed meanwhile (another app), the reader sees the new numbers and confirms again
+    fetcher.clear()
+    let fresh: NostrEvent | null = null
+    try { fresh = await loadFollowList(fetcher, me) } catch { fresh = null }
+    if (!followFlow || followFlow.stage !== 'confirm') return
+    const verdict = checkBase(fresh, loadKnownFollowing())
+    if (!verdict.ok) { followFlow = { stage: 'refuse', pubkey: f.pubkey, action: f.action, why: verdict.why, known: verdict.known, found: verdict.found, base: fresh }; return draw() }
+    if (fresh!.id !== f.base.id) { followFlow = { ...f, base: fresh!, changed: true }; return draw() }
+    const template = followTemplate(fresh!, f.pubkey, f.action, nowSec())
+    const problem = template ? checkTemplate(template, { followBase: fresh! }) : 'follow'
+    if (!template || problem) { followFlow = null; say('error', problemText(lang, problem ?? 'follow')); return draw() }
+    followFlow = null
+    safeSet(kv, `followbackup:${me}`, JSON.stringify(addBackup(parseBackups(safeGet(kv, `followbackup:${me}`)), fresh!))) // a copy of the list as it was, kept on this device
+    if (await send(template, { followBase: fresh! })) {
+      const next = new Set(followPubkeys({ tags: template.tags })); session!.follows = next; saveKnownFollowing(next)
+      const name = nameOf(view(), f.pubkey)
+      let confirmed = false
+      try { fetcher.clear(); const after = await loadFollowList(fetcher, me); confirmed = !!after && sameFollows(new Set(followPubkeys(after)), next) } catch { confirmed = false }
+      if (result && !failedRelays(result.outcomes).length) result = null
+      say(confirmed ? 'info' : 'error', confirmed ? t(lang, f.action === 'follow' ? 'followDone' : 'unfollowDone', { who: name }) : t(lang, 'followUnconfirmed'))
+      draw(); void load() // the feed and the counts follow the new list
+      return
+    }
+    draw()
+  }
+
   /** Sharing is public: first a confirmation that shows the note, then the signature. */
   function startShare(target: NostrEvent): void {
     if (engagement.of(target.id).reposted) { say('info', t(lang, 'alreadyShared')); return draw() }
@@ -504,15 +574,16 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const route = parseRoute(deps.location.hash)
     if (confirmingDisconnect && (route.name !== 'me' || signer?.state !== 'connected')) confirmingDisconnect = false // a question left behind is forgotten
     if (shareConfirm && signer?.state !== 'connected') shareConfirm = null
+    if (followFlow && signer?.state !== 'connected') followFlow = null
     const tab = (name: 'following' | 'mentions' | 'me', href: string) => h('a', { href, class: route.name === name ? 'tab on' : 'tab', 'data-tab': name, ...(route.name === name ? { 'aria-current': 'page' } : {}), onClick: (e: Event) => { if (route.name === name) { e.preventDefault(); refresh() } } }, icon(name === 'following' ? 'people' : name === 'mentions' ? 'at' : 'person', 18), t(lang, name), name === 'mentions' && badge > 0 ? h('span', { class: 'badge', role: 'status', 'aria-label': t(lang, 'newItems', { n: badge }) }, badge > 9 ? '9+' : String(badge)) : null)
     const input = h('input', { type: 'text', placeholder: t(lang, 'loginPlaceholder'), autocomplete: 'off', spellcheck: 'false', 'aria-label': t(lang, 'loginTitle') })
     const loginForm = h('form', { class: 'login card', onSubmit: (e: Event) => { e.preventDefault(); login(input.value) } },
       h('p', { class: 'tagline' }, t(lang, 'tagline')), h('h2', {}, t(lang, 'loginTitle')), h('p', {}, t(lang, 'loginHelp')), input, ' ', h('button', { type: 'submit', class: 'primary' }, t(lang, 'loginButton')),
       loginError ? h('p', { class: 'error', role: 'alert' }, loginError) : null)
     const signArea = signer ? renderSignArea({
-      signer: signer.state, who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, flash, composer, review, step, result, relays, bunkerText, linkOpen, confirmDisconnect: confirmingDisconnect, shareConfirm,
+      signer: signer.state, who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, flash, composer, review, step, result, relays, bunkerText, linkOpen, confirmDisconnect: confirmingDisconnect, shareConfirm, followPanel: followPanel(),
     }, {
-      openConnect, startLink, pasteBunker: () => void pasteBunker(), cancelConnect, bunker: (x) => void bunker(x), confirmShare: () => void share(), startQuote: () => { if (shareConfirm) startQuote(shareConfirm) }, cancelShare: () => { shareConfirm = null; draw() }, askDisconnect: () => { confirmingDisconnect = true; draw() }, cancelDisconnect: () => { confirmingDisconnect = false; draw() },
+      openConnect, startLink, pasteBunker: () => void pasteBunker(), cancelConnect, bunker: (x) => void bunker(x), confirmFollow: () => void confirmFollow(), acceptList, cancelFollow: () => { followFlow = null; draw() }, confirmShare: () => void share(), startQuote: () => { if (shareConfirm) startQuote(shareConfirm) }, cancelShare: () => { shareConfirm = null; draw() }, askDisconnect: () => { confirmingDisconnect = true; draw() }, cancelDisconnect: () => { confirmingDisconnect = false; draw() },
       disconnect: () => { confirmingDisconnect = false; void signer.disconnect(); composer = review = result = null; flash = null; draw() }, copy: (x) => { deps.copy?.(x); say('info', t(lang, 'copied')); draw() },
       edit: (x) => { if (composer) composer.text = x }, review: doReview, publish: () => void publish(), back: () => { review = null; draw() }, cancelComposer: () => { composer = null; review = null; draw() },
       retry: () => void retry(), dismissResult: () => { result = null; draw() }, startNote, cancelSigning: () => signing?.abort(),

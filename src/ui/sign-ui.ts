@@ -16,6 +16,12 @@ export const REACTIONS = ['+', '❤️', '🤙', '😂', '🙏']
 
 export interface Composer { mode: 'note' | 'reply' | 'quote'; target?: NostrEvent; text: string }
 export interface Review { template: Template; target?: NostrEvent; mentions: number; quote?: boolean }
+/** The panel of a follow / unfollow: reading the list, the confirmation, or why Quill will not go on. */
+export type FollowPanel =
+  | { stage: 'checking' }
+  | { stage: 'confirm'; who: string; action: 'follow' | 'unfollow'; before: number; after: number; changed: boolean }
+  | { stage: 'refuse'; why: 'none' | 'shrunk'; known: number; found: number }
+
 export interface Flash { kind: 'error' | 'info'; text: string }
 
 export interface SignUiState {
@@ -32,6 +38,7 @@ export interface SignUiState {
   /** What the user has typed in the bunker:// field and whether "use a link instead" is open: kept in the app because the page is redrawn often. */
   bunkerText: string
   linkOpen: boolean
+  followPanel: FollowPanel | null
   /** The note the reader is about to share: sharing is public, so it asks first. */
   shareConfirm: NostrEvent | null
   /** Disconnecting asks first: connecting again means pasting the bunker:// address again. */
@@ -39,7 +46,7 @@ export interface SignUiState {
 }
 
 export interface SignUiHandlers {
-  openConnect(): void; cancelConnect(): void; bunker(text: string): void; confirmShare(): void; startQuote(): void; cancelShare(): void; askDisconnect(): void; cancelDisconnect(): void; disconnect(): void; copy(text: string): void
+  openConnect(): void; cancelConnect(): void; bunker(text: string): void; confirmFollow(): void; acceptList(): void; cancelFollow(): void; confirmShare(): void; startQuote(): void; cancelShare(): void; askDisconnect(): void; cancelDisconnect(): void; disconnect(): void; copy(text: string): void
   edit(text: string): void; review(): void; publish(): void; back(): void; cancelComposer(): void; retry(): void; dismissResult(): void
   startNote(): void; cancelSigning(): void; startLink(): void; pasteBunker(): void; editBunker(text: string): void; setLinkOpen(open: boolean): void
 }
@@ -68,6 +75,7 @@ export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, sign
     // while the signer works: a popup that stays as long as the wait lasts (it does not fade) and goes away when it is over
     if (s.step) parts.push(h('div', { class: 'popup stay', role: 'status' }, h('span', {}, t(v.lang, `step_${s.step}` as Parameters<typeof t>[1])), s.step === 'waiting' ? h('button', { type: 'button', class: 'link', onClick: hd.cancelSigning }, t(v.lang, 'cancel')) : null))
     else if (s.result) toast.push(renderResult(s.result, s.relays, hd, v))
+    else if (s.followPanel) parts.push(sheet(renderFollowPanel(s.followPanel, hd, v)))
     else if (s.shareConfirm) parts.push(sheet(renderShareConfirm(s.shareConfirm, hd, v)))
     else if (s.review) parts.push(sheet(renderReview(s, hd, v)))
     else if (s.composer) parts.push(sheet(renderComposer(s, hd, v)))
@@ -120,6 +128,19 @@ function renderComposer(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElemen
     (c.mode === 'reply' || c.mode === 'quote') && c.target ? h('p', { class: 'replying' }, t(v.lang, c.mode === 'quote' ? 'quotingTo' : 'replyingTo', { who: nameOf(v, c.target.pubkey) }), ': ', h('q', {}, excerpt(c.target))) : null,
     area, h('p', {}, count, ' ', h('button', { type: 'button', onClick: hd.review }, t(v.lang, 'review')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.cancelComposer }, t(v.lang, 'cancel'))),
   )
+}
+
+/** Following or unfollowing replaces the whole public list, so it says exactly what changes, and why it refuses when the list does not look right. */
+function renderFollowPanel(f: FollowPanel, hd: SignUiHandlers, v: View): HTMLElement {
+  if (f.stage === 'checking') return h('div', { class: 'review', role: 'status' }, h('p', {}, t(v.lang, 'followChecking')), h('p', { class: 'buttons' }, h('button', { type: 'button', class: 'link', onClick: hd.cancelFollow }, t(v.lang, 'cancel'))))
+  if (f.stage === 'refuse') return h('div', { class: 'review', role: 'alertdialog', 'aria-label': t(v.lang, 'followRefuseTitle') },
+    h('h2', {}, t(v.lang, 'followRefuseTitle')), h('p', {}, t(v.lang, f.why === 'none' ? 'followRefuseNone' : 'followRefuseShrunk', { known: f.known, found: f.found })),
+    h('p', { class: 'buttons' }, ...(f.why === 'shrunk' ? [h('button', { type: 'button', onClick: hd.acceptList }, t(v.lang, 'followAccept')), ' '] : []), h('button', { type: 'button', class: 'primary', onClick: hd.cancelFollow }, t(v.lang, 'cancel'))))
+  const title = t(v.lang, f.action === 'follow' ? 'followTitle' : 'unfollowTitle', { who: f.who })
+  return h('div', { class: 'review', role: 'alertdialog', 'aria-label': title },
+    h('h2', {}, title), f.changed ? h('p', { class: 'error' }, t(v.lang, 'followChanged')) : null,
+    h('p', {}, t(v.lang, 'followCount', { a: f.before, b: f.after })), h('p', { class: 'meta' }, t(v.lang, 'followPublic')),
+    h('p', { class: 'buttons' }, h('button', { type: 'button', class: 'primary', onClick: hd.confirmFollow }, t(v.lang, f.action === 'follow' ? 'followButton' : 'unfollowButton')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.cancelFollow }, t(v.lang, 'cancel'))))
 }
 
 /** Sharing a note is public and cannot be undone from here: the note is shown, and nothing is signed until the second tap. */
