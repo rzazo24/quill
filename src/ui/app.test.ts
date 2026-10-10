@@ -831,8 +831,13 @@ describe('wide screens: three columns and a panel', () => {
     w.value = true; a.wideChanged.forEach((cb) => cb()); await tick(250)
     expect(titles(a)).toEqual(['Following', 'Mentions', 'Me']); expect(a.root.querySelector('.tabbar')).toBeNull()
   })
+  it('Settings and Help keep the header where it is on a wide screen (the screen is wide even when the page is one column)', async () => {
+    const a = boot({ events: wideWorld(), stored: { me }, wide: { value: true } }); await tick(250)
+    expect(a.root.classList.contains('wide')).toBe(true); expect(a.root.classList.contains('wide-screen')).toBe(true)
+    for (const page of ['#/settings', '#/help']) { await a.go(page); await tick(80); expect(a.root.classList.contains('wide'), page).toBe(false); expect(a.root.classList.contains('wide-screen'), page).toBe(true) }
+  })
   it('narrow screens are unchanged: one column and the tab bar', async () => {
     const a = boot({ events: wideWorld(), stored: { me }, wide: { value: false } }); await tick(250)
-    expect(a.root.querySelector('.col')).toBeNull(); expect(a.root.querySelector('.tabbar')).not.toBeNull(); expect(a.root.classList.contains('wide')).toBe(false)
+    expect(a.root.querySelector('.col')).toBeNull(); expect(a.root.querySelector('.tabbar')).not.toBeNull(); expect(a.root.classList.contains('wide')).toBe(false); expect(a.root.classList.contains('wide-screen')).toBe(false)
   })
 })

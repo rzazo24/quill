@@ -15,7 +15,7 @@ a { color: var(--accent) }
 h2, h3 { margin: 0 }
 
 /* header and tab bar */
-.top { flex: none; position: relative; z-index: 5; display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top)) max(14px, calc((100% - var(--col)) / 2)) 10px; background: rgba(11,15,22,.94); border-bottom: 1px solid var(--border) }
+.top { flex: none; position: relative; z-index: 5; display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top)) max(14px, calc((100% - var(--top-col, var(--col))) / 2)) 10px; background: rgba(11,15,22,.94); border-bottom: 1px solid var(--border) }
 .top h1 { margin: 0; font-size: 1.5rem; line-height: 1.2 } .top h1 a { color: var(--text); text-decoration: none }
 .brand { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px }
 .tag { min-width: 0; color: var(--muted); font-size: .8rem }
@@ -290,3 +290,4 @@ main.view.wide { display: block; overflow: hidden; padding: 12px 14px 0; scrollb
 .emoji-panel[hidden] { display: none }
 .emoji-panel button { min-height: 36px; padding: 0; font-size: 1.3rem; line-height: 1; background: none; border: 0; border-radius: 8px }
 @media (hover: hover) { .emoji-panel button:hover { background: var(--btn) } }
+#app.wide-screen { --top-col: 1760px } /* the header keeps its place on a wide screen even on the pages that are one narrow column (Settings, Help) */
