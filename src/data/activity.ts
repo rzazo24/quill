@@ -2,7 +2,8 @@
 // same filter as the rest of the app, and the new-since-last-visit count only includes what the filter would SHOW (hidden things are counted apart).
 import type { Event } from 'nostr-tools'
 import { analyse, judge, type Context, type Judged, type Settings, DEFAULT_SETTINGS } from '../core/verdict.js'
-import type { Fetcher } from '../net/fetcher.js'
+import { queryAuthors, type Fetcher } from '../net/fetcher.js'
+import { newestPerAuthor } from './lists.js'
 import { normReaction } from './engaged.js'
 
 const HEX64 = /^[0-9a-f]{64}$/
@@ -19,14 +20,23 @@ export interface Activity {
   reposts: Judged[]
   /** The reader's notes that were reacted to or reposted, by id (for their text). */
   targets: Map<string, Event>
-  /** Accounts whose follow list includes the reader (newest list first), not the reader and not muted. Relays each hold only part of them, so this is what the ones asked returned. */
+  /** Accounts whose NEWEST follow list names the reader (newest list first), not the reader and not muted. Relays each hold only part of them, so this is what the ones asked returned. */
   followers: string[]
+  /** Accounts that were known followers and whose newest follow list no longer names the reader: they stopped following. */
+  gone: string[]
+}
+
+export interface ActivityOptions {
+  /** The followers seen on earlier visits. */
+  known?: ReadonlySet<string>
+  /** Also check the newest list of every known follower (it costs one more query: done now and then, not at every look). */
+  verifyKnown?: boolean
 }
 
 /** NIP-25: the note reacted to is the LAST e tag. */
 export const reactionTarget = (e: Pick<Event, 'tags'>): string | undefined => [...e.tags].reverse().find((t) => t[0] === 'e' && HEX64.test(t[1] ?? ''))?.[1]
 
-export async function loadActivity(f: Fetcher, ctx: Context, settings: Settings = DEFAULT_SETTINGS): Promise<Activity> {
+export async function loadActivity(f: Fetcher, ctx: Context, settings: Settings = DEFAULT_SETTINGS, opts: ActivityOptions = {}): Promise<Activity> {
   const [mentions, reacts, lists, reposted] = await Promise.all([f.query({ kinds: [1], '#p': [ctx.me], limit: LIMIT }), f.query({ kinds: [7], '#p': [ctx.me], limit: LIMIT }), f.query({ kinds: [3], '#p': [ctx.me], limit: FOLLOWER_LIMIT }).catch(() => []), f.query({ kinds: [6, 16], '#p': [ctx.me], limit: LIMIT }).catch(() => [])])
   const notes = mentions.filter((e) => e.pubkey !== ctx.me).sort(byNewest)
   // Anyone can put the reader's key in a `p` tag of a reaction to somebody else's note: only reactions to notes the reader really wrote count.
@@ -42,7 +52,8 @@ export async function loadActivity(f: Fetcher, ctx: Context, settings: Settings 
   const judged = (e: Event): Judged => ({ event: e, verdict: judge(e, ctx, signals, settings) })
   // a repost carries a copy of the reader's own note: it is judged by who reposted, not by that text
   const judgedRepost = (e: Event): Judged => ({ event: e, verdict: judge({ ...e, content: '' }, ctx, signals, settings) })
-  return { notes: notes.map(judged), reactions: reactions.map(judged), reposts: reposts.map(judgedRepost), targets, followers: followersOf(lists, ctx) }
+  const { followers, gone } = await checkedFollowers(f, ctx, followersOf(lists, ctx), opts)
+  return { notes: notes.map(judged), reactions: reactions.map(judged), reposts: reposts.map(judgedRepost), targets, followers, gone }
 }
 
 /** Who follows the reader: the author of each follow list (kind 3) that really names them in a `p` tag. The newest list of each author counts once. */
@@ -53,6 +64,30 @@ export function followersOf(lists: Event[], ctx: Pick<Context, 'me' | 'muted'>):
     const o = newest.get(e.pubkey); if (!o || byNewest(e, o) < 0) newest.set(e.pubkey, e)
   }
   return [...newest.values()].sort(byNewest).map((e) => e.pubkey)
+}
+
+/**
+ * Whether somebody follows you is decided by THEIR newest follow list, not by which relay happened to return an old copy. For the accounts a relay says follow you
+ * and are not known yet, the newest list across the relays is fetched: if it no longer names you, the relay was stale and they are not followers (nor "new"). With
+ * `verifyKnown`, the same is done for every known follower, to notice who stopped following (and to count followers the first query did not return).
+ * An account with no list found anywhere proves nothing: it is neither a follower seen now nor one that left.
+ */
+export async function checkedFollowers(f: Fetcher, ctx: Pick<Context, 'me' | 'muted'>, fromRelays: string[], opts: ActivityOptions = {}): Promise<{ followers: string[]; gone: string[] }> {
+  const known = opts.known ?? new Set<string>()
+  const toCheck = [...new Set([...fromRelays.filter((k) => !known.has(k)), ...(opts.verifyKnown ? known : [])])].filter((k) => !ctx.muted.has(k) && k !== ctx.me).slice(0, 2000)
+  if (!toCheck.length) return { followers: fromRelays, gone: [] }
+  let newest: Map<string, Event>
+  try { newest = newestPerAuthor((await queryAuthors(f, { kinds: [3], limit: 200 }, toCheck)).filter((e) => e.kind === 3 && toCheck.includes(e.pubkey))) } catch { return { followers: fromRelays, gone: [] } } // cannot check: believe the relays
+  const names = (e: Event) => e.tags.some((t) => t[0] === 'p' && t[1] === ctx.me)
+  const followers = new Set(fromRelays.filter((k) => !newest.has(k) || names(newest.get(k)!)))
+  const gone: string[] = []
+  for (const k of toCheck) {
+    const e = newest.get(k)
+    if (!e) continue
+    if (names(e)) followers.add(k); else if (known.has(k)) gone.push(k)
+  }
+  const order = (k: string) => newest.get(k)?.created_at ?? 0
+  return { followers: [...followers].sort((a, b) => order(b) - order(a) || (a < b ? -1 : 1)), gone }
 }
 
 /** New since `seenAt` (unix seconds): what the filter shows and what it hides. A reaction counts once per (person, note), however many emoji; so does a repost.

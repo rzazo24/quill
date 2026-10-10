@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { ev, pk } from '../core/testutil.js'
 import { contextOf } from './session.js'
 import { buildGraph } from './graph.js'
-import { countNew, followersOf, groupReactions, groupReposts, loadActivity, MAX_KNOWN_FOLLOWERS, mergeKnown, newFollowers, parseKnown, reactionTarget, showReaction } from './activity.js'
+import { checkedFollowers, countNew, followersOf, groupReactions, groupReposts, loadActivity, MAX_KNOWN_FOLLOWERS, mergeKnown, newFollowers, parseKnown, reactionTarget, showReaction } from './activity.js'
 import { answers, type Fetcher } from '../net/fetcher.js'
 
 const me = pk('1'), friend = pk('a'), stranger = pk('f'), other = pk('b')
@@ -81,7 +81,7 @@ describe('followers', () => {
     expect((await loadActivity(hostile, sess())).followers).toEqual([])
   })
   it('the ones not known before count as new (never as hidden); the known set only grows and has a limit; junk in storage is ignored', () => {
-    const a = { notes: [], reactions: [], reposts: [], targets: new Map(), followers: [friend, other, stranger] }
+    const a = { notes: [], reactions: [], reposts: [], targets: new Map(), followers: [friend, other, stranger], gone: [] }
     expect(newFollowers(a, new Set([friend]))).toEqual([other, stranger]); expect(countNew(a, 0, new Set([friend]))).toEqual({ shown: 2, hidden: 0 }); expect(countNew(a, 0)).toEqual({ shown: 0, hidden: 0 })
     expect([...mergeKnown(new Set([pk('1'), friend]), a)].sort()).toEqual([friend, other, pk('1'), stranger].sort())
     const many = new Set(Array.from({ length: 25_000 }, (_, i) => i.toString(16).padStart(64, '0'))); expect(mergeKnown(many, a).size).toBe(MAX_KNOWN_FOLLOWERS)
@@ -116,5 +116,39 @@ describe('reposts of the reader\'s notes', () => {
     const a = await loadActivity(world([repost(friend, myNote.id, 300), repost(friend, myNote.id, 310), repost(stranger, myNote.id, 320), repost(other, myNote.id, 50)]), sess({ [other]: 1 }))
     expect(countNew(a, 100)).toEqual({ shown: 1, hidden: 1 }) // friend (once), stranger hidden; other is old
     const groups = groupReposts(a, 100); expect(groups).toHaveLength(1); expect(groups[0]).toMatchObject({ emojis: [], latest: 310, fresh: true }); expect(groups[0]!.by).toEqual([friend, other])
+  })
+})
+
+describe('who follows you is decided by their NEWEST list', () => {
+  const list3 = (who: string, at: number, names: boolean) => ev(who, '', { kind: 3, created_at: at, tags: names ? [['p', me]] : [['p', other]] })
+  const ctx = { me, muted: new Set<string>() }
+  const counting = (events: ReturnType<typeof ev>[]) => { const asked: { authors?: string[] }[] = []; const f: Fetcher = { query: async (q) => { if (q.kinds?.includes(3) && q.authors) asked.push(q); return events.filter((e) => answers(q, e)) } }; return { f, asked } }
+  it('a relay with an old copy that names you does not make somebody a follower: their newest list does not', async () => {
+    const { f } = counting([list3(friend, 100, true), list3(friend, 300, false)])
+    expect(await checkedFollowers(f, ctx, [friend], {})).toEqual({ followers: [], gone: [] }) // stale: not a follower, and not "gone" either (they were never known)
+  })
+  it('somebody new whose newest list names you is a follower', async () => {
+    const { f } = counting([list3(friend, 300, true)]); expect((await checkedFollowers(f, ctx, [friend], {})).followers).toEqual([friend])
+  })
+  it('known followers are only checked when asked to (a follow list can be big): otherwise nothing is fetched for them', async () => {
+    const { f, asked } = counting([list3(friend, 300, false)])
+    expect(await checkedFollowers(f, ctx, [friend], { known: new Set([friend]) })).toEqual({ followers: [friend], gone: [] }); expect(asked).toEqual([])
+    expect(await checkedFollowers(f, ctx, [friend], { known: new Set([friend]), verifyKnown: true })).toEqual({ followers: [], gone: [friend] }); expect(asked).toHaveLength(1)
+  })
+  it('with the check on: whoever stopped following is gone; one a relay did not return but whose newest list names you counts; one with no list found anywhere proves nothing', async () => {
+    const { f } = counting([list3(friend, 300, false), list3(other, 300, true)])
+    const r = await checkedFollowers(f, ctx, [], { known: new Set([friend, other, stranger]), verifyKnown: true })
+    expect(r.gone).toEqual([friend]); expect(r.followers).toEqual([other]) // `stranger` has no list anywhere: neither
+  })
+  it('if the check cannot be made, the relays are believed', async () => {
+    const broken: Fetcher = { query: async () => { throw new Error('boom') } }
+    expect(await checkedFollowers(broken, ctx, [friend], {})).toEqual({ followers: [friend], gone: [] })
+  })
+  it('muted accounts are never checked or counted', async () => {
+    const { f, asked } = counting([list3(friend, 300, true)]); expect(await checkedFollowers(f, { me, muted: new Set([friend]) }, [friend], {})).toEqual({ followers: [friend], gone: [] }); expect(asked).toEqual([])
+  })
+  it('loadActivity applies it: a stale copy is not a follower and a follower who left is reported', async () => {
+    const f = world([list3(friend, 100, true), list3(friend, 300, false), list3(other, 300, false), list3(stranger, 400, true)])
+    const a = await loadActivity(f, sess(), undefined, { known: new Set([other]), verifyKnown: true }); expect(a.followers).toEqual([stranger]); expect(a.gone).toEqual([other])
   })
 })

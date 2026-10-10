@@ -15,7 +15,7 @@ const en: HelpSection[] = [
 • Following: notes of the people you follow (not their replies) and what they repost, marked “Ana reposted”. A repost does not vouch for the note: the filter judges it by its own author. You can switch reposts off in Settings.
 • At the top of Following a switch chooses **Follows** (the people you follow) or **Network**: the notes of the people they follow, each marked “Followed by Ana and 3 more” so you can see why it is there. Network leaves out the “outside your network” rule (that is what it is showing you); every other rule applies. It looks at the accounts followed by the most of your follows, up to 200.
 • Mentions: replies and mentions from anyone. This is where the filter works hardest.
-• Me: your account, your Clave connection, your own notes and sign out.
+• Me: your account (with how many you follow, exact, and at least how many follow you: relays each know only part of them), your Clave connection, your own notes and sign out.
 
 Tap Thread on a note to see the whole conversation. The ↻ button, or tapping the tab you are already on, reads everything again from the relays. When you come back to the app after a couple of minutes it refreshes by itself.` },
   { id: 'filter', title: 'How the filter decides', body: `Every note gets a verdict: shown or hidden, by which rule, and the numbers behind it. In order of priority:
@@ -41,7 +41,7 @@ The summary at the top says how many notes are hidden and why. Every rule can be
   { id: 'news', title: 'What is new', body: `While the app is open it looks once a minute and shows a number on the Mentions tab (up to 9+) with what is new since you last opened it: replies, mentions, reactions and reposts of your notes.
 
 • Opening Mentions marks the new notes and lists who reacted to your notes and who reposted them.
-• New followers are announced too: accounts that follow you now and did not the last time you looked. Quill cannot know WHEN they followed you, and each relay knows only some of your followers, so a follower may take a while to show up. The first time it only learns who follows you, without announcing anyone.
+• New followers are announced too: accounts that follow you now and did not the last time you looked. Quill cannot know WHEN they followed you, and each relay knows only some of your followers, so a follower may take a while to show up. Somebody counts as a follower only if their NEWEST follow list names you (a relay with an old copy does not make them one), and who stops following you is noticed and no longer counted (this is checked every half hour or so). The first time it only learns who follows you, without announcing anyone.
 • What the filter would hide is not counted in the number; it is listed apart.
 • There are no system notifications: nothing reaches you while the app is closed.` },
   { id: 'settings', title: 'Settings', body: `Open them with the cog (⚙) next to the language buttons.
@@ -72,7 +72,7 @@ const es: HelpSection[] = [
 • Siguiendo: notas de la gente que sigues (sin sus respuestas) y lo que comparten, marcado «Ana compartió». Un repost no avala la nota: el filtro la juzga por su propio autor. Puedes desactivar los reposts en Ajustes.
 • Arriba de Siguiendo, un interruptor elige **Seguidos** (la gente que sigues) o **Red**: las notas de la gente a la que ellos siguen, cada una marcada «Seguida por Ana y 3 más» para que veas por qué está ahí. Red deja fuera la regla «fuera de tu red» (es justo lo que enseña); el resto de reglas se aplican. Mira las cuentas seguidas por más de tus seguidos, hasta 200.
 • Menciones: respuestas y menciones de cualquiera. Aquí es donde más trabaja el filtro.
-• Yo: tu cuenta, tu conexión con Clave, tus propias notas y cerrar sesión.
+• Yo: tu cuenta (con a cuántos sigues, exacto, y al menos cuántos te siguen: cada relé conoce solo una parte), tu conexión con Clave, tus propias notas y cerrar sesión.
 
 Toca Hilo en una nota para ver toda la conversación. El botón ↻, o tocar la pestaña en la que ya estás, vuelve a leer todo de los relés. Al volver a la app pasados un par de minutos se actualiza sola.` },
   { id: 'filter', title: 'Cómo decide el filtro', body: `Cada nota recibe un veredicto: visible u oculta, por qué regla y con qué números. Por orden de prioridad:
@@ -98,7 +98,7 @@ El resumen de arriba dice cuántas notas se ocultan y por qué. Cada regla se pu
   { id: 'news', title: 'Qué hay de nuevo', body: `Con la app abierta mira una vez por minuto y muestra un número en la pestaña Menciones (hasta 9+) con lo nuevo desde la última vez que la abriste: respuestas, menciones, reacciones y reposts de tus notas.
 
 • Al abrir Menciones se marcan las notas nuevas y se lista quién reaccionó a tus notas y quién las compartió.
-• También avisa de los seguidores nuevos: cuentas que te siguen ahora y no te seguían la última vez que miraste. Quill no puede saber CUÁNDO empezaron a seguirte, y cada relé conoce solo a una parte de tus seguidores, así que alguno puede tardar en aparecer. La primera vez solo aprende quién te sigue, sin avisar de nadie.
+• También avisa de los seguidores nuevos: cuentas que te siguen ahora y no te seguían la última vez que miraste. Quill no puede saber CUÁNDO empezaron a seguirte, y cada relé conoce solo a una parte de tus seguidores, así que alguno puede tardar en aparecer. Alguien cuenta como seguidor solo si su lista de seguidos MÁS RECIENTE te nombra (un relé con una copia vieja no lo convierte en uno), y quien deja de seguirte se detecta y deja de contarse (se comprueba cada media hora más o menos). La primera vez solo aprende quién te sigue, sin avisar de nadie.
 • Lo que el filtro ocultaría no cuenta en el número; se lista aparte.
 • No hay notificaciones del sistema: no te llega nada con la app cerrada.` },
   { id: 'settings', title: 'Ajustes', body: `Se abren con la rueda (⚙) junto a los botones de idioma.

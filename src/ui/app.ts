@@ -116,7 +116,22 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const loadKnown = () => { knownFollowers ??= parseKnown(safeGet(kv, followersKey())); return knownFollowers }
   const saveKnown = (s: Set<string>) => { knownFollowers = s; safeSet(kv, followersKey(), JSON.stringify([...s])) }
   /** Switching account: nothing remembered about the notifications of the previous one may leak into the next. */
-  const forgetAccount = () => { seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null }
+  // the newest list of every known follower is checked now and then (not at every look): that is how somebody who stopped following is noticed
+  const VERIFY_EVERY_MS = 30 * 60_000
+  let lastVerify = 0
+  const activityOptions = () => ({ known: loadKnown() ?? undefined, verifyKnown: lastVerify === 0 || (deps.nowMs?.() ?? Date.now()) - lastVerify > VERIFY_EVERY_MS })
+  /** Who stopped following is forgotten (they count again as new if they come back), and the check is remembered. */
+  const afterActivity = (a: Activity, verified: boolean) => {
+    if (verified) lastVerify = deps.nowMs?.() ?? Date.now()
+    if (!a.gone.length) return
+    const gone = new Set(a.gone)
+    for (const k of gone) followersSeen.delete(k)
+    if (knownFollowers) saveKnown(new Set([...knownFollowers].filter((k) => !gone.has(k))))
+  }
+  const followersSeen = new Set<string>() // everybody seen following you since this page opened (the known ones are in `knownFollowers`)
+  /** How many accounts have been seen following the reader: only a lower bound (each relay knows part of them), and it only grows. Null while nothing has been looked at yet. */
+  const followerCount = (): number | null => { const k = loadKnown(); return k === null && followersSeen.size === 0 ? null : new Set([...(k ?? []), ...followersSeen]).size }
+  const forgetAccount = () => { lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
   const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
@@ -186,12 +201,13 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         let act: Activity | null = null
         if (route.name === 'mentions') {
           if (seenAt === null) loadSeen()
-          act = await loadActivity(fetcher, ctx(), settings)
+          const opts = activityOptions(); act = await loadActivity(fetcher, ctx(), settings, opts); afterActivity(act, !!opts.verifyKnown)
         }
         const items = act ? act.notes : route.name === 'me' ? await loadMine(fetcher, ctx(), settings) : (feedMode === 'network' ? await loadNetwork(fetcher, session!, ctx(), settings) : await loadFollowing(fetcher, ctx(), settings, { reposts: showReposts }))
         if (mine !== run) return
         // the first visit to Mentions ever takes the followers of today as its starting point (nothing is "new" yet); later, the ones not seen before are
         const baseline = act ? (loadKnown() ?? new Set(act.followers)) : null
+        if (act) for (const k of act.followers) followersSeen.add(k)
         if (act && followersMark === null) followersMark = baseline
         const fresher = act ? newFollowers(act, followersMark!) : []
         await nameThem(act ? [...items, ...act.reactions, ...act.reposts] : items, fresher.slice(0, 8))
@@ -223,11 +239,14 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (seenAt === null) loadSeen()
     try {
       fetcher.clear()
-      const a = await loadActivity(fetcher, ctx(), settings)
+      const opts = activityOptions(), a = await loadActivity(fetcher, ctx(), settings, opts)
+      const before = followerCount()
+      afterActivity(a, !!opts.verifyKnown)
       if (loadKnown() === null) saveKnown(new Set(a.followers)) // the first look at followers only learns who they are
-      if (seenAt === null) { markSeen(); return } // first run: start counting from now, do not greet with a pile
+      for (const k of a.followers) followersSeen.add(k)
+      if (seenAt === null) { markSeen(); draw(); return } // first run: start counting from now, do not greet with a pile
       const n = countNew(a, seenAt, knownFollowers!).shown
-      if (n !== badge) { badge = n; draw() }
+      if (n !== badge || followerCount() !== before) { badge = n; draw() }
     } catch { /* a failed look says nothing */ }
   }
 
@@ -412,9 +431,17 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     try { const again = await publisher.publish(result.event, failedRelays(result.outcomes)); result = { event: result.event, outcomes: { ...result.outcomes, ...again } } } finally { busy = false; step = null; draw() }
   }
 
+  /** "128 following · at least 37 followers": the first is exact (it is your own list), the second is what the relays showed. */
+  function countsLine(): HTMLElement | null {
+    if (!session) return null
+    const n = followerCount()
+    const followers = n === null ? null : n === 0 ? t(lang, 'followersNone') : t(lang, n === 1 ? 'followersAtLeastOne' : 'followersAtLeast', { n })
+    return h('div', { class: 'meta counts' }, [t(lang, 'followingN', { n: session.follows.size }), followers].filter(Boolean).join(' · '))
+  }
+
   function accountCard(): HTMLElement {
     return h('section', { class: 'account card' }, avatarEl(me!, view(), 'lg'),
-      h('div', {}, h('strong', {}, nameOf(view(), me!)), h('div', { class: 'meta' }, shortNpub(me!))))
+      h('div', {}, h('strong', {}, nameOf(view(), me!)), h('div', { class: 'meta' }, shortNpub(me!)), countsLine()))
   }
 
   function draw(): void {

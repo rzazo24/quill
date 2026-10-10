@@ -581,3 +581,68 @@ describe('reposts of your notes', () => {
     const card = [...a.root.querySelectorAll('section.reacted')].find((c) => c.querySelector('h2')!.textContent === 'Your notes, reposted')!; expect(card.querySelectorAll('li')).toHaveLength(1); expect(card.textContent).not.toContain('Someone')
   })
 })
+
+describe('the counts on Me', () => {
+  const NOW = 10_000
+  const key = (n: number) => ('c' + n.toString(16).padStart(3, '0')).repeat(16)
+  const follower = (n: number) => ev(key(n), '', { kind: 3, created_at: 9000, tags: [['p', me]] })
+  const base = (): Event[] => [list(me, 3, [['p', friend]]), list(friend, 3, []), ev(friend, 'a post from my friend', { created_at: 8000 })]
+  const start = (events: Event[], lang = 'en') => boot({ events, clock: { now: NOW * 1000 }, languages: [lang], stored: { me, lang, [`seen:${me}`]: '5000' } })
+  const counts = (a: ReturnType<typeof boot>) => a.root.querySelector('.account .counts')?.textContent ?? null
+  it('says how many you follow (exact) and at least how many follow you (what the relays showed)', async () => {
+    const a = start([...base(), follower(1), follower(2)]); await a.go('#/me'); await tick(300); expect(counts(a)).toBe('1 following · at least 2 followers')
+    const one = start([...base(), follower(1)]); await one.go('#/me'); await tick(300); expect(counts(one)).toBe('1 following · at least 1 follower')
+    const none = start(base()); await none.go('#/me'); await tick(300); expect(counts(none)).toBe('1 following · no followers seen yet')
+  })
+  it('is in the language of the page', async () => {
+    const a = start([...base(), follower(1), follower(2)], 'es'); await a.go('#/me'); await tick(300); expect(counts(a)).toBe('1 siguiendo · al menos 2 seguidores')
+    const none = start(base(), 'es'); await none.go('#/me'); await tick(300); expect(counts(none)).toBe('1 siguiendo · ningún seguidor visto aún')
+  })
+  it('only grows: a new follower is counted before you open Mentions, and one a relay stops returning is not forgotten', async () => {
+    const events = [...base(), follower(1), follower(2)]; const a = start(events); await a.go('#/me'); await tick(300); expect(counts(a)).toBe('1 following · at least 2 followers')
+    events.push(follower(3)); await a.go('#/'); await tick(200); a.poll(); await tick(300); await a.go('#/me'); await tick(300); expect(counts(a)).toBe('1 following · at least 3 followers')
+    events.splice(events.findIndex((e) => e.pubkey === key(1)), 1); a.poll(); await tick(300); await a.go('#/'); await tick(200); await a.go('#/me'); await tick(300); expect(counts(a)).toBe('1 following · at least 3 followers')
+  })
+  it('does not carry a count over to another account', async () => {
+    const events = [...base(), follower(1)]; const a = start(events); await a.go('#/me'); await tick(300); expect(counts(a)).toContain('at least 1 follower')
+    ;(a.root.querySelector('button.danger') as HTMLElement).click(); await tick(100)
+    const input = a.root.querySelector('input')!; input.value = nip19.npubEncode(far); a.root.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true })); await tick(300)
+    await a.go('#/me'); await tick(300); expect(counts(a)).toBe('0 following · no followers seen yet') // `far` follows nobody and nobody follows `far`
+  })
+})
+
+describe('followers who leave, and stale relays', () => {
+  const NOW = 10_000
+  const key = (n: number) => ('d' + n.toString(16).padStart(3, '0')).repeat(16)
+  const list3 = (n: number, at: number, names = true) => ev(key(n), '', { kind: 3, created_at: at, tags: names ? [['p', me]] : [['p', friend]] })
+  const base = (): Event[] => [list(me, 3, [['p', friend]]), list(friend, 3, []), ev(friend, 'a post from my friend', { created_at: 8000 })]
+  const clock = { now: NOW * 1000 }
+  const start = (events: Event[]) => boot({ events, clock, stored: { me, [`seen:${me}`]: '5000' } })
+  const counts = (a: ReturnType<typeof boot>) => a.root.querySelector('.account .counts')?.textContent ?? null
+  const badge = (a: ReturnType<typeof boot>) => a.root.querySelector('.tabbar .badge')?.textContent ?? null
+  const known = (a: ReturnType<typeof boot>) => JSON.parse(a.mem.get(`followers:${me}`) ?? 'null') as string[]
+  const later = (min: number) => { clock.now += min * 60_000 }
+
+  it('the count goes DOWN when somebody stops following you (their newest list no longer names you), once the check is due', async () => {
+    clock.now = NOW * 1000; const events = [...base(), list3(1, 9000), list3(2, 9000), list3(3, 9000)]; const a = start(events)
+    await a.go('#/me'); await tick(300); expect(counts(a)).toBe('1 following · at least 3 followers')
+    events.splice(events.findIndex((e) => e.pubkey === key(2) && e.created_at === 9000), 1, list3(2, 9500, false)) // 2 leaves: a newer list without you
+    a.poll(); await tick(300); expect(counts(a)).toBe('1 following · at least 3 followers') // the check of known followers is not due yet (they are not fetched at every look)
+    later(31); a.poll(); await tick(300); expect(counts(a)).toBe('1 following · at least 2 followers'); expect(known(a)).not.toContain(key(2)); expect(known(a)).toContain(key(1))
+  })
+  it('a relay with an old copy of somebody\'s list does not announce a follower who is not one', async () => {
+    clock.now = NOW * 1000; const events = [...base(), list3(1, 9000)]; const a = start(events); await tick(300); expect(badge(a)).toBeNull()
+    events.push(ev(key(7), '', { kind: 3, created_at: 100, tags: [['p', me]] }), list3(7, 9400, false)) // the stale copy names you; their newest list does not
+    a.poll(); await tick(300); expect(badge(a)).toBeNull(); await a.go('#/me'); await tick(300); expect(counts(a)).toBe('1 following · at least 1 follower')
+  })
+  it('somebody who comes back after leaving is announced as new again', async () => {
+    clock.now = NOW * 1000; const events = [...base(), list3(1, 9000), list3(2, 9000)]; const a = start(events); await tick(300)
+    events.splice(events.findIndex((e) => e.pubkey === key(2) && e.created_at === 9000), 1, list3(2, 9500, false)); later(31); a.poll(); await tick(300); expect(known(a)).not.toContain(key(2))
+    events.push(list3(2, 9900, true)); a.poll(); await tick(300); expect(badge(a)).toBe('1') // follows again: new
+  })
+  it('a known follower a relay does not return is still counted when their newest list names you', async () => {
+    clock.now = NOW * 1000; const events = [...base(), list3(1, 9000), list3(2, 9000)]; const a = start(events); await tick(300)
+    events.splice(events.findIndex((e) => e.pubkey === key(2) && e.created_at === 9000), 1) // the relay forgot their list entirely
+    later(31); a.poll(); await tick(300); await a.go('#/me'); await tick(300); expect(counts(a)).toBe('1 following · at least 2 followers') // no list anywhere: not proof of leaving
+  })
+})
