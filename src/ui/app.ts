@@ -431,7 +431,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     try { const again = await publisher.publish(result.event, failedRelays(result.outcomes)); result = { event: result.event, outcomes: { ...result.outcomes, ...again } } } finally { busy = false; step = null; draw() }
   }
 
-  /** "128 following · at least 37 followers": the first is exact (it is your own list), the second is what the relays showed. */
+  /** "128 following · ~37 followers": the first is exact (it is your own list), the second is approximate (what the relays showed; there is no official count and every app counts its own way). */
   function countsLine(): HTMLElement | null {
     if (!session) return null
     const n = followerCount()

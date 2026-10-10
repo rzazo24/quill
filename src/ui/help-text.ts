@@ -15,7 +15,7 @@ const en: HelpSection[] = [
 • Following: notes of the people you follow (not their replies) and what they repost, marked “Ana reposted”. A repost does not vouch for the note: the filter judges it by its own author. You can switch reposts off in Settings.
 • At the top of Following a switch chooses **Follows** (the people you follow) or **Network**: the notes of the people they follow, each marked “Followed by Ana and 3 more” so you can see why it is there. Network leaves out the “outside your network” rule (that is what it is showing you); every other rule applies. It looks at the accounts followed by the most of your follows, up to 200.
 • Mentions: replies and mentions from anyone. This is where the filter works hardest.
-• Me: your account (with how many you follow, exact, and at least how many follow you: relays each know only part of them), your Clave connection, your own notes and sign out.
+• Me: your account (with how many you follow, exact, and about how many follow you, with a ~: there is no official count, relays each know only part of them, and every app counts in its own way, so it will not match other apps exactly), your Clave connection, your own notes and sign out.
 
 Tap Thread on a note to see the whole conversation. The ↻ button, or tapping the tab you are already on, reads everything again from the relays. When you come back to the app after a couple of minutes it refreshes by itself.` },
   { id: 'filter', title: 'How the filter decides', body: `Every note gets a verdict: shown or hidden, by which rule, and the numbers behind it. In order of priority:
@@ -72,7 +72,7 @@ const es: HelpSection[] = [
 • Siguiendo: notas de la gente que sigues (sin sus respuestas) y lo que comparten, marcado «Ana compartió». Un repost no avala la nota: el filtro la juzga por su propio autor. Puedes desactivar los reposts en Ajustes.
 • Arriba de Siguiendo, un interruptor elige **Seguidos** (la gente que sigues) o **Red**: las notas de la gente a la que ellos siguen, cada una marcada «Seguida por Ana y 3 más» para que veas por qué está ahí. Red deja fuera la regla «fuera de tu red» (es justo lo que enseña); el resto de reglas se aplican. Mira las cuentas seguidas por más de tus seguidos, hasta 200.
 • Menciones: respuestas y menciones de cualquiera. Aquí es donde más trabaja el filtro.
-• Yo: tu cuenta (con a cuántos sigues, exacto, y al menos cuántos te siguen: cada relé conoce solo una parte), tu conexión con Clave, tus propias notas y cerrar sesión.
+• Yo: tu cuenta (con a cuántos sigues, exacto, y aproximadamente cuántos te siguen, con una ~: no hay un contador oficial, cada relé conoce solo una parte y cada app cuenta a su manera, así que no coincidirá exactamente con otras apps), tu conexión con Clave, tus propias notas y cerrar sesión.
 
 Toca Hilo en una nota para ver toda la conversación. El botón ↻, o tocar la pestaña en la que ya estás, vuelve a leer todo de los relés. Al volver a la app pasados un par de minutos se actualiza sola.` },
   { id: 'filter', title: 'Cómo decide el filtro', body: `Cada nota recibe un veredicto: visible u oculta, por qué regla y con qué números. Por orden de prioridad:
