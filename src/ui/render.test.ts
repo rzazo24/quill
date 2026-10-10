@@ -61,8 +61,9 @@ describe('the thread button looks the same everywhere', () => {
   it('in a card the header is always [name and time][thread button], however long the name, and the name is never cut', () => {
     for (const name of ['Ana', 'A very long display name that would never fit on one line of a phone']) {
       const el = renderJudged(shown(ev(pk('c'), 'hi')), { ...v, names: new Map([[pk('c'), name]]) })
+      expect(el.querySelector('header .head-end > a.thread-link'), name).not.toBeNull()
       const kids = [...el.querySelector('header')!.children].map((c) => c.tagName.toLowerCase() + (c.classList.contains('thread-link') ? '.thread-link' : ''))
-      expect(kids, name).toEqual(['span', 'a.thread-link'])
+      expect(kids, name).toEqual(['span', 'span'])
       expect(el.querySelector('header .byline strong')!.textContent).toBe(name); expect(el.querySelector('header .byline time')).not.toBeNull()
     }
   })

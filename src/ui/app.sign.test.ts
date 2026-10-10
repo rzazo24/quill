@@ -425,12 +425,18 @@ describe('sharing a note', () => {
     const out = boot({ events: events(), signer: fakeSigner() }); await tick(100); expect(share(out)).toBeNull()
     const { a } = await ready(); expect(share(a)).not.toBeNull(); expect(share(a)!.getAttribute('aria-label')).toBe('Share'); expect(share(a)!.getAttribute('aria-pressed')).toBe('false'); expect(share(a)!.querySelector('svg')).not.toBeNull()
   })
-  it('Copy offers the note id and a link; each copies exactly that and says so', async () => {
-    const copied: string[] = []; const { a } = await ready({ copied })
-    const bar = a.root.querySelector('.actions .copy')!; const id = (a.root.querySelector('article.note') as HTMLElement).dataset.id!
-    expect(bar.classList.contains('open')).toBe(false); await click(a.root, 'Copy'); expect(bar.classList.contains('open')).toBe(true)
-    await click(a.root, 'Note ID'); expect(copied).toEqual([nip19.noteEncode(id)]); expect(a.text()).toContain('Copied'); expect(bar.classList.contains('open')).toBe(false)
-    await click(a.root, 'Copy'); await click(a.root, 'Link'); expect(copied[1]).toMatch(/^https:\/\/njump\.me\/nevent1/); expect((nip19.decode(copied[1]!.split('/').pop()!).data as { id: string }).id).toBe(id)
+  it('the "…" of a note offers its id and its link, even without a signer; each copies exactly that and says so', async () => {
+    const copied: string[] = []; const a = boot({ events: events(), copied }); await tick(100)
+    const menu = a.root.querySelector('.more-menu')!; const id = (a.root.querySelector('article.note') as HTMLElement).dataset.id!
+    expect(menu.classList.contains('open')).toBe(false); (menu.querySelector('.more-btn') as HTMLElement).click(); expect(menu.classList.contains('open')).toBe(true)
+    await click(a.root, 'Copy note ID'); expect(copied).toEqual([nip19.noteEncode(id)]); expect(menu.textContent).toContain('Copied'); await tick(1000); expect(menu.classList.contains('open')).toBe(false); expect(menu.textContent).toContain('Copy note ID')
+    ;(menu.querySelector('.more-btn') as HTMLElement).click(); await click(a.root, 'Copy note link'); expect(copied[1]).toMatch(/^https:\/\/njump\.me\/nevent1/); expect((nip19.decode(copied[1]!.split('/').pop()!).data as { id: string }).id).toBe(id)
+  })
+  it('the menu closes on a tap anywhere else and on Escape', async () => {
+    const a = boot({ events: events(), copied: [] }); await tick(100)
+    const menu = () => a.root.querySelector('.more-menu')!; const btn = () => menu().querySelector('.more-btn') as HTMLElement
+    btn().click(); await tick(10); document.body.click(); expect(menu().classList.contains('open')).toBe(false)
+    btn().click(); await tick(10); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); expect(menu().classList.contains('open')).toBe(false)
   })
   it('a tap only asks: the note is shown with a warning that it is public, and nothing is signed until the second tap; Cancel closes it', async () => {
     const { a, sg } = await ready(); share(a)!.click(); await tick(60)
