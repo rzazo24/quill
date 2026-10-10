@@ -18,8 +18,8 @@ const PATHS = {
   person: ['M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2', 'M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z'],
   /** two arrows going round a rectangle: a repost */
   repost: ['M17 2l3 3-3 3', 'M4 11V9a4 4 0 0 1 4-4h12', 'M7 22l-3-3 3-3', 'M20 13v2a4 4 0 0 1-4 4H4'],
-  /** a pencil: write */
-  pen: ['M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3Z'],
+  /** a feather (the quill): write */
+  feather: ['M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z', 'M16 8L2 22', 'M17.5 15H9'],
   /** a circle with a question mark: help */
   help: ['M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z', 'M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3', 'M12 17h.01'],
   /** a cog: settings */
