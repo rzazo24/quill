@@ -838,6 +838,16 @@ describe('wide screens: three columns and a panel', () => {
     expect(a.root.classList.contains('wide')).toBe(true); expect(a.root.classList.contains('wide-screen')).toBe(true)
     for (const page of ['#/settings', '#/help']) { await a.go(page); await tick(80); expect(a.root.classList.contains('wide'), page).toBe(false); expect(a.root.classList.contains('wide-screen'), page).toBe(true) }
   })
+  it('a change made in Settings (avatars, filter) is already in the columns when you go back, without reloading the page', async () => {
+    const a = boot({ events: wideWorld(), stored: { me }, wide: { value: true } }); await tick(250)
+    const avatars = () => [...col(a, 'following').querySelectorAll('article.note .avatar')]
+    expect(avatars().length).toBeGreaterThan(0); expect(avatars().every((x) => !x.classList.contains('art'))).toBe(true)
+    await a.go('#/settings'); await tick(100)
+    ;([...a.root.querySelectorAll('.seg.avatars button')].find((b) => b.textContent!.includes('Robots')) as HTMLElement).click(); await tick(250)
+    await a.go('#/'); await tick(150)
+    expect(avatars().every((x) => x.classList.contains('art') && x.querySelector('svg.robot'))).toBe(true)
+    expect(col(a, 'mentions').querySelector('.avatar.art svg.robot')).not.toBeNull(); expect(col(a, 'me').querySelector('.account .avatar.lg.art svg.robot')).not.toBeNull()
+  })
   it('narrow screens are unchanged: one column and the tab bar', async () => {
     const a = boot({ events: wideWorld(), stored: { me }, wide: { value: false } }); await tick(250)
     expect(a.root.querySelector('.col')).toBeNull(); expect(a.root.querySelector('.tabbar')).not.toBeNull(); expect(a.root.classList.contains('wide')).toBe(false); expect(a.root.classList.contains('wide-screen')).toBe(false)

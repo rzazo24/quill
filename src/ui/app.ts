@@ -323,8 +323,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (!(await ensureSession()) || !session) return
     if (paneJobs === 0) status = null // reading the account is done; what turns the button now is the columns loading
     const route = parseRoute(deps.location.hash)
-    if (route.name === 'settings' || route.name === 'help') { draw(); return }
-    const jobs: Promise<void>[] = []
+    const jobs: Promise<void>[] = [] // Settings and Help too: a change made there (avatars, filter, relays) must already be in the columns when you go back
     if (scope === 'all') for (const id of ['following', 'mentions', 'me'] as const) jobs.push(loadPane(panes[id], { name: id }))
     if (route.name === 'note' || route.name === 'user' || route.name === 'people') {
       const key = JSON.stringify(route)
