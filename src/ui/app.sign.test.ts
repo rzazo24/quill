@@ -465,3 +465,36 @@ describe('sharing a note', () => {
     expect(a.root.querySelector('.sheet')).toBeNull()
   })
 })
+
+describe('quoting a note', () => {
+  const sk = generateSecretKey(), author = getPublicKey(sk), signed = finalizeEvent({ kind: 1, created_at: 1_699_999_500, tags: [], content: 'a signed note to quote' }, sk)
+  const events = (): Event[] => [list(me, 3, [['p', author]]), list(author, 3, []), ev(author, JSON.stringify({ name: 'Quinn' }), { kind: 0, created_at: 5 }), signed]
+  const share = (a: ReturnType<typeof boot>) => a.root.querySelector('button.share') as HTMLButtonElement
+  const open = async () => { const sg = fakeSigner(); const a = boot({ events: events(), signer: sg }); await tick(100); await connectClave(a, sg); await a.go('#/'); await tick(80); share(a).click(); await tick(60); return { a, sg } }
+  const write = (a: ReturnType<typeof boot>, text: string) => { const ta = a.root.querySelector('.sheet textarea') as HTMLTextAreaElement; ta.value = text; ta.dispatchEvent(new Event('input')) }
+  it('the share panel offers Quote next to Share; it opens the writing panel with the note being quoted, a placeholder for the comment, and a counter that leaves room for the reference', async () => {
+    const { a } = await open(); expect([...a.root.querySelectorAll('.sheet button')].map((b) => b.textContent)).toEqual(['Share', 'Quote with a comment', 'Cancel'])
+    await click(a.root, 'Quote with a comment')
+    const sheet = a.root.querySelector('.sheet')!; expect(sheet.querySelector('.review')).toBeNull(); expect(sheet.querySelector('.replying')!.textContent).toContain('Quoting Quinn'); expect(sheet.querySelector('.replying q')!.textContent).toContain('a signed note to quote')
+    expect(sheet.querySelector('textarea')!.getAttribute('placeholder')).toBe('Your comment…'); const m = /0 \/ (\d+)/.exec(sheet.querySelector('small')!.textContent!)!; expect(Number(m[1])).toBeLessThan(1000); expect(Number(m[1])).toBeGreaterThan(800)
+  })
+  it('a quote without a comment is refused with a message (it would just be a share)', async () => {
+    const { a } = await open(); await click(a.root, 'Quote with a comment'); await click(a.root, 'Review'); expect(a.text()).toContain('Write your comment'); expect(a.root.querySelector('.review')).toBeNull()
+    write(a, '   '); await click(a.root, 'Review'); expect(a.root.querySelector('.review')).toBeNull()
+  })
+  it('review shows the exact note: the comment, the reference, the q and p tags and no e tag; publishing signs exactly that and does NOT mark the note as answered', async () => {
+    const { a, sg } = await open(); await click(a.root, 'Quote with a comment'); write(a, 'worth reading #nostr'); await click(a.root, 'Review')
+    const rev = a.root.querySelector('.sheet .review')!; expect(rev.querySelector('.preview')!.textContent).toMatch(/^worth reading #nostr\n\nnostr:nevent1/); expect(rev.textContent).toContain('Quoting a note by Quinn')
+    await click(a.root, 'Publish'); await tick(150)
+    expect(a.pub.sent).toHaveLength(1); const e = a.pub.sent[0]!.event
+    expect(e.kind).toBe(1); expect(e.content).toMatch(/^worth reading #nostr\n\nnostr:nevent1/); expect(e.tags.filter((t) => t[0] === 'q')).toEqual([['q', signed.id, 'wss://r1.example', author]]); expect(e.tags.some((t) => t[0] === 'e')).toBe(false)
+    expect(e.tags).toContainEqual(['p', author]); expect(e.tags).toContainEqual(['t', 'nostr']); expect(sg.log.filter((l) => l.startsWith('sign'))).toHaveLength(1)
+    expect(a.root.querySelector('button.link.on')).toBeNull() // "Replied" is not lit: a quote is not a reply
+  })
+  it('the comment cannot use up the room of the reference: too long a comment is refused by the usual limit', async () => {
+    const { a } = await open(); await click(a.root, 'Quote with a comment'); write(a, 'x'.repeat(990)); await click(a.root, 'Review'); expect(a.root.querySelector('.review')).toBeNull(); expect(a.text()).toContain('limit 1000 characters')
+  })
+  it('Cancel leaves the writing panel and nothing is signed', async () => {
+    const { a, sg } = await open(); await click(a.root, 'Quote with a comment'); await click(a.root, 'Cancel'); expect(a.root.querySelector('.sheet')).toBeNull(); expect(a.pub.sent).toEqual([]); expect(sg.log.filter((l) => l.startsWith('sign'))).toHaveLength(0)
+  })
+})

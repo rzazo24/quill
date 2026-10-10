@@ -2,7 +2,7 @@
 // user's remote signer. State lives here; everything else is a function of it.
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
 import { canRepost, repostTemplate } from '../core/repost.js'
-import { hashtagTags, mentionTags, mergeTags, reactionTags, replyTags } from '../core/compose.js'
+import { hashtagTags, mentionTags, mergeTags, quoteContent, quoteTags, reactionTags, replyTags } from '../core/compose.js'
 import { parseIdentity } from '../core/identity.js'
 import { mentionedKeys, shortNpub } from '../core/refs.js'
 import { isReply } from '../core/thread.js'
@@ -420,24 +420,30 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     return current
   }
 
-  function templateFor(text: string, target?: NostrEvent): Template {
+  function templateFor(text: string, target?: NostrEvent, mode: Composer['mode'] = target ? 'reply' : 'note'): Template {
     const auto = mergeTags(mentionTags(text), hashtagTags(text))
-    return { kind: 1, content: text, tags: target ? mergeTags(replyTags(target), auto) : auto, created_at: Math.floor((deps.nowMs?.() ?? Date.now()) / 1000) }
+    const created_at = Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
+    // a quote is a note of its own (not a reply): the comment, then a reference to the quoted note, with the q tag that points at it
+    if (mode === 'quote' && target) { const hint = relays[0] ?? ''; return { kind: 1, content: quoteContent(text, target, hint), tags: mergeTags(quoteTags(target, hint), auto), created_at } }
+    return { kind: 1, content: text, tags: target ? mergeTags(replyTags(target), auto) : auto, created_at }
   }
 
   function startReply(target: NostrEvent): void { composer = { mode: 'reply', target, text: '' }; review = null; result = null; flash = null; draw(); root.querySelector('textarea')?.focus() }
+  /** From the share panel: a quote asks for the reader's comment first. */
+  function startQuote(target: NostrEvent): void { shareConfirm = null; composer = { mode: 'quote', target, text: '' }; review = null; result = null; flash = null; draw(); root.querySelector('textarea')?.focus() }
   function startNote(): void { composer = { mode: 'note', text: '' }; draw(); root.querySelector('textarea')?.focus() }
   function doReview(): void {
     if (!composer) return
     let template: Template
-    try { template = templateFor(composer.text, composer.target) } catch { return say('error', t(lang, 'p_tags')), draw() }
+    if (composer.mode === 'quote' && !composer.text.trim()) { say('error', t(lang, 'quoteEmpty')); return draw() }
+    try { template = templateFor(composer.text, composer.target, composer.mode) } catch { return say('error', t(lang, 'p_tags')), draw() }
     const problem = checkTemplate(template)
     if (problem) { say('error', problemText(lang, problem, { max: MAX_NOTE_CHARS })); return draw() }
-    flash = null; review = { template, target: composer.target, mentions: template.tags.filter((x) => x[0] === 'p').length }; draw()
+    flash = null; review = { template, target: composer.target, mentions: template.tags.filter((x) => x[0] === 'p').length, quote: composer.mode === 'quote' }; draw()
   }
   async function publish(): Promise<void> {
     if (!review) return
-    const replyingTo = review.target, ok = await send(review.template)
+    const replyingTo = review.quote ? undefined : review.target, ok = await send(review.template) // a quote is not a reply: the note quoted is not marked as answered
     if (ok) { if (replyingTo) { engagement.addReply(replyingTo.id); rebar(replyingTo) } review = null; composer = null; void load() }
   }
   async function react(target: NostrEvent, emoji: string): Promise<void> {
@@ -506,7 +512,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const signArea = signer ? renderSignArea({
       signer: signer.state, who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, flash, composer, review, step, result, relays, bunkerText, linkOpen, confirmDisconnect: confirmingDisconnect, shareConfirm,
     }, {
-      openConnect, startLink, pasteBunker: () => void pasteBunker(), cancelConnect, bunker: (x) => void bunker(x), confirmShare: () => void share(), cancelShare: () => { shareConfirm = null; draw() }, askDisconnect: () => { confirmingDisconnect = true; draw() }, cancelDisconnect: () => { confirmingDisconnect = false; draw() },
+      openConnect, startLink, pasteBunker: () => void pasteBunker(), cancelConnect, bunker: (x) => void bunker(x), confirmShare: () => void share(), startQuote: () => { if (shareConfirm) startQuote(shareConfirm) }, cancelShare: () => { shareConfirm = null; draw() }, askDisconnect: () => { confirmingDisconnect = true; draw() }, cancelDisconnect: () => { confirmingDisconnect = false; draw() },
       disconnect: () => { confirmingDisconnect = false; void signer.disconnect(); composer = review = result = null; flash = null; draw() }, copy: (x) => { deps.copy?.(x); say('info', t(lang, 'copied')); draw() },
       edit: (x) => { if (composer) composer.text = x }, review: doReview, publish: () => void publish(), back: () => { review = null; draw() }, cancelComposer: () => { composer = null; review = null; draw() },
       retry: () => void retry(), dismissResult: () => { result = null; draw() }, startNote, cancelSigning: () => signing?.abort(),

@@ -68,3 +68,13 @@ export function mergeTags(explicit: string[][], auto: string[][]): string[][] {
   const have = new Set(explicit.map((t) => `${t[0]}\u0000${t[1]}`))
   return [...explicit, ...auto.filter((t) => !have.has(`${t[0]}\u0000${t[1]}`))]
 }
+
+/** A quote (NIP-18): the reader's own comment, then a NIP-21 reference to the note quoted, which clients show as the embedded note. */
+export function quoteRef(target: Event, hint: string): string {
+  return 'nostr:' + nip19.neventEncode({ id: target.id, relays: hint ? [hint] : [], author: target.pubkey, kind: target.kind })
+}
+/** The `q` tag points at the note quoted (with where to find it and who wrote it), and the author is mentioned so they are told. */
+export const quoteTags = (target: Event, hint: string): string[][] => [['q', target.id, hint, target.pubkey], ['p', target.pubkey]]
+export const quoteContent = (text: string, target: Event, hint: string): string => `${text.trim()}\n\n${quoteRef(target, hint)}`
+/** How many characters of the 1000 the reference takes (and the blank line before it): what the reader's comment has left is the rest. */
+export const quoteReserve = (target: Event, hint: string): number => [...`\n\n${quoteRef(target, hint)}`].length

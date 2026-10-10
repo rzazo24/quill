@@ -2,6 +2,7 @@
 // Pure of state: give it the state and the handlers, get elements. The text of strangers (a reply's target) only ever goes in as text.
 import type { Event as NostrEvent } from 'nostr-tools'
 import { cleanText } from '../core/text.js'
+import { quoteReserve } from '../core/compose.js'
 import { failedRelays } from '../net/publisher.js'
 import type { Published, Step } from '../sign/pipeline.js'
 import { MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
@@ -13,8 +14,8 @@ import { normReaction, type Mine } from '../data/engaged.js'
 
 export const REACTIONS = ['+', '❤️', '🤙', '😂', '🙏']
 
-export interface Composer { mode: 'note' | 'reply'; target?: NostrEvent; text: string }
-export interface Review { template: Template; target?: NostrEvent; mentions: number }
+export interface Composer { mode: 'note' | 'reply' | 'quote'; target?: NostrEvent; text: string }
+export interface Review { template: Template; target?: NostrEvent; mentions: number; quote?: boolean }
 export interface Flash { kind: 'error' | 'info'; text: string }
 
 export interface SignUiState {
@@ -38,7 +39,7 @@ export interface SignUiState {
 }
 
 export interface SignUiHandlers {
-  openConnect(): void; cancelConnect(): void; bunker(text: string): void; confirmShare(): void; cancelShare(): void; askDisconnect(): void; cancelDisconnect(): void; disconnect(): void; copy(text: string): void
+  openConnect(): void; cancelConnect(): void; bunker(text: string): void; confirmShare(): void; startQuote(): void; cancelShare(): void; askDisconnect(): void; cancelDisconnect(): void; disconnect(): void; copy(text: string): void
   edit(text: string): void; review(): void; publish(): void; back(): void; cancelComposer(): void; retry(): void; dismissResult(): void
   startNote(): void; cancelSigning(): void; startLink(): void; pasteBunker(): void; editBunker(text: string): void; setLinkOpen(open: boolean): void
 }
@@ -110,11 +111,13 @@ const sheet = (inner: HTMLElement): HTMLElement => h('div', { class: 'sheet' }, 
 function renderComposer(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement {
   const c = s.composer
   if (!c) return h('div', {})
-  const area = h('textarea', { rows: '4', placeholder: t(v.lang, 'newNote'), 'aria-label': t(v.lang, c.mode === 'reply' ? 'reply' : 'newNote'), onInput: (e: Event) => { hd.edit((e.target as HTMLTextAreaElement).value); count.textContent = t(v.lang, 'chars', { n: [...(e.target as HTMLTextAreaElement).value].length, max: MAX_NOTE_CHARS }) } })
+  // a quote carries the reference to the note after the comment: what it takes is not left to the comment
+  const max = c.mode === 'quote' && c.target ? MAX_NOTE_CHARS - quoteReserve(c.target, s.relays[0] ?? '') : MAX_NOTE_CHARS
+  const area = h('textarea', { rows: '4', placeholder: t(v.lang, c.mode === 'quote' ? 'quotePlaceholder' : 'newNote'), 'aria-label': t(v.lang, c.mode === 'reply' ? 'reply' : c.mode === 'quote' ? 'quoteButton' : 'newNote'), onInput: (e: Event) => { hd.edit((e.target as HTMLTextAreaElement).value); count.textContent = t(v.lang, 'chars', { n: [...(e.target as HTMLTextAreaElement).value].length, max }) } })
   area.value = c.text
-  const count = h('small', {}, t(v.lang, 'chars', { n: [...c.text].length, max: MAX_NOTE_CHARS }))
+  const count = h('small', {}, t(v.lang, 'chars', { n: [...c.text].length, max }))
   return h('div', { class: 'composer' },
-    c.mode === 'reply' && c.target ? h('p', { class: 'replying' }, t(v.lang, 'replyingTo', { who: nameOf(v, c.target.pubkey) }), ': ', h('q', {}, excerpt(c.target))) : null,
+    (c.mode === 'reply' || c.mode === 'quote') && c.target ? h('p', { class: 'replying' }, t(v.lang, c.mode === 'quote' ? 'quotingTo' : 'replyingTo', { who: nameOf(v, c.target.pubkey) }), ': ', h('q', {}, excerpt(c.target))) : null,
     area, h('p', {}, count, ' ', h('button', { type: 'button', onClick: hd.review }, t(v.lang, 'review')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.cancelComposer }, t(v.lang, 'cancel'))),
   )
 }
@@ -126,7 +129,7 @@ function renderShareConfirm(target: NostrEvent, hd: SignUiHandlers, v: View): HT
     h('p', { class: 'meta' }, t(v.lang, 'shareBy', { who: nameOf(v, target.pubkey) })),
     h('pre', { class: 'preview' }, cleanText(target.content, 400)),
     h('p', { class: 'meta' }, t(v.lang, 'shareNote')),
-    h('p', { class: 'buttons' }, h('button', { type: 'button', class: 'primary', onClick: hd.confirmShare }, t(v.lang, 'shareConfirm')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.cancelShare }, t(v.lang, 'cancel'))))
+    h('p', { class: 'buttons' }, h('button', { type: 'button', class: 'primary', onClick: hd.confirmShare }, t(v.lang, 'shareConfirm')), ' ', h('button', { type: 'button', onClick: hd.startQuote }, t(v.lang, 'quoteButton')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.cancelShare }, t(v.lang, 'cancel'))))
 }
 
 /** The exact event that will be signed, in words and in full: nothing is signed that is not on this screen. */
@@ -136,7 +139,7 @@ function renderReview(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement 
   return h('div', { class: 'review' },
     h('h2', {}, t(v.lang, 'previewTitle', { who: s.who ?? '' })),
     h('pre', { class: 'preview' }, r.template.content),
-    r.target ? h('p', { class: 'meta' }, t(v.lang, 'previewReplyTo', { who: nameOf(v, r.target.pubkey) })) : null,
+    r.target ? h('p', { class: 'meta' }, t(v.lang, r.quote ? 'previewQuoteOf' : 'previewReplyTo', { who: nameOf(v, r.target.pubkey) })) : null,
     r.mentions ? h('p', { class: 'meta' }, t(v.lang, 'previewMentions', { n: r.mentions })) : null,
     h('p', { class: 'meta' }, t(v.lang, 'previewRelays', { n: s.relays.length }), ` · kind ${r.template.kind} (${kind}) · ${r.template.tags.length} tags`),
     h('p', { class: 'meta' }, t(v.lang, 'previewPublic')),

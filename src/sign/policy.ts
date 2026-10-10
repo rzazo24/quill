@@ -1,6 +1,7 @@
 // What Quill is willing to ask a signer to sign. The user's signer decides what it approves (low/medium/full trust); this is Quill's own rule,
 // so that even a signer set to approve everything is only ever asked for notes, reactions, reposts of a real note and the reader's relay list, in the shapes Quill builds itself.
 import { isReactionContent } from '../core/compose.js'
+import { nip19 } from 'nostr-tools'
 import { checkRepost, REPOST_KIND, type RepostProblem } from '../core/repost.js'
 import { MAX_RELAYS, normalizeRelay } from '../net/relays.js'
 
@@ -12,9 +13,23 @@ export const MAX_SIGNATURES_PER_HOUR = 20
 
 export interface Template { kind: number; content: string; tags: string[][]; created_at: number }
 
-export type Problem = 'kind' | 'empty' | 'too-long' | 'reaction' | 'tags' | 'reaction-target' | 'relay-list' | RepostProblem
+export type Problem = 'kind' | 'empty' | 'too-long' | 'reaction' | 'tags' | 'reaction-target' | 'relay-list' | 'quote' | RepostProblem
 
-const TAG_NAMES = new Set(['e', 'p', 't', 'k', 'a'])
+const TAG_NAMES = new Set(['e', 'p', 't', 'k', 'a', 'q'])
+const HEX64 = /^[0-9a-f]{64}$/
+
+/** The ids of the notes a text points at with NIP-21 references (nostr:nevent1… / nostr:note1…). */
+const referencedNotes = (content: string): string[] => [...content.matchAll(/nostr:(nevent1[a-z0-9]{20,}|note1[a-z0-9]{20,})/g)].flatMap((m) => { try { const d = nip19.decode(m[1]!); return d.type === 'nevent' ? [d.data.id] : d.type === 'note' ? [d.data] : [] } catch { return [] } })
+
+/** A quote: exactly one `q` tag (the note, an optional tidy relay hint, an optional author), the text must carry a reference to that same note AND a comment of its own. */
+function checkQuote(t: Template): boolean {
+  const qs = t.tags.filter((x) => x[0] === 'q')
+  if (qs.length !== 1) return false
+  const [, id, hint, author, ...more] = qs[0]!
+  if (!id || !HEX64.test(id) || more.length > 0 || (hint !== undefined && hint !== '' && normalizeRelay(hint) !== hint) || (author !== undefined && !HEX64.test(author))) return false
+  if (!referencedNotes(t.content).includes(id)) return false
+  return t.content.replace(/nostr:(nevent1|note1)[a-z0-9]+/g, '').trim() !== '' // a comment of its own: a quote with none is just a share
+}
 
 /** Null when the template is fine, otherwise why not. */
 export function checkTemplate(t: Template): Problem | null {
@@ -26,7 +41,9 @@ export function checkTemplate(t: Template): Problem | null {
     return ok ? null : 'relay-list'
   }
   if (t.tags.length > 40 || !t.tags.every((tag) => Array.isArray(tag) && tag.length >= 2 && tag.length <= 4 && tag.every((v) => typeof v === 'string' && v.length <= 300) && TAG_NAMES.has(tag[0]!))) return 'tags'
+  if (t.kind !== 1 && t.tags.some((x) => x[0] === 'q')) return 'tags'
   if (t.kind === 1) {
+    if (t.tags.some((x) => x[0] === 'q') && !checkQuote(t)) return 'quote'
     if (!t.content.trim()) return 'empty'
     if ([...t.content].length > MAX_NOTE_CHARS) return 'too-long'
   } else {

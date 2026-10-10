@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { finalizeEvent, generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
-import { hashtagTags, isReactionContent, mentionTags, mergeTags, reactionTags, replyTags } from './compose.js'
+import { finalizeEvent, generateSecretKey, getPublicKey, nip19, type Event } from 'nostr-tools'
+import { hashtagTags, isReactionContent, mentionTags, mergeTags, quoteContent, quoteRef, quoteReserve, quoteTags, reactionTags, replyTags } from './compose.js'
 
 const key = () => { const sk = generateSecretKey(); return { sk, pk: getPublicKey(sk) } }
 const ev = (k: { sk: Uint8Array }, kind: number, content: string, created_at: number, tags: string[][] = []) => finalizeEvent({ kind, content, created_at, tags }, k.sk)
@@ -66,5 +66,18 @@ describe('hashtags and mentions', () => {
   })
   it('mergeTags keeps what the user asked for and adds only what is not there', () => {
     expect(mergeTags([['t', 'nostr'], ['x', '1']], [['t', 'nostr'], ['t', 'mcp']])).toEqual([['t', 'nostr'], ['x', '1'], ['t', 'mcp']])
+  })
+})
+
+describe('quotes', () => {
+  const target = { id: 'a'.repeat(64), pubkey: 'b'.repeat(64), kind: 1, created_at: 1, tags: [], content: 'x', sig: 'c'.repeat(128) } as Event
+  it('the reference decodes back to the note, its author and where to find it; the tags point at both', () => {
+    const d = nip19.decode(quoteRef(target, 'wss://relay.example.com').replace('nostr:', '')); expect(d.type).toBe('nevent')
+    expect(d.data).toMatchObject({ id: target.id, author: target.pubkey, relays: ['wss://relay.example.com'], kind: 1 })
+    expect(quoteTags(target, 'wss://relay.example.com')).toEqual([['q', target.id, 'wss://relay.example.com', target.pubkey], ['p', target.pubkey]])
+    expect((nip19.decode(quoteRef(target, '').replace('nostr:', '')).data as { relays: string[] }).relays).toEqual([])
+  })
+  it('the content is the comment, a blank line and the reference; the reserve is what the reference takes', () => {
+    const c = quoteContent('  my comment  ', target, ''); expect(c).toBe(`my comment\n\n${quoteRef(target, '')}`); expect([...c].length).toBe([...'my comment'].length + quoteReserve(target, ''))
   })
 })
