@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import type { Event } from 'nostr-tools'
+import { finalizeEvent, generateSecretKey, getPublicKey, type Event } from 'nostr-tools'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ev, pk } from '../core/testutil.js'
 import { answers, type Fetcher } from '../net/fetcher.js'
@@ -410,5 +410,58 @@ describe('a disconnect question left open is forgotten', () => {
     ;(a.root.querySelector('.signing-as button') as HTMLElement).click(); await tick(60); expect(a.root.querySelector('.confirm-disconnect')).not.toBeNull()
     await a.go('#/'); await tick(80); await a.go('#/me'); await tick(80)
     expect(a.root.querySelector('.confirm-disconnect')).toBeNull(); expect(a.root.querySelector('.signing-as button')).not.toBeNull()
+  })
+})
+
+describe('sharing a note', () => {
+  // a note with a REAL signature: the policy refuses to share anything else (the notes of the other tests have fake signatures)
+  const sk = generateSecretKey(), author = getPublicKey(sk), signed = finalizeEvent({ kind: 1, created_at: 1_699_999_500, tags: [], content: 'a signed note to share' }, sk)
+  const events = (): Event[] => [list(me, 3, [['p', author]]), list(author, 3, []), signed]
+  const share = (a: ReturnType<typeof boot>) => a.root.querySelector('button.share') as HTMLButtonElement | null
+  const ready = async (o: Parameters<typeof boot>[0] = {}) => { const sg = o.signer ?? fakeSigner(); const a = boot({ events: events(), ...o, signer: sg }); await tick(100); await connectClave(a, sg); await a.go('#/'); await tick(80); return { a, sg } }
+  it('there is a Share button on notes the filter shows, only with a signer connected', async () => {
+    const out = boot({ events: events(), signer: fakeSigner() }); await tick(100); expect(share(out)).toBeNull()
+    const { a } = await ready(); expect(share(a)).not.toBeNull(); expect(share(a)!.getAttribute('aria-label')).toBe('Share'); expect(share(a)!.getAttribute('aria-pressed')).toBe('false'); expect(share(a)!.querySelector('svg')).not.toBeNull()
+  })
+  it('a tap only asks: the note is shown with a warning that it is public, and nothing is signed until the second tap; Cancel closes it', async () => {
+    const { a, sg } = await ready(); share(a)!.click(); await tick(60)
+    const box = a.root.querySelector('.sheet .review')!; expect(box.querySelector('h2')!.textContent).toBe('Share this note?'); expect(box.querySelector('.preview')!.textContent).toContain('a signed note to share'); expect(box.textContent).toContain('This is public')
+    expect(a.pub.sent).toEqual([]); expect(sg.log.filter((l) => l.startsWith('sign'))).toHaveLength(0)
+    await click(a.root, 'Cancel'); expect(a.root.querySelector('.sheet')).toBeNull(); expect(a.pub.sent).toEqual([])
+  })
+  it('confirming signs and publishes a kind 6 repost with exactly the pointer and a faithful copy, marks the button, and says so', async () => {
+    const { a } = await ready(); share(a)!.click(); await tick(60); await click(a.root, 'Share'); await tick(150)
+    expect(a.pub.sent).toHaveLength(1); const e = a.pub.sent[0]!.event
+    expect(e.kind).toBe(6); expect(e.tags).toEqual([['e', signed.id, 'wss://r1.example'], ['p', author]]); expect(JSON.parse(e.content)).toEqual({ id: signed.id, pubkey: signed.pubkey, created_at: signed.created_at, kind: 1, tags: [], content: 'a signed note to share', sig: signed.sig }) // a faithful copy of the note, nothing more
+    expect(share(a)!.getAttribute('aria-pressed')).toBe('true'); expect(share(a)!.getAttribute('aria-label')).toBe('You shared this note'); expect(a.text()).toContain('Shared: note by'); expect(a.root.querySelector('.sheet')).toBeNull()
+  })
+  it('sharing again does not sign a second time', async () => {
+    const { a, sg } = await ready(); share(a)!.click(); await tick(60); await click(a.root, 'Share'); await tick(150)
+    share(a)!.click(); await tick(100); expect(a.root.querySelector('.sheet')).toBeNull(); expect(a.text()).toContain('You already shared this note.'); expect(a.pub.sent).toHaveLength(1); expect(sg.log.filter((l) => l.startsWith('sign'))).toHaveLength(1)
+  })
+  it('what was shared in an earlier visit (or from another app) is already marked when the page opens', async () => {
+    const sg = fakeSigner(); const shared = ev(me, JSON.stringify(signed), { kind: 6, created_at: 1_700_000_100, tags: [['e', signed.id], ['p', author]] })
+    const a = boot({ signer: sg, events: [...events(), shared] }); await tick(120); await connectClave(a, sg); await a.go('#/'); await tick(120)
+    expect(share(a)!.getAttribute('aria-pressed')).toBe('true')
+  })
+  it('a note the filter hides cannot be shared from here (it would amplify what Quill folded): its card has no Share button, a visible one does', async () => {
+    const mutedSk = generateSecretKey(), mutedPk = getPublicKey(mutedSk), hiddenNote = finalizeEvent({ kind: 1, created_at: 1_699_999_700, tags: [], content: 'a note from somebody muted' }, mutedSk)
+    const sg = fakeSigner(); const a = boot({ signer: sg, events: [list(me, 3, [['p', author], ['p', mutedPk]]), ev(me, '', { kind: 10000, created_at: 5, tags: [['p', mutedPk]] }), list(author, 3, []), list(mutedPk, 3, []), signed, hiddenNote] })
+    await tick(100); await connectClave(a, sg); await a.go('#/'); await tick(120)
+    const hidden = a.root.querySelector('details.folded')!; expect(hidden.textContent).toContain('a note from somebody muted'); expect(hidden.querySelector('button.share')).toBeNull(); expect(a.root.querySelectorAll('button.share').length).toBe(1)
+  })
+  it('a failed signature does not mark anything and publishes nothing', async () => {
+    const sg = fakeSigner({ signError: 'user rejected the request' }); const { a } = await ready({ signer: sg })
+    share(a)!.click(); await tick(60); await click(a.root, 'Share'); await tick(150); expect(a.pub.sent).toEqual([]); expect(share(a)!.getAttribute('aria-pressed')).toBe('false')
+  })
+  it('a note with a fake signature is refused by the policy, not signed: the signer is never asked', async () => {
+    const fake = ev(author, 'a note with a forged signature', { created_at: 1_699_999_600 }); const sg = fakeSigner()
+    const a = boot({ signer: sg, events: [list(me, 3, [['p', author]]), list(author, 3, []), fake] }); await tick(100); await connectClave(a, sg); await a.go('#/'); await tick(80)
+    share(a)!.click(); await tick(60); await click(a.root, 'Share'); await tick(150); expect(a.pub.sent).toEqual([]); expect(sg.log.filter((l) => l.startsWith('sign'))).toHaveLength(0); expect(a.text()).toContain('That repost is not valid.')
+  })
+  it('a question left open is forgotten when the signer disconnects', async () => {
+    const { a } = await ready(); share(a)!.click(); await tick(60); expect(a.root.querySelector('.sheet .review')).not.toBeNull()
+    await a.go('#/me'); await tick(80); ;(a.root.querySelector('.signing-as button') as HTMLElement).click(); await tick(60); ;(a.root.querySelector('.confirm-disconnect button.danger') as HTMLElement).click(); await tick(100)
+    expect(a.root.querySelector('.sheet')).toBeNull()
   })
 })

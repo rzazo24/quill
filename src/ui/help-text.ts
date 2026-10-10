@@ -32,7 +32,7 @@ The summary at the top says how many notes are hidden and why. Every rule can be
   { id: 'write', title: 'Writing with Clave', body: `In Me, tap Connect Clave and paste the bunker:// address that Clave gives you (or tap Paste and connect after copying it in Clave). Clave keeps your key and signs; Quill only keeps an app key in this browser.
 
 • With a bunker:// address Clave can sign in the background. With a link or QR it only answers while it is open on screen.
-• Reacting is one tap. Reply and Write a note go through a review screen that shows the exact text, kind, tags and relays before anything is asked of Clave.
+• Reacting is one tap. Sharing a note (the arrows button) asks first, because it is public and Quill cannot undo it: you see the note, then confirm. Only notes the filter shows can be shared, and what you already shared is lit. Reply and Write a note go through a review screen that shows the exact text, kind, tags and relays before anything is asked of Clave.
 • Quill sends one request and waits up to 90 seconds. You can cancel, and nothing is published unless Clave signs.
 • Quill signs at most 20 times per hour, notes up to 1000 characters, whatever trust level you set in Clave. A good level for Quill in Clave is medium.
 • After signing, the result is shown relay by relay, with a retry for the ones that failed that needs no new signature.` },
@@ -89,7 +89,7 @@ El resumen de arriba dice cuántas notas se ocultan y por qué. Cada regla se pu
   { id: 'write', title: 'Escribir con Clave', body: `En Yo, toca Conectar Clave y pega la dirección bunker:// que te da Clave (o toca Pegar y conectar después de copiarla en Clave). Clave guarda tu clave y firma; Quill solo guarda una clave de aplicación en este navegador.
 
 • Con una dirección bunker:// Clave puede firmar en segundo plano. Con un enlace o un QR solo contesta mientras está abierta en pantalla.
-• Reaccionar es un toque. Responder y Escribir una nota pasan por una pantalla de revisión que muestra el texto exacto, el tipo, las etiquetas y los relés antes de pedirle nada a Clave.
+• Reaccionar es un toque. Compartir una nota (el botón de las flechas) pregunta antes, porque es público y Quill no puede deshacerlo: ves la nota y confirmas. Solo se pueden compartir las notas que el filtro muestra, y lo que ya compartiste queda encendido. Responder y Escribir una nota pasan por una pantalla de revisión que muestra el texto exacto, el tipo, las etiquetas y los relés antes de pedirle nada a Clave.
 • Quill manda una petición y espera hasta 90 segundos. Puedes cancelar, y no se publica nada si Clave no firma.
 • Quill firma como mucho 20 veces por hora, notas de hasta 1000 caracteres, sea cual sea el nivel de confianza que le des en Clave. Un buen nivel para Quill en Clave es el medio.
 • Tras firmar, el resultado se muestra relé por relé, con un reintento para los que fallaron que no necesita una firma nueva.` },

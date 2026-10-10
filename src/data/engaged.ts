@@ -9,23 +9,25 @@ export const normReaction = (content: string): string => content.replace(/️/g,
 
 const HEX64 = /^[0-9a-f]{64}$/
 
-export interface Mine { reactions: ReadonlySet<string>; replied: boolean }
-const NONE: Mine = { reactions: new Set(), replied: false }
+export interface Mine { reactions: ReadonlySet<string>; replied: boolean; reposted: boolean }
+const NONE: Mine = { reactions: new Set(), replied: false, reposted: false }
 
 export class Engagement {
   private readonly reacted = new Map<string, Set<string>>()
   private readonly replies = new Set<string>()
+  private readonly shared = new Set<string>()
 
   /** What was done to this note (never undefined). */
-  of(noteId: string): Mine { return { reactions: this.reacted.get(noteId) ?? NONE.reactions, replied: this.replies.has(noteId) } }
+  of(noteId: string): Mine { return { reactions: this.reacted.get(noteId) ?? NONE.reactions, replied: this.replies.has(noteId), reposted: this.shared.has(noteId) } }
   addReaction(noteId: string, content: string): void {
     const c = normReaction(content)
     if (HEX64.test(noteId) && c) this.reacted.set(noteId, (this.reacted.get(noteId) ?? new Set()).add(c))
   }
   addReply(noteId: string): void { if (HEX64.test(noteId)) this.replies.add(noteId) }
+  addRepost(noteId: string): void { if (HEX64.test(noteId)) this.shared.add(noteId) }
 }
 
-/** `events` are the reader's own reactions (kind 7) and notes (kind 1); anything else, or anyone else's, is ignored. */
+/** `events` are the reader's own reactions (kind 7), notes (kind 1) and reposts (kinds 6 and 16); anything else, or anyone else's, is ignored. */
 export function engagementOf(events: Event[], me: string): Engagement {
   const e = new Engagement()
   for (const ev of events) {
@@ -33,6 +35,9 @@ export function engagementOf(events: Event[], me: string): Engagement {
     if (ev.kind === 7) {
       const target = [...ev.tags].reverse().find((t) => t[0] === 'e' && HEX64.test(t[1] ?? ''))?.[1] // NIP-25: the LAST e tag is the note reacted to
       if (target) e.addReaction(target, ev.content)
+    } else if (ev.kind === 6 || ev.kind === 16) {
+      const target = [...ev.tags].reverse().find((t) => t[0] === 'e' && HEX64.test(t[1] ?? ''))?.[1] // NIP-18: the note shared
+      if (target) e.addRepost(target)
     } else if (ev.kind === 1) {
       const to = threadRefs(ev).reply
       if (to) e.addReply(to)
@@ -42,6 +47,6 @@ export function engagementOf(events: Event[], me: string): Engagement {
 }
 
 export async function loadEngagement(f: Fetcher, me: string): Promise<Engagement> {
-  const [reactions, notes] = await Promise.all([f.query({ kinds: [7], authors: [me], limit: 500 }), f.query({ kinds: [1], authors: [me], limit: 300 })])
-  return engagementOf([...reactions, ...notes], me)
+  const [reactions, notes, reposts] = await Promise.all([f.query({ kinds: [7], authors: [me], limit: 500 }), f.query({ kinds: [1], authors: [me], limit: 300 }), f.query({ kinds: [6, 16], authors: [me], limit: 300 }).catch(() => [])])
+  return engagementOf([...reactions, ...notes, ...reposts], me)
 }

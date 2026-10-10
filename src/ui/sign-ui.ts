@@ -31,12 +31,14 @@ export interface SignUiState {
   /** What the user has typed in the bunker:// field and whether "use a link instead" is open: kept in the app because the page is redrawn often. */
   bunkerText: string
   linkOpen: boolean
+  /** The note the reader is about to share: sharing is public, so it asks first. */
+  shareConfirm: NostrEvent | null
   /** Disconnecting asks first: connecting again means pasting the bunker:// address again. */
   confirmDisconnect: boolean
 }
 
 export interface SignUiHandlers {
-  openConnect(): void; cancelConnect(): void; bunker(text: string): void; askDisconnect(): void; cancelDisconnect(): void; disconnect(): void; copy(text: string): void
+  openConnect(): void; cancelConnect(): void; bunker(text: string): void; confirmShare(): void; cancelShare(): void; askDisconnect(): void; cancelDisconnect(): void; disconnect(): void; copy(text: string): void
   edit(text: string): void; review(): void; publish(): void; back(): void; cancelComposer(): void; retry(): void; dismissResult(): void
   startNote(): void; cancelSigning(): void; startLink(): void; pasteBunker(): void; editBunker(text: string): void; setLinkOpen(open: boolean): void
 }
@@ -65,6 +67,7 @@ export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, sign
     // while the signer works: a popup that stays as long as the wait lasts (it does not fade) and goes away when it is over
     if (s.step) parts.push(h('div', { class: 'popup stay', role: 'status' }, h('span', {}, t(v.lang, `step_${s.step}` as Parameters<typeof t>[1])), s.step === 'waiting' ? h('button', { type: 'button', class: 'link', onClick: hd.cancelSigning }, t(v.lang, 'cancel')) : null))
     else if (s.result) toast.push(renderResult(s.result, s.relays, hd, v))
+    else if (s.shareConfirm) parts.push(sheet(renderShareConfirm(s.shareConfirm, hd, v)))
     else if (s.review) parts.push(sheet(renderReview(s, hd, v)))
     else if (s.composer) parts.push(sheet(renderComposer(s, hd, v)))
     else if (fab) parts.push(h('button', { type: 'button', class: 'fab', 'aria-label': t(v.lang, 'newNote').replace(/…$/, ''), title: t(v.lang, 'newNote').replace(/…$/, ''), onClick: hd.startNote }, icon('pen', 24)))
@@ -116,6 +119,16 @@ function renderComposer(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElemen
   )
 }
 
+/** Sharing a note is public and cannot be undone from here: the note is shown, and nothing is signed until the second tap. */
+function renderShareConfirm(target: NostrEvent, hd: SignUiHandlers, v: View): HTMLElement {
+  return h('div', { class: 'review', role: 'alertdialog', 'aria-label': t(v.lang, 'shareTitle') },
+    h('h2', {}, t(v.lang, 'shareTitle')),
+    h('p', { class: 'meta' }, t(v.lang, 'shareBy', { who: nameOf(v, target.pubkey) })),
+    h('pre', { class: 'preview' }, cleanText(target.content, 400)),
+    h('p', { class: 'meta' }, t(v.lang, 'shareNote')),
+    h('p', { class: 'buttons' }, h('button', { type: 'button', class: 'primary', onClick: hd.confirmShare }, t(v.lang, 'shareConfirm')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.cancelShare }, t(v.lang, 'cancel'))))
+}
+
 /** The exact event that will be signed, in words and in full: nothing is signed that is not on this screen. */
 function renderReview(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement {
   const r = s.review!
@@ -143,7 +156,7 @@ function renderResult(r: Published, relays: string[], hd: SignUiHandlers, v: Vie
 
 /** One-tap reactions under a note, only while a signer is connected. What the reader already did to the note is marked: the reactions given (also ones from other
  *  apps, with emoji this bar does not offer) and whether they replied. */
-export function reactionBar(target: NostrEvent, onReact: (emoji: string) => void, onReply: () => void, v: View, mine: Mine = { reactions: new Set(), replied: false }): HTMLElement {
+export function reactionBar(target: NostrEvent, onReact: (emoji: string) => void, onReply: () => void, v: View, mine: Mine = { reactions: new Set(), replied: false, reposted: false }, onShare?: () => void): HTMLElement {
   const offered = REACTIONS.map((e) => normReaction(e))
   const extra = [...mine.reactions].filter((c) => !offered.includes(c)) // given from elsewhere, e.g. 🔥: shown too, so the bar tells the truth
   const chip = (content: string, label: string) => {
@@ -152,6 +165,8 @@ export function reactionBar(target: NostrEvent, onReact: (emoji: string) => void
   }
   return h('div', { class: 'actions' },
     h('button', { type: 'button', class: mine.replied ? 'link on' : 'link', onClick: onReply }, ...(mine.replied ? [icon('check', 14), t(v.lang, 'replied')] : [t(v.lang, 'reply')])),
+    // sharing: only for notes that can be (a text note the filter shows); lit when you already shared it
+    onShare ? h('button', { type: 'button', class: mine.reposted ? 'react share on' : 'react share', 'aria-pressed': String(mine.reposted), 'aria-label': t(v.lang, mine.reposted ? 'sharedByYou' : 'share'), title: t(v.lang, mine.reposted ? 'sharedByYou' : 'share'), onClick: onShare }, icon('repost', 16)) : null,
     ...REACTIONS.map((e) => chip(e, e === '+' ? '👍' : e)),
     ...extra.map((c) => chip(c, c)),
   )

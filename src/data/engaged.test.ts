@@ -27,12 +27,29 @@ describe('what the reader already did', () => {
   it('malformed events never throw and never count', () => {
     const e = engagementOf([react('❤️', []), react('❤️', [['e', 'nothex']]), react('', [['e', n1]]), ev(me, 'x', { tags: [['e', 'zz', '', 'reply']] })], me)
     expect(e.of(n1).reactions.size).toBe(0); expect(e.of('zz').replied).toBe(false)
-    const local = new Engagement(); local.addReaction('nothex', '❤️'); local.addReply('nothex'); expect(local.of('nothex')).toEqual({ reactions: new Set(), replied: false })
+    const local = new Engagement(); local.addReaction('nothex', '❤️'); local.addReply('nothex'); local.addRepost('nothex'); expect(local.of('nothex')).toEqual({ reactions: new Set(), replied: false, reposted: false })
   })
   it('loads the reader\'s reactions and notes from the relays', async () => {
     const world = [react('🙏', [['e', n1]]), ev(me, 'reply', { tags: [['e', n2, '', 'root']] }), react('❤️', [['e', n3]], other)]
     const f: Fetcher = { query: async (filter) => world.filter((x) => answers(filter, x)) }
     const e = await loadEngagement(f, me)
     expect([...e.of(n1).reactions]).toEqual(['🙏']); expect(e.of(n2).replied).toBe(true); expect(e.of(n3).reactions.size).toBe(0)
+  })
+})
+
+describe('what the reader already shared', () => {
+  const me = pk('1'), other = pk('2'), n1 = 'a'.repeat(64), n2 = 'b'.repeat(64)
+  it('knows the notes the reader reposted (kinds 6 and 16, the LAST e tag), and ignores other people\'s reposts', () => {
+    const e = engagementOf([ev(me, '', { kind: 6, tags: [['e', 'c'.repeat(64)], ['e', n1], ['p', other]] }), ev(me, '', { kind: 16, tags: [['e', n2], ['k', '1']] }), ev(other, '', { kind: 6, tags: [['e', 'd'.repeat(64)]] })], me)
+    expect(e.of(n1).reposted).toBe(true); expect(e.of(n2).reposted).toBe(true); expect(e.of('d'.repeat(64)).reposted).toBe(false); expect(e.of('c'.repeat(64)).reposted).toBe(false)
+  })
+  it('is read from the relays, and a failure on reposts only means nothing is marked', async () => {
+    const world = [ev(me, '', { kind: 6, tags: [['e', n1]] }), ev(me, '❤️', { kind: 7, tags: [['e', n2]] })]
+    expect((await loadEngagement({ query: async (f) => world.filter((e) => answers(f, e)) }, me)).of(n1).reposted).toBe(true)
+    const broken: Fetcher = { query: async (f) => { if (f.kinds?.includes(6)) throw new Error('boom'); return world.filter((e) => answers(f, e)) } }
+    const e = await loadEngagement(broken, me); expect(e.of(n1).reposted).toBe(false); expect([...e.of(n2).reactions]).toEqual(['❤'])
+  })
+  it('malformed reposts never throw and never count', () => {
+    const e = engagementOf([ev(me, '', { kind: 6, tags: [] }), ev(me, '', { kind: 6, tags: [['e', 'nothex']] })], me); expect(e.of('nothex').reposted).toBe(false)
   })
 })

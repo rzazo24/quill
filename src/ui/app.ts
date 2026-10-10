@@ -1,6 +1,7 @@
 // The app: a login, two lists (following, mentions), a thread view, and — when a signer is configured — writing, replying and reacting through the
 // user's remote signer. State lives here; everything else is a function of it.
 import { nip19, type Event as NostrEvent } from 'nostr-tools'
+import { canRepost, repostTemplate } from '../core/repost.js'
 import { hashtagTags, mentionTags, mergeTags, reactionTags, replyTags } from '../core/compose.js'
 import { parseIdentity } from '../core/identity.js'
 import { mentionedKeys, shortNpub } from '../core/refs.js'
@@ -78,6 +79,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let published: string[] | null | undefined // the relay list on Nostr: undefined = not read (yet), null = none
   let confirmingList = false
   let confirmingDisconnect = false
+  let shareConfirm: NostrEvent | null = null // the note about to be shared (sharing asks first: it is public)
+  const shareable = new Set<string>() // ids of the notes whose bar offers Share (visible to the filter, shareable)
   const helpOpen = new Set<string>(['about']) // which Help sections are unfolded
   let adoptTried = false // the published list becomes this device's list at most once per page load, and only if the reader never chose one here
   deps.setRelays?.(relays)
@@ -138,13 +141,18 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const followersSeen = new Set<string>() // everybody seen following you since this page opened (the known ones are in `knownFollowers`)
   /** How many accounts have been seen following the reader: only a lower bound (each relay knows part of them), and it only grows. Null while nothing has been looked at yet. */
   const followerCount = (): number | null => { const k = loadKnown(); return k === null && followersSeen.size === 0 ? null : new Set([...(k ?? []), ...followersSeen]).size }
-  const forgetAccount = () => { lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
+  const forgetAccount = () => { shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
   const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
 
-  const barFor = (e: NostrEvent) => reactionBar(e, (emoji) => void react(e, emoji), () => startReply(e), view(), engagement.of(e.id))
-  const actions = (j: Judged) => (signer?.state === 'connected' ? [barFor(j.event)] : [])
+  const barFor = (e: NostrEvent) => reactionBar(e, (emoji) => void react(e, emoji), () => startReply(e), view(), engagement.of(e.id), shareable.has(e.id) ? () => startShare(e) : undefined)
+  const actions = (j: Judged) => {
+    if (signer?.state !== 'connected') return []
+    // a note the filter hides is not amplified from here, and only text notes of a reasonable size can be shared
+    if (!j.verdict.hidden && canRepost(j.event)) shareable.add(j.event.id); else shareable.delete(j.event.id)
+    return [barFor(j.event)]
+  }
   /** The lists are built once and reused between redraws, so a bar already on screen keeps what it showed: redo the bar(s) of this note in place. */
   const rebar = (e: NostrEvent) => { for (const old of root.querySelectorAll(`article.note[data-id="${e.id}"] .actions`)) old.replaceWith(barFor(e)) }
   const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
@@ -447,6 +455,23 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     }
     draw()
   }
+  /** Sharing is public: first a confirmation that shows the note, then the signature. */
+  function startShare(target: NostrEvent): void {
+    if (engagement.of(target.id).reposted) { say('info', t(lang, 'alreadyShared')); return draw() }
+    shareConfirm = target; draw()
+  }
+  async function share(): Promise<void> {
+    const target = shareConfirm; shareConfirm = null
+    if (!target || !signer || signer.state !== 'connected') return draw()
+    const template = repostTemplate(target, relays[0] ?? '', Math.floor((deps.nowMs?.() ?? Date.now()) / 1000))
+    const problem = checkTemplate(template)
+    if (problem) { say('error', problemText(lang, problem)); return draw() }
+    if (await send(template)) {
+      engagement.addRepost(target.id); rebar(target)
+      if (result && !failedRelays(result.outcomes).length) { result = null; say('info', t(lang, 'shareDone', { who: nameOf(view(), target.pubkey) })) }
+    }
+    draw()
+  }
   async function retry(): Promise<void> {
     if (!result || !publisher || busy) return
     busy = true; step = 'sending'; draw()
@@ -472,15 +497,16 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const kept = root.querySelector('main.view')?.scrollTop ?? 0
     const route = parseRoute(deps.location.hash)
     if (confirmingDisconnect && (route.name !== 'me' || signer?.state !== 'connected')) confirmingDisconnect = false // a question left behind is forgotten
+    if (shareConfirm && signer?.state !== 'connected') shareConfirm = null
     const tab = (name: 'following' | 'mentions' | 'me', href: string) => h('a', { href, class: route.name === name ? 'tab on' : 'tab', 'data-tab': name, ...(route.name === name ? { 'aria-current': 'page' } : {}), onClick: (e: Event) => { if (route.name === name) { e.preventDefault(); refresh() } } }, icon(name === 'following' ? 'people' : name === 'mentions' ? 'at' : 'person', 18), t(lang, name), name === 'mentions' && badge > 0 ? h('span', { class: 'badge', role: 'status', 'aria-label': t(lang, 'newItems', { n: badge }) }, badge > 9 ? '9+' : String(badge)) : null)
     const input = h('input', { type: 'text', placeholder: t(lang, 'loginPlaceholder'), autocomplete: 'off', spellcheck: 'false', 'aria-label': t(lang, 'loginTitle') })
     const loginForm = h('form', { class: 'login card', onSubmit: (e: Event) => { e.preventDefault(); login(input.value) } },
       h('p', { class: 'tagline' }, t(lang, 'tagline')), h('h2', {}, t(lang, 'loginTitle')), h('p', {}, t(lang, 'loginHelp')), input, ' ', h('button', { type: 'submit', class: 'primary' }, t(lang, 'loginButton')),
       loginError ? h('p', { class: 'error', role: 'alert' }, loginError) : null)
     const signArea = signer ? renderSignArea({
-      signer: signer.state, who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, flash, composer, review, step, result, relays, bunkerText, linkOpen, confirmDisconnect: confirmingDisconnect,
+      signer: signer.state, who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, flash, composer, review, step, result, relays, bunkerText, linkOpen, confirmDisconnect: confirmingDisconnect, shareConfirm,
     }, {
-      openConnect, startLink, pasteBunker: () => void pasteBunker(), cancelConnect, bunker: (x) => void bunker(x), askDisconnect: () => { confirmingDisconnect = true; draw() }, cancelDisconnect: () => { confirmingDisconnect = false; draw() },
+      openConnect, startLink, pasteBunker: () => void pasteBunker(), cancelConnect, bunker: (x) => void bunker(x), confirmShare: () => void share(), cancelShare: () => { shareConfirm = null; draw() }, askDisconnect: () => { confirmingDisconnect = true; draw() }, cancelDisconnect: () => { confirmingDisconnect = false; draw() },
       disconnect: () => { confirmingDisconnect = false; void signer.disconnect(); composer = review = result = null; flash = null; draw() }, copy: (x) => { deps.copy?.(x); say('info', t(lang, 'copied')); draw() },
       edit: (x) => { if (composer) composer.text = x }, review: doReview, publish: () => void publish(), back: () => { review = null; draw() }, cancelComposer: () => { composer = null; review = null; draw() },
       retry: () => void retry(), dismissResult: () => { result = null; draw() }, startNote, cancelSigning: () => signing?.abort(),
