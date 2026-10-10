@@ -78,8 +78,8 @@ h2.section { font-size: 1.05rem; margin-top: 8px } .foot { margin: 8px 0 0 }
 /* the chip that leads to a thread: the same look as every button, only smaller */
 .thread-link { display: inline-flex; align-items: center; gap: 5px; flex: none; font-size: .78rem; line-height: 1.7; padding: 0 9px 0 8px; background: var(--btn); color: var(--muted); text-decoration: none; border: 1px solid var(--border); border-radius: 8px; vertical-align: baseline }
 .thread-link .icon { flex: none }
-.head-end { display: inline-flex; align-items: flex-start; gap: 4px } .more-menu { position: relative; display: inline-flex }
-.more-btn { display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; background: none; border: 0; border-radius: 8px; color: var(--muted) }
+.head-end { display: inline-flex; align-items: center; gap: 4px } .more-menu { position: relative; display: inline-flex }
+.more-btn { display: inline-grid; place-items: center; width: 28px; height: 24px; padding: 0; background: none; border: 0; border-radius: 8px; color: var(--muted) }
 .more-menu.open .more-btn { color: var(--accent); background: var(--btn) }
 .more-list { display: none; position: absolute; right: 0; top: 100%; z-index: 5; min-width: 190px; padding: 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.45) } .more-menu.open .more-list { display: grid }
 .more-list button { text-align: left; min-height: 40px; padding: 0 12px; background: none; border: 0; border-radius: 8px; color: var(--text); font-size: .9rem } @media (hover: hover) { .more-list button:hover, .more-btn:hover { background: var(--btn) } }

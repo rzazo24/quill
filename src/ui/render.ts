@@ -71,7 +71,7 @@ function moreMenu(event: Judged['event'], v: View): HTMLElement | null {
   // the answer is on the choice itself (the page's message bar only exists with a signer): it says "Copied" for a moment, then the menu closes
   const choice = (label: string, text: () => string) => { const b = h('button', { type: 'button', role: 'menuitem', onClick: () => { copy(text()); b.textContent = t(v.lang, 'copied'); setTimeout(() => { close(); b.textContent = label }, 900) } }, label); return b }
   const list = h('span', { class: 'more-list', role: 'menu' }, choice(t(v.lang, 'copyNoteId'), () => noteId(event)), choice(t(v.lang, 'copyNoteLink'), () => noteLink(event)))
-  const toggle = h('button', { type: 'button', class: 'more-btn', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': t(v.lang, 'more'), title: t(v.lang, 'more'), onClick: () => (box.classList.contains('open') ? close() : open()) }, icon('more', 24))
+  const toggle = h('button', { type: 'button', class: 'more-btn', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': t(v.lang, 'more'), title: t(v.lang, 'more'), onClick: () => (box.classList.contains('open') ? close() : open()) }, icon('more', 22))
   const away = (e: Event) => { if (!box.contains(e.target as Node)) close() }
   const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
   function open() { box.classList.add('open'); toggle.setAttribute('aria-expanded', 'true'); setTimeout(() => { document.addEventListener('click', away); document.addEventListener('keydown', esc) }, 0) }
