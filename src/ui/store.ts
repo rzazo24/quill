@@ -47,3 +47,11 @@ export const parseLang = (raw: string | null): Lang | null => (raw === 'en' || r
 export function parseWords(raw: string | null): string[] {
   return [...new Set((raw ?? '').split('\n').map((w) => w.trim().toLowerCase().slice(0, 60)).filter(Boolean))].slice(0, 100)
 }
+
+/** The reader's choice of theme: 'halloween', 'default', or null when they never chose (then the season decides). */
+export type ThemeChoice = 'halloween' | 'default' | null
+export const parseTheme = (raw: string | null): ThemeChoice => (raw === 'halloween' || raw === 'default' ? raw : null)
+/** From 24 October to 1 November (local date): the weeks around Halloween. */
+export const inHalloweenSeason = (d: Date): boolean => (d.getMonth() === 9 && d.getDate() >= 24) || (d.getMonth() === 10 && d.getDate() === 1)
+/** What is shown: an explicit choice always wins; without one, the season decides. */
+export const halloweenOn = (choice: ThemeChoice, now: Date): boolean => (choice === null ? inHalloweenSeason(now) : choice === 'halloween')

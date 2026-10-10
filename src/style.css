@@ -1,6 +1,6 @@
 /* Same family as the ephemeral chat and the relay's landing page: dark navy, teal accent, rounded cards. Mobile first: the base rules are for a phone,
    the media query at the end only widens things. Nothing here loads anything: no fonts, no images. */
-:root { --col: 820px; --btn:#162030; --bg:#0b0f16; --panel:#111823; --border:#1f2a3a; --text:#e6edf3; --muted:#93a1b1; --accent:#2dd4bf; --amber:#fbbf24; --red:#ff9aa5; --tab-h:44px; --ctl-h:36px /* the height of every button in the header */ }
+:root { --col: 820px; --btn:#162030; --bg:#0b0f16; --panel:#111823; --border:#1f2a3a; --text:#e6edf3; --muted:#93a1b1; --accent:#2dd4bf; --accent-rgb:45,212,191; --on-accent:#04211d; --bg-rgb:11,15,22; --amber:#fbbf24; --red:#ff9aa5; --tab-h:44px; --ctl-h:36px /* the height of every button in the header */ }
 * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: #2b3a50 transparent }
 html { color-scheme: dark; -webkit-text-size-adjust: 100%; height: 100%; background: var(--panel) } /* whatever the system leaves below the page is the colour of the tab bar, not black */
 body { margin: 0; background: var(--bg); color: var(--text); font: 1rem/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -15,7 +15,7 @@ a { color: var(--accent) }
 h2, h3 { margin: 0 }
 
 /* header and tab bar */
-.top { flex: none; position: relative; z-index: 5; display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top)) max(14px, calc((100% - var(--top-col, var(--col))) / 2)) 10px; background: rgba(11,15,22,.94); border-bottom: 1px solid var(--border) }
+.top { flex: none; position: relative; z-index: 5; display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top)) max(14px, calc((100% - var(--top-col, var(--col))) / 2)) 10px; background: rgba(var(--bg-rgb),.94); border-bottom: 1px solid var(--border) }
 .top h1 { margin: 0; font-size: 1.5rem; line-height: 1.2 } .top h1 a { color: var(--text); text-decoration: none }
 .brand { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px }
 .tag { min-width: 0; color: var(--muted); font-size: .8rem }
@@ -31,7 +31,7 @@ main.view { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior
 .tabbar .tab { flex: 1; max-width: 226px; display: flex; align-items: center; justify-content: center; min-height: calc(var(--tab-h) + env(safe-area-inset-bottom) * .5); padding-bottom: calc(env(safe-area-inset-bottom) * .18); color: var(--muted); text-decoration: none; font-size: .85rem; font-weight: 600; border-top: 3px solid transparent }
 .tabbar .tab.on { color: var(--tc); border-top-color: var(--tc); background: var(--tcbg) }
 /* the tabs wear the app's green: tinted icon, and the open one lit with a line on top */
-.tab { --tc: var(--accent); --tcbg: rgba(45,212,191,.10) }
+.tab { --tc: var(--accent); --tcbg: rgba(var(--accent-rgb),.10) }
 .tabbar .tab { gap: 6px } .tabbar .tab svg { flex: none; color: var(--tc); opacity: .65 } .tabbar .tab.on svg { opacity: 1 }
 
 /* controls */
@@ -103,12 +103,12 @@ h2.section { font-size: 1.05rem; margin-top: 8px } .foot { margin: 8px 0 0 }
 .reply[data-depth="4"], .reply[data-depth="5"], .reply[data-depth="6"] { margin-left: 0; padding-left: 0; border-left: 0 }
 
 /* writing and connecting */
-.signing-as { display: flex; align-items: center; gap: 12px } .signing-as .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(45,212,191,.18) }
+.signing-as { display: flex; align-items: center; gap: 12px } .signing-as .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(var(--accent-rgb),.18) }
 .signing-as .who { flex: 1; min-width: 0; display: grid } .signing-as .who strong { font-size: 1rem } .signing-as .who span { color: var(--muted); font-size: .9rem; overflow-wrap: anywhere } .signing-as button { flex: none } .sign .meta { margin: 0 }
 .sign textarea { min-height: 110px; resize: vertical }
 .preview { margin: 0; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit }
 .replying { color: var(--muted); font-size: .9rem } .replying q { font-style: italic }
-.bunker { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--accent); border-radius: 10px; background: rgba(45,212,191,.05) }
+.bunker { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--accent); border-radius: 10px; background: rgba(var(--accent-rgb),.05) }
 .bunker h3 { color: var(--text) } .by-link summary { display: inline-flex; align-items: center; cursor: pointer; list-style: none; min-height: 36px; padding: 0 12px; background: var(--btn); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: .9rem }
 .by-link summary::-webkit-details-marker { display: none }
 .result ul { margin: 0; padding-left: 0; list-style: none; font-size: .9rem }
@@ -129,7 +129,7 @@ h2.section { font-size: 1.05rem; margin-top: 8px } .foot { margin: 8px 0 0 }
 button.icon { display: inline-grid; place-items: center; min-height: var(--ctl-h); min-width: var(--ctl-h); padding: 0; border-radius: 8px; color: var(--muted) }
 .install h2 { font-size: 1.05rem } .install p { margin: 6px 0 0 }
 .top { flex-wrap: wrap }
-.update { flex-basis: 100%; order: -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 6px 6px 14px; margin: -2px 0 2px; background: rgba(45,212,191,.12); border: 1px solid var(--accent); border-radius: 12px; font-size: .9rem }
+.update { flex-basis: 100%; order: -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 6px 6px 14px; margin: -2px 0 2px; background: rgba(var(--accent-rgb),.12); border: 1px solid var(--accent); border-radius: 12px; font-size: .9rem }
 .update button { min-height: 36px }
 
 /* the connect panel: breathing room, and buttons you can hit with a thumb */
@@ -140,14 +140,14 @@ button.icon { display: inline-grid; place-items: center; min-height: var(--ctl-h
 
 /* what you already did to a note: the reaction you gave is lit, the reply shows a tick */
 .actions .more-reactions { display: contents } .actions .more-reactions-list { display: none } .actions .more-reactions.open .more-reactions-list { display: contents } .actions .more-toggle { color: var(--muted); font-size: 1.15rem } .actions .more-reactions.open .more-toggle { color: var(--accent); border-color: var(--accent) }
-.actions button.react.on { background: rgba(45,212,191,.18); border-color: var(--accent) }
+.actions button.react.on { background: rgba(var(--accent-rgb),.18); border-color: var(--accent) }
 .actions button.link.on { color: var(--accent); border-color: var(--accent); display: inline-flex; align-items: center; gap: 5px }
 
 /* in-app notifications: a number on the Mentions tab, new notes marked, and who reacted to your notes */
 .tab { position: relative }
-.tab .badge { position: absolute; top: 1px; right: 5px; min-width: 16px; box-sizing: border-box; padding: 0 4px; border-radius: 8px; background: var(--accent); color: #04211d; font-size: 10px; font-weight: 800; line-height: 14px; text-align: center } /* in the corner of its tab: it takes no room, so the three tabs stay equal */
+.tab .badge { position: absolute; top: 1px; right: 5px; min-width: 16px; box-sizing: border-box; padding: 0 4px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-size: 10px; font-weight: 800; line-height: 14px; text-align: center } /* in the corner of its tab: it takes no room, so the three tabs stay equal */
 .note.new { border-left: 3px solid var(--accent) }
-.note.new::before { content: attr(data-new); grid-column: 1 / -1; justify-self: start; /* a pseudo-element of a grid is a grid item: it takes its own row above the avatar and the text, not their column */ margin-bottom: 4px; padding: 0 7px; border-radius: 8px; background: rgba(45,212,191,.18); color: var(--accent); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em }
+.note.new::before { content: attr(data-new); grid-column: 1 / -1; justify-self: start; /* a pseudo-element of a grid is a grid item: it takes its own row above the avatar and the text, not their column */ margin-bottom: 4px; padding: 0 7px; border-radius: 8px; background: rgba(var(--accent-rgb),.18); color: var(--accent); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em }
 .new-line { margin: 0; color: var(--accent) }
 .reacted h2 { margin: 0 0 8px; font-size: 14px }
 .reacted ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
@@ -173,7 +173,7 @@ html[data-font=small] { font-size: 90% } html[data-font=large] { font-size: 112.
 /* settings: text size and relays */
 .prefs h3 { margin: 14px 0 6px; font-size: 1rem }
 .seg { display: flex; flex-wrap: wrap; gap: 8px }
-.seg button[aria-pressed=true] { border-color: var(--accent); background: rgba(45,212,191,.18); color: var(--accent) }
+.seg button[aria-pressed=true] { border-color: var(--accent); background: rgba(var(--accent-rgb),.18); color: var(--accent) }
 .seg .size-small { font-size: .85rem } .seg .size-large { font-size: 1.1rem } .seg .size-xlarge { font-size: 1.2rem }
 .relay-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 4px }
 .relay-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 0; border-bottom: 1px solid var(--border) }
@@ -181,7 +181,7 @@ html[data-font=small] { font-size: 90% } html[data-font=large] { font-size: 112.
 .relay-list .probe { font-size: .85rem } .relay-list .probe.up { color: var(--accent) } .relay-list .probe.down { color: var(--red) } .relay-list .probe.testing { color: var(--muted) }
 .relay-add { display: flex; gap: 8px; margin-top: 8px } .relay-add input { flex: 1; min-width: 0 }
 
-button.icon.on { color: var(--accent); border-color: var(--accent); background: rgba(45,212,191,.18) }
+button.icon.on { color: var(--accent); border-color: var(--accent); background: rgba(var(--accent-rgb),.18) }
 
 /* help */
 .help h2 { margin: 0 0 8px }
@@ -205,7 +205,7 @@ button.icon.on { color: var(--accent); border-color: var(--accent); background: 
 .quoted-from > .meta { margin: 0 }
 
 /* write: a round button over the page, and the panel it opens */
-.fab { position: fixed; z-index: 6; right: max(16px, calc((100% - var(--col)) / 2 + 16px)); bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) * .5 + 16px); width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: var(--accent); border-color: var(--accent); color: #04211d; box-shadow: 0 4px 16px rgba(0,0,0,.5) }
+.fab { position: fixed; z-index: 6; right: max(16px, calc((100% - var(--col)) / 2 + 16px)); bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) * .5 + 16px); width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: var(--accent); border-color: var(--accent); color: var(--on-accent); box-shadow: 0 4px 16px rgba(0,0,0,.5) }
 .sheet { position: fixed; inset: 0; z-index: 9; display: flex; align-items: flex-start; justify-content: center; padding: calc(env(safe-area-inset-top) + 56px) 16px 16px; background: rgba(5,8,12,.72); overflow: auto }
 .sheet > * { width: min(100%, var(--col)); box-sizing: border-box; padding: 14px; border-radius: 14px; background: var(--panel); border: 1px solid var(--border); max-height: 100%; overflow: auto }
 
@@ -277,7 +277,7 @@ main.view.wide { display: block; overflow: hidden; padding: 12px 14px 0; scrollb
 .col { min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 12px; align-content: start; padding: 0 2px 24px }
 .col-title { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; padding: 0 2px; height: 46px; flex: none; font-size: 1rem; background: var(--bg); border-bottom: 1px solid var(--border) } /* the same height in every column, with or without a button in it */
 .col-title .write { min-height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; font-size: .85rem }
-.col-title .badge { min-width: 20px; padding: 0 6px; border-radius: 10px; background: var(--accent); color: #04211d; font-size: .75rem; font-weight: 700; text-align: center }
+.col-title .badge { min-width: 20px; padding: 0 6px; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-size: .75rem; font-weight: 700; text-align: center }
 .col.detail { background: var(--bg); border-left: 1px solid var(--border); padding-left: 14px }
 #app.wide .sheet > * { width: min(100%, 680px) } #app.wide .sign .toast > * { max-width: 680px }
 #app.wide .sign .toast { bottom: 0 } #app.wide .sign .popup { bottom: 20px } /* no tab bar on a wide screen: the notices sit on the real bottom edge */
@@ -291,3 +291,10 @@ main.view.wide { display: block; overflow: hidden; padding: 12px 14px 0; scrollb
 .emoji-panel button { min-height: 36px; padding: 0; font-size: 1.3rem; line-height: 1; background: none; border: 0; border-radius: 8px }
 @media (hover: hover) { .emoji-panel button:hover { background: var(--btn) } }
 #app.wide-screen { --top-col: 1760px } /* the header keeps its place on a wide screen even on the pages that are one narrow column (Settings, Help) */
+
+/* Halloween theme (Settings, or by itself from 24 October to 1 November unless the reader chose): the same layout in purple and pumpkin orange */
+html[data-theme=halloween] { --accent:#ff8a1f; --accent-rgb:255,138,31; --on-accent:#231203; --bg:#0f0a16; --bg-rgb:15,10,22; --panel:#181022; --btn:#21162f; --border:#33244a; --muted:#a898bd; --text:#efe7f7 }
+html[data-theme=halloween] ::selection { background: rgba(var(--accent-rgb), .35) }
+.top .cobweb { position: absolute; left: 0; top: 0; width: 46px; height: 46px; pointer-events: none; opacity: .45; color: #cdbfe3 } .top .cobweb svg { width: 100%; height: 100% }
+.wordmark .pumpkin { margin-left: 6px; vertical-align: -5px }
+@media (max-width: 459px) { .wordmark .pumpkin { display: none } } /* a phone header has no room for it next to the buttons: there the quill itself turns orange and the cobweb stays */

@@ -24,4 +24,9 @@ describe('reactions in the bar', () => {
   it('with everything given or visible there is no + at all', () => {
     expect(bar(mine('😂', '🙏', '🔥', '😮', '😢', '🎉', '💯')).querySelector('.more-reactions')).toBeNull()
   })
+  it('with the Halloween theme the five spooky reactions wait behind the + too (and without it they are not offered)', () => {
+    const themed = reactionBar(ev(pk('a'), 'hi'), () => {}, () => {}, { ...v, halloween: true }, mine())
+    expect(folded(themed)).toEqual(['😂', '🙏', '🔥', '😮', '😢', '🎉', '💯', '🎃', '👻', '🦇', '💀', '🕷️'])
+    expect(folded(bar())).not.toContain('🎃')
+  })
 })

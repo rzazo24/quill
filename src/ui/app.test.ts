@@ -420,10 +420,11 @@ describe('reposts of the people you follow', () => {
 describe('the switches in Settings', () => {
   it('every rule and the reposts option is a switch (a checkbox announced as on/off), with the words first and the switch at the end, and one line that says what on and off mean', async () => {
     const a = boot({ stored: { me } }); await tick(80); await a.go('#/settings'); await tick(100)
-    const rows = [...a.root.querySelectorAll('label.check')]; expect(rows).toHaveLength(5) // four rules + reposts
+    const rows = [...a.root.querySelectorAll('label.check')]; expect(rows).toHaveLength(6) // four rules + reposts + the Halloween theme
     for (const r of rows) { const input = r.querySelector('input')!; expect(input.type).toBe('checkbox'); expect(input.getAttribute('role')).toBe('switch'); expect(r.firstElementChild!.tagName).toBe('SPAN'); expect(r.lastElementChild).toBe(input) }
     expect(a.root.querySelector('.settings .meta')!.textContent).toBe('On = the rule hides what meets its condition. Off = it hides nothing.')
-    expect(rows.slice(0, 4).map((r) => (r.querySelector('input') as HTMLInputElement).checked)).toEqual([true, true, true, true]) // all on by default
+    const rules = rows.filter((r) => !/Halloween|repost/.test(r.textContent!)); expect(rules).toHaveLength(4)
+    expect(rules.map((r) => (r.querySelector('input') as HTMLInputElement).checked)).toEqual([true, true, true, true]) // all on by default
   })
 })
 
@@ -840,5 +841,33 @@ describe('wide screens: three columns and a panel', () => {
   it('narrow screens are unchanged: one column and the tab bar', async () => {
     const a = boot({ events: wideWorld(), stored: { me }, wide: { value: false } }); await tick(250)
     expect(a.root.querySelector('.col')).toBeNull(); expect(a.root.querySelector('.tabbar')).not.toBeNull(); expect(a.root.classList.contains('wide')).toBe(false); expect(a.root.classList.contains('wide-screen')).toBe(false)
+  })
+})
+
+
+describe('the Halloween theme', () => {
+  const IN = new Date(2026, 9, 28, 12).getTime(), OUT = new Date(2026, 2, 3, 12).getTime()
+  const themed = (a: ReturnType<typeof boot>) => document.documentElement.getAttribute('data-theme') === 'halloween'
+  it('is off outside the season: no cobweb, no pumpkin, the normal wording', async () => {
+    const a = boot({ stored: { me }, clock: { now: OUT } }); await tick(150)
+    expect(themed(a)).toBe(false); expect(a.root.querySelector('.cobweb')).toBeNull(); expect(a.root.querySelector('.pumpkin')).toBeNull(); expect(a.root.querySelector('.wordmark svg.logo path')!.getAttribute('fill')).toBe('#2dd4bf')
+  })
+  it('turns itself on in the season: colours, a pumpkin and a cobweb in the header, an orange quill, and the spooky wording', async () => {
+    const a = boot({ events: [list(me, 3, [])], stored: { me }, clock: { now: IN } }); await tick(200)
+    expect(themed(a)).toBe(true); expect(a.root.querySelector('.top .cobweb svg')).not.toBeNull(); expect(a.root.querySelector('.wordmark .pumpkin')).not.toBeNull()
+    expect(a.root.querySelector('.wordmark svg.logo path')!.getAttribute('fill')).toBe('#ff8a1f'); expect(a.text()).toContain('Nothing here but dust and cobwebs.')
+  })
+  it('what the reader chose wins: switched off in the season it stays off (and the choice is kept); switched on out of the season it stays on', async () => {
+    const off = boot({ stored: { me, theme: 'default' }, clock: { now: IN } }); await tick(150); expect(themed(off)).toBe(false); expect(off.root.querySelector('.cobweb')).toBeNull()
+    const on = boot({ stored: { me, theme: 'halloween' }, clock: { now: OUT } }); await tick(150); expect(themed(on)).toBe(true); expect(on.root.querySelector('.cobweb')).not.toBeNull()
+  })
+  it('Settings has the switch: it follows the season, a tap is an explicit choice that is remembered, and it changes the page at once', async () => {
+    const a = boot({ stored: { me }, clock: { now: OUT } }); await tick(150); await a.go('#/settings'); await tick(100)
+    const sw = () => [...a.root.querySelectorAll('label.check')].find((l) => l.textContent!.includes('Halloween theme'))!.querySelector('input') as HTMLInputElement
+    expect(sw().checked).toBe(false); sw().checked = true; sw().dispatchEvent(new Event('change', { bubbles: true })); await tick(60)
+    expect(a.mem.get('theme')).toBe('halloween'); expect(themed(a)).toBe(true); expect(a.root.querySelector('.cobweb')).not.toBeNull(); expect(sw().checked).toBe(true)
+    sw().checked = false; sw().dispatchEvent(new Event('change', { bubbles: true })); await tick(60)
+    expect(a.mem.get('theme')).toBe('default'); expect(themed(a)).toBe(false); expect(a.root.querySelector('.cobweb')).toBeNull()
+    expect(a.text()).toContain('It turns on by itself from 24 October to 1 November')
   })
 })

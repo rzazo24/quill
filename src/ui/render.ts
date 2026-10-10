@@ -18,7 +18,7 @@ import { noteId, noteLink } from '../core/compose.js'
 import type { ThreadNode } from '../data/feed.js'
 import { ago, reason, t, tallyLabel, type Lang } from './i18n.js'
 
-export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** The relays put in a copied id/link as places to look for the note. */ hints?: readonly string[]; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
+export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; /** The Halloween theme is on: extra reactions. */ halloween?: boolean; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** The relays put in a copied id/link as places to look for the note. */ hints?: readonly string[]; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
 
 export const nameOf = (v: View, pubkey: string): string => v.names.get(pubkey) ?? shortNpub(pubkey)
 
@@ -252,7 +252,7 @@ export function renderHelp(v: View, open: ReadonlySet<string>, onToggle: (id: st
 export const SOURCE_URL = 'https://github.com/rzazo24/quill'
 
 export interface PrefsProps {
-  font: FontSize; avatars: AvatarStyle; sampleKey: string; onAvatars: (s: AvatarStyle) => void; reposts: boolean; onReposts: (on: boolean) => void; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
+  font: FontSize; avatars: AvatarStyle; sampleKey: string; onAvatars: (s: AvatarStyle) => void; reposts: boolean; onReposts: (on: boolean) => void; halloween: boolean; onHalloween: (on: boolean) => void; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
   /** The list published on Nostr compared with this one, and what can be done about it. */
   list: { state: ListState; publishedCount: number; canSign: boolean; confirming: boolean }
   onAskPublish: () => void; onCancelPublish: () => void; onPublish: () => void; onUsePublished: () => void
@@ -270,6 +270,7 @@ export function renderPrefs(p: PrefsProps, v: View): HTMLElement {
     h('h3', {}, t(v.lang, 'avatarsTitle')),
     h('div', { class: 'seg avatars', role: 'group', 'aria-label': t(v.lang, 'avatarsTitle') }, ...AVATAR_STYLES.map((a) =>
       h('button', { type: 'button', class: `avatar-${a}`, 'aria-pressed': String(p.avatars === a), onClick: () => { if (p.avatars !== a) p.onAvatars(a) } }, avatarEl(p.sampleKey, v, 'md', a), t(v.lang, `avatar_${a}` as Parameters<typeof t>[1])))),
+    h('label', { class: 'check' }, h('span', {}, t(v.lang, 'halloweenTheme')), h('input', { type: 'checkbox', role: 'switch', ...(p.halloween ? { checked: true } : {}), onChange: (e: Event) => p.onHalloween((e.target as HTMLInputElement).checked) })), h('p', { class: 'meta' }, t(v.lang, 'halloweenHelp')),
     h('label', { class: 'check' }, h('span', {}, t(v.lang, 'showReposts')), h('input', { type: 'checkbox', role: 'switch', ...(p.reposts ? { checked: true } : {}), onChange: (e: Event) => p.onReposts((e.target as HTMLInputElement).checked) })),
     h('h3', {}, t(v.lang, 'relaysTitle')), h('p', { class: 'meta' }, t(v.lang, 'relaysHelp')),
     h('ul', { class: 'relay-list' }, ...p.relays.map((u) => h('li', {},

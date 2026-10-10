@@ -20,12 +20,12 @@ import { failedRelays, type Publisher } from '../net/publisher.js'
 import { PipelineError, signAndPublish, type Published, type SignerApi, type Step } from '../sign/pipeline.js'
 import { checkTemplate, MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
-import { logo, icon } from './icons.js'
-import { detectLang, problemText, t, type Key, type Lang } from './i18n.js'
+import { cobweb, icon, logo, pumpkin } from './icons.js'
+import { detectLang, problemText, setSpooky, t, type Key, type Lang } from './i18n.js'
 import { PAGE, renderPeople, renderProfileHead, renderProfileMode, renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type FollowPanel, type Review } from './sign-ui.js'
 import { installHint, type Env } from './install.js'
-import { parseAvatars, parseFeedMode, parseFont, parseLang, parseReposts, parseSettings, parseWords, safeGet, safeSet, type AvatarStyle, type FeedMode, type FontSize, type KV } from './store.js'
+import { halloweenOn, parseTheme, type ThemeChoice, parseAvatars, parseFeedMode, parseFont, parseLang, parseReposts, parseSettings, parseWords, safeGet, safeSet, type AvatarStyle, type FeedMode, type FontSize, type KV } from './store.js'
 import { addRelay, parseRelays, removeRelay } from '../net/relays.js'
 import { listState, loadPublishedRelays, relayListTemplate } from '../data/relaylist.js'
 
@@ -87,6 +87,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let profileMode: 'notes' | 'replies' = 'notes' // what an account's page shows
   let avatarStyle: AvatarStyle = parseAvatars(safeGet(kv, 'avatars'))
   let feedMode: FeedMode = parseFeedMode(safeGet(kv, 'feed'))
+  let themeChoice: ThemeChoice = parseTheme(safeGet(kv, 'theme')) // null: never chosen, so the season decides
+  const halloween = () => halloweenOn(themeChoice, new Date(deps.nowMs?.() ?? Date.now()))
   let relayError: string | null = null
   const probes = new Map<string, 'testing' | 'up' | 'down'>()
   let published: string[] | null | undefined // the relay list on Nostr: undefined = not read (yet), null = none
@@ -105,8 +107,14 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const helpOpen = new Set<string>(['about']) // which Help sections are unfolded
   let adoptTried = false // the published list becomes this device's list at most once per page load, and only if the reader never chose one here
   deps.setRelays?.(relays)
+  const applyTheme = () => {
+    const on = halloween(), doc = root.ownerDocument
+    if (on) doc.documentElement.setAttribute('data-theme', 'halloween'); else doc.documentElement.removeAttribute('data-theme')
+    doc.querySelector('meta[name=theme-color]')?.setAttribute('content', on ? '#0f0a16' : '#0b0f16')
+    setSpooky(on)
+  }
   const applyFont = () => root.ownerDocument.documentElement.setAttribute('data-font', font)
-  applyFont()
+  applyFont(); applyTheme()
   let lang: Lang = parseLang(safeGet(kv, 'lang')) ?? detectLang(deps.languages)
   let settings: Settings = parseSettings(safeGet(kv, 'settings'))
   let words: string[] = parseWords(safeGet(kv, 'words'))
@@ -186,7 +194,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
   /** The lists are built once and reused between redraws, so a bar already on screen keeps what it showed: redo the bar(s) of this note in place. */
   const rebar = (e: NostrEvent) => { for (const old of root.querySelectorAll(`article.note[data-id="${e.id}"] .actions`)) old.replaceWith(barFor(e)) }
-  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
+  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
   const ctx = () => contextOf(session!, { mutedWords: words, mutedKeys: [] })
   const who = () => (signer?.pubkey ? nameOf(view(), signer.pubkey) : '')
 
@@ -419,6 +427,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   function changeFeedMode(m: FeedMode): void { feedMode = m; safeSet(kv, 'feed', m === 'follows' ? null : m); void load() }
   function changeAvatars(a: AvatarStyle): void { avatarStyle = a; safeSet(kv, 'avatars', a === 'initials' ? null : a); void load() } // the cards are built once and kept: they are rebuilt with the new pictures
   function changeReposts(on: boolean): void { showReposts = on; safeSet(kv, 'reposts', on ? null : '0'); void load() }
+  function changeTheme(on: boolean): void { themeChoice = on ? 'halloween' : 'default'; safeSet(kv, 'theme', themeChoice); applyTheme(); draw() } // an explicit choice, kept, wins over the season
   function changeFont(f: FontSize): void { font = f; safeSet(kv, 'font', f); applyFont(); draw() }
   /** A new relay list: stored, handed to the network code, and everything is read again from it. */
   function changeRelays(list: string[]): void {
@@ -731,14 +740,14 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const helpPage = renderHelp(view(), helpOpen, (id, isOpen) => { if (isOpen) helpOpen.add(id); else helpOpen.delete(id) })
     const content: (HTMLElement | null)[] = route.name === 'help' ? [signArea, helpPage]
       : !me ? [...(route.name === 'note' && guestBody ? [guestBody] : []), loginForm, signArea]
-      : route.name === 'settings' ? [signArea, renderPrefs({ font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, reposts: showReposts, onReposts: changeReposts, relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
+      : route.name === 'settings' ? [signArea, renderPrefs({ font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, halloween: halloween(), onHalloween: changeTheme, reposts: showReposts, onReposts: changeReposts, relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
         onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
       : isWide ? [wideView(route, signArea, signOut)]
       : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), body, h('div', { class: 'foot' }, signOut)]
       : [signArea, body]
     const page: (HTMLElement | null)[] = [
-      h('header', { class: 'top' }, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('div', { class: 'brand' }, h('h1', {}, h('a', { href: '#/', class: 'wordmark' }, logo(26), 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline'))), me ? h('button', { type: 'button', class: status ? 'icon spinning' : 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), ...(status ? { 'aria-busy': 'true' } : {}), onClick: refresh }, icon('refresh', 18)) : null, pills, me ? h('button', { type: 'button', class: route.name === 'settings' ? 'icon on' : 'icon', 'aria-label': t(lang, 'prefsTitle'), title: t(lang, 'prefsTitle'), 'aria-pressed': String(route.name === 'settings'), onClick: () => deps.setHash(route.name === 'settings' ? '' : '#/settings') }, icon('gear', 18)) : null, h('button', { type: 'button', class: route.name === 'help' ? 'icon on' : 'icon', 'aria-label': t(lang, 'helpTitle'), title: t(lang, 'helpTitle'), 'aria-pressed': String(route.name === 'help'), onClick: () => deps.setHash(route.name === 'help' ? '' : '#/help') }, icon('help', 18)), statusEl),
+      h('header', { class: 'top' }, halloween() ? h('span', { class: 'cobweb', 'aria-hidden': 'true' }, cobweb()) : null, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('div', { class: 'brand' }, h('h1', {}, h('a', { href: '#/', class: 'wordmark' }, logo(26, halloween()), 'Quill', halloween() ? pumpkin(22) : null)), h('span', { class: 'tag' }, t(lang, 'tagline'))), me ? h('button', { type: 'button', class: status ? 'icon spinning' : 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), ...(status ? { 'aria-busy': 'true' } : {}), onClick: refresh }, icon('refresh', 18)) : null, pills, me ? h('button', { type: 'button', class: route.name === 'settings' ? 'icon on' : 'icon', 'aria-label': t(lang, 'prefsTitle'), title: t(lang, 'prefsTitle'), 'aria-pressed': String(route.name === 'settings'), onClick: () => deps.setHash(route.name === 'settings' ? '' : '#/settings') }, icon('gear', 18)) : null, h('button', { type: 'button', class: route.name === 'help' ? 'icon on' : 'icon', 'aria-label': t(lang, 'helpTitle'), title: t(lang, 'helpTitle'), 'aria-pressed': String(route.name === 'help'), onClick: () => deps.setHash(route.name === 'help' ? '' : '#/help') }, icon('help', 18)), statusEl),
       h('main', { class: isWide ? 'view wide' : 'view' }, ...content),
       me && !isWide ? h('nav', { class: 'tabbar' }, tab('following', '#/'), tab('mentions', '#/mentions'), tab('me', '#/me')) : null,
     ]

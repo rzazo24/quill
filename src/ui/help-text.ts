@@ -51,6 +51,7 @@ The summary at the top says how many notes are hidden and why. Every rule can be
   { id: 'settings', title: 'Settings', body: `Open them with the cog (⚙) next to the language buttons.
 
 • Text size: four sizes, remembered on this device.
+• Halloween theme: purple and pumpkin colours, a pumpkin and a cobweb in the header, spooky wording and 🎃 👻 🦇 💀 🕷️ among the reactions. It turns on by itself from 24 October to 1 November; the switch in Settings always wins, on or off, and Quill remembers it.
 • Avatars: initials on a colour (the default), robots, pixel figures or Halloween creatures (pumpkins, ghosts, bats, skulls, black cats, spiders and witches). The robots, the figures and the creatures are drawn from each account's key, so the same account always looks the same; nothing is loaded from anywhere.
 • Relays: the relays Quill reads from and publishes to. Only secure addresses (wss://), from 1 to 10. Test tells you if one answers, and you can restore the defaults. Every relay sees your IP address and what you publish. Clave uses its own relays and is not affected.
 • Relay list on Nostr: you can publish your list so that other apps and your other devices know it. It is public, so Quill asks you to confirm and Clave asks you to approve it. A device where you never chose a list starts from the one you published (once; after that it is that device's own list).
@@ -112,6 +113,7 @@ El resumen de arriba dice cuántas notas se ocultan y por qué. Cada regla se pu
   { id: 'settings', title: 'Ajustes', body: `Se abren con la rueda (⚙) junto a los botones de idioma.
 
 • Tamaño del texto: cuatro tamaños, recordados en este dispositivo.
+• Tema Halloween: colores morado y calabaza, una calabaza y una telaraña en la cabecera, textos de miedo y 🎃 👻 🦇 💀 🕷️ entre las reacciones. Se enciende solo del 24 de octubre al 1 de noviembre; el interruptor de Ajustes manda siempre, encendido o apagado, y Quill lo recuerda.
 • Avatares: iniciales sobre un color (por defecto), robots, figuras de píxeles o criaturas de Halloween (calabazas, fantasmas, murciélagos, calaveras, gatos negros, arañas y brujas). Los robots, las figuras y las criaturas se dibujan a partir de la clave de cada cuenta, así que la misma cuenta se ve siempre igual; no se carga nada de ningún sitio.
 • Relés: los relés de los que Quill lee y en los que publica. Solo direcciones seguras (wss://), de 1 a 10. Probar te dice si uno responde, y puedes restaurar los de por defecto. Cada relé ve tu dirección IP y lo que publicas. Clave usa sus propios relés y no se ve afectada.
 • Lista de relés en Nostr: puedes publicar tu lista para que otras apps y tus otros dispositivos la conozcan. Es pública, así que Quill te pide que confirmes y Clave te pide que la apruebes. Un dispositivo donde nunca elegiste lista empieza con la que publicaste (una sola vez; después es la lista de ese dispositivo).

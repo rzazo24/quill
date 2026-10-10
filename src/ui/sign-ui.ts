@@ -14,6 +14,8 @@ import { nameOf, type View } from './render.js'
 import { normReaction, type Mine } from '../data/engaged.js'
 
 export const REACTIONS = ['+', '❤️', '🤙', '😂', '🙏', '🔥', '😮', '😢', '🎉', '💯']
+/** Added behind the others while the Halloween theme is on. */
+export const HALLOWEEN_REACTIONS = ['🎃', '👻', '🦇', '💀', '🕷️']
 
 export interface Composer { mode: 'note' | 'reply' | 'quote'; target?: NostrEvent; text: string }
 export interface Review { template: Template; target?: NostrEvent; mentions: number; quote?: boolean }
@@ -202,14 +204,15 @@ function moreReactions(chips: HTMLElement[], v: View): HTMLElement {
 }
 
 export function reactionBar(target: NostrEvent, onReact: (emoji: string) => void, onReply: () => void, v: View, mine: Mine = { reactions: new Set(), replied: false, reposted: false }, onShare?: () => void): HTMLElement {
-  const offered = REACTIONS.map((e) => normReaction(e))
+  const base = v.halloween ? [...REACTIONS, ...HALLOWEEN_REACTIONS] : REACTIONS
+  const offered = base.map((e) => normReaction(e))
   const extra = [...mine.reactions].filter((c) => !offered.includes(c)) // given from elsewhere, e.g. 🔥: shown too, so the bar tells the truth
   const chip = (content: string, label: string) => {
     const given = mine.reactions.has(normReaction(content))
     return h('button', { type: 'button', class: given ? 'react on' : 'react', 'aria-pressed': String(given), 'aria-label': given ? t(v.lang, 'reactedWith', { emoji: label }) : `${t(v.lang, 'react')} ${label}`, title: given ? t(v.lang, 'reactedWith', { emoji: label }) : t(v.lang, 'react'), onClick: () => onReact(content) }, label)
   }
   // three reactions are always at hand; the rest wait behind a "+" next to them. One you have already given is always shown (lit), so the bar tells the truth
-  const all: [string, string][] = [...REACTIONS.map((e): [string, string] => [e, e === '+' ? '👍' : e]), ...extra.map((c): [string, string] => [c, c])]
+  const all: [string, string][] = [...base.map((e): [string, string] => [e, e === '+' ? '👍' : e]), ...extra.map((c): [string, string] => [c, c])]
   const given = (c: string) => mine.reactions.has(normReaction(c))
   const shown = all.filter(([c], i) => i < VISIBLE_REACTIONS || given(c)), folded = all.filter(([c], i) => i >= VISIBLE_REACTIONS && !given(c))
   return h('div', { class: 'actions' },

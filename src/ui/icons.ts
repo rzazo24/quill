@@ -40,12 +40,34 @@ export function icon(name: IconName, size = 16): SVGElement {
 }
 
 /** The quill, as in the favicon (`public/favicon.svg`), drawn as page elements: nothing is loaded, so the "no images" rule and the page's img-src stay true. */
-export function logo(size = 24): SVGElement {
+export function logo(size = 24, halloween = false): SVGElement {
   const svg = document.createElementNS(NS, 'svg')
   for (const [k, v] of Object.entries({ viewBox: '0 0 64 64', width: String(size), height: String(size), class: 'logo', 'aria-hidden': 'true', focusable: 'false' })) svg.setAttribute(k, v)
   const part = (tag: string, attrs: Record<string, string>) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); svg.append(e) }
-  part('path', { d: 'M53 9 C34 9 17 22 15 46 C32 47 50 34 53 9 Z', fill: '#2dd4bf' })
+  const colour = halloween ? '#ff8a1f' : '#2dd4bf'
+  part('path', { d: 'M53 9 C34 9 17 22 15 46 C32 47 50 34 53 9 Z', fill: colour })
   part('path', { d: 'M50 12 Q30 26 17 45', fill: 'none', stroke: '#0b0f16', 'stroke-width': '2.6', 'stroke-linecap': 'round' })
-  part('path', { d: 'M16 46 L9 57', fill: 'none', stroke: '#2dd4bf', 'stroke-width': '4.5', 'stroke-linecap': 'round' })
+  part('path', { d: 'M16 46 L9 57', fill: 'none', stroke: colour, 'stroke-width': '4.5', 'stroke-linecap': 'round' })
+  return svg
+}
+
+/** A small pumpkin for the Halloween theme: plain shapes, nothing loaded. */
+export function pumpkin(size = 20): SVGElement {
+  const svg = document.createElementNS(NS, 'svg')
+  for (const [k, v] of Object.entries({ viewBox: '0 0 64 64', width: String(size), height: String(size), class: 'pumpkin', 'aria-hidden': 'true', focusable: 'false' })) svg.setAttribute(k, v)
+  const part = (tag: string, attrs: Record<string, string>) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); svg.append(e) }
+  part('path', { d: 'M29 20Q30 9 38 8L39 12Q35 13 35 21Z', fill: '#4a8f2a', stroke: '#2d5a18', 'stroke-width': '2' })
+  for (const cx of [20, 44]) part('ellipse', { cx: String(cx), cy: '38', rx: '16', ry: '19', fill: '#ff8a1f', stroke: '#a84a00', 'stroke-width': '2.5' })
+  part('ellipse', { cx: '32', cy: '38', rx: '14', ry: '20', fill: '#ff8a1f', stroke: '#a84a00', 'stroke-width': '2.5' })
+  part('path', { d: 'M20 36L28 36L24 28ZM36 36L44 36L40 28Z', fill: '#2a1346' })
+  part('path', { d: 'M20 44L25 49L29 44L32 49L35 44L39 49L44 44L44 52Q32 58 20 52Z', fill: '#2a1346' })
+  return svg
+}
+
+/** A cobweb for the corner of the header (Halloween theme): thin lines in the colour of the text around it. */
+export function cobweb(): SVGElement {
+  const svg = document.createElementNS(NS, 'svg')
+  for (const [k, v] of Object.entries({ viewBox: '0 0 64 64', fill: 'none', stroke: 'currentColor', 'stroke-width': '1', 'stroke-linecap': 'round', 'aria-hidden': 'true', focusable: 'false' })) svg.setAttribute(k, v)
+  for (const d of ['M0 0L60 60', 'M0 0L64 28', 'M0 0L28 64', 'M0 0L64 8', 'M0 0L8 64', 'M0 12Q12 12 12 0', 'M0 26Q24 26 26 0', 'M0 42Q36 40 42 0', 'M0 58Q48 54 58 0']) { const p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); svg.append(p) }
   return svg
 }
