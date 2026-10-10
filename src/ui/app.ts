@@ -232,34 +232,23 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     draw()
   }
 
-  async function load(): Promise<void> {
-    const mine = ++run
-    if (!me) {
-      const r = parseRoute(deps.location.hash)
-      if (r.name === 'note') return void loadGuestNote(r.id, mine)
-      guestBody = null; return draw()
-    }
-    if (!(await ensureSession()) || mine !== run || !session) return
-    const route = parseRoute(deps.location.hash)
-    const key = JSON.stringify(route)
-    if (key !== shownRoute) { body = null; shownRoute = key; scrollToTop = true; profileMode = 'notes'; if (route.name !== 'mentions') { markFrom = null; followersMark = null } }
-    if (route.name === 'settings' || route.name === 'help') { status = null; body = null; draw(); return }
-    status = t(lang, 'loadingFeed'); draw()
+  /** The content of one view (a feed, a thread, an account, a list…). `alive` says whether the answer is still wanted: when it is not, null comes back. */
+  async function buildContent(route: Route, alive: () => boolean): Promise<HTMLElement | null> {
     let content: HTMLElement
     try {
       if (route.name === 'note') {
         const [th, source] = await Promise.all([loadThread(fetcher, route.id, ctx(), settings), route.from ? loadNote(fetcher, route.from, ctx(), settings).catch(() => null) : Promise.resolve(null)])
-        if (mine !== run) return
+        if (!alive()) return null
         if (!th) content = h('div', { class: 'stack' }, sourceCard(source), h('p', { class: 'empty' }, t(lang, 'noNote')))
         else { await nameThem([...(th.root ? [th.root] : []), ...flat(th.replies), ...(source ? [source] : [])]); content = threadView(th, source) }
       } else if (route.name === 'people') {
         if (route.list === 'followers' && loadKnown() === null && followersSeen.size === 0) await poll() // never looked yet: learn who follows you first
-        if (mine !== run) return
-        content = await peopleView(route.list, mine)
-        if (mine !== run) return
+        if (!alive()) return null
+        content = await peopleView(route.list, alive)
+        if (!alive()) return null
       } else if (route.name === 'user') {
         const { info, notes } = await loadProfile(fetcher, route.pubkey, session!, ctx(), settings)
-        if (mine !== run) return
+        if (!alive()) return null
         await nameThem(notes, [info.pubkey, ...info.via.slice(0, 3)]); content = profileView(info, notes)
       } else {
         let act: Activity | null = null
@@ -268,14 +257,14 @@ export function startApp(root: HTMLElement, deps: Deps): void {
           const opts = activityOptions(); act = await loadActivity(fetcher, ctx(), settings, opts); afterActivity(act, !!opts.verifyKnown)
         }
         const items = act ? act.notes : route.name === 'me' ? await loadMine(fetcher, ctx(), settings) : (feedMode === 'network' ? await loadNetwork(fetcher, session!, ctx(), settings) : await loadFollowing(fetcher, ctx(), settings, { reposts: showReposts }))
-        if (mine !== run) return
+        if (!alive()) return null
         // the first visit to Mentions ever takes the followers of today as its starting point (nothing is "new" yet); later, the ones not seen before are
         const baseline = act ? (loadKnown() ?? new Set(act.followers)) : null
         if (act) for (const k of act.followers) followersSeen.add(k)
         if (act && followersMark === null) followersMark = baseline
         const fresher = act ? newFollowers(act, followersMark!) : []
         await nameThem(act ? [...items, ...act.reactions, ...act.reposts] : items, fresher.slice(0, 8))
-        if (route.name === 'me' && !names.has(me)) for (const [k, n] of await loadNames(fetcher, [me])) names.set(k, n)
+        if (route.name === 'me' && !names.has(me!)) for (const [k, n] of await loadNames(fetcher, [me!])) names.set(k, n)
         if (act) {
           if (markFrom === null) markFrom = seenAt ?? nowSec() // first ever visit: nothing is "new"
           const fresh = countNew(act, markFrom, followersMark!)
@@ -292,7 +281,24 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         }
       }
     } catch { content = h('p', { class: 'empty' }, t(lang, 'noNote')) }
-    if (mine !== run) return
+    return alive() ? content : null
+  }
+
+  async function load(): Promise<void> {
+    const mine = ++run
+    if (!me) {
+      const r = parseRoute(deps.location.hash)
+      if (r.name === 'note') return void loadGuestNote(r.id, mine)
+      guestBody = null; return draw()
+    }
+    if (!(await ensureSession()) || mine !== run || !session) return
+    const route = parseRoute(deps.location.hash)
+    const key = JSON.stringify(route)
+    if (key !== shownRoute) { body = null; shownRoute = key; scrollToTop = true; profileMode = 'notes'; if (route.name !== 'mentions') { markFrom = null; followersMark = null } }
+    if (route.name === 'settings' || route.name === 'help') { status = null; body = null; draw(); return }
+    status = t(lang, 'loadingFeed'); draw()
+    const content = await buildContent(route, () => mine === run)
+    if (content === null) return
     status = null; body = content; lastLoadAt = deps.nowMs?.() ?? Date.now(); draw()
     if (route.name !== 'mentions') void poll()
   }
@@ -602,7 +608,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   /** The two lists behind the counts in Me. Following is your own list, exact; followers is what this app has seen (the same ~N as the count), so it says so. */
-  async function peopleView(list: 'following' | 'followers', mine: number): Promise<HTMLElement> {
+  async function peopleView(list: 'following' | 'followers', alive: () => boolean): Promise<HTMLElement> {
     const followers = [...new Set([...(loadKnown() ?? []), ...followersSeen])] // oldest seen first
     const followerSet = new Set(followers)
     const keys = (list === 'following' ? [...session!.follows] : followers).reverse() // newest first
@@ -611,7 +617,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     return h('div', { class: 'stack' }, backLink(), renderPeople(rows, view(), {
       title: t(lang, list === 'following' ? 'peopleFollowing' : 'peopleFollowers'), count: rows.length,
       note: t(lang, list === 'following' ? 'followingNote' : 'followersNote'), approximate: list === 'followers',
-      nameThem: (ks) => (mine === run ? nameKeys(ks) : Promise.resolve()),
+      nameThem: (ks) => (alive() ? nameKeys(ks) : Promise.resolve()),
     }))
   }
 
