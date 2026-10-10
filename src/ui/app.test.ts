@@ -697,3 +697,26 @@ describe('accounts have a page', () => {
     const plain = boot({ events: events(), stored: { me } }); await tick(100); await plain.go(`#/user/${friend}`); await tick(250); link(plain, '.back').click(); await tick(100); expect(plain.root.querySelector('.profile')).toBeNull() // no history: the start
   })
 })
+
+describe('a note opened by someone with no account', () => {
+  const root = ev(friend, 'the note someone shared'), reply = ev(far, 'a pitch from a stranger, a reply nobody filtered', { tags: [['e', root.id, '', 'root'], ['e', root.id, '', 'reply']] })
+  const dupes = [1, 2, 3, 4, 5, 6].map((i) => ev(pk('9'), 'buy my thing now https://spam.example/x', { tags: [['e', root.id, '', 'root'], ['e', root.id, '', 'reply']], created_at: 1_700_000_000 + i }))
+  const named = ev(friend, '', { kind: 0, content: JSON.stringify({ name: 'Ana' }) })
+  it('shows the note and its replies exactly as they are (nothing folded, no tabs), with the login below and a hint', async () => {
+    const a = boot({ events: [root, reply, ...dupes, named] }); await a.go('#/note/' + root.id); await tick(60)
+    expect(a.text()).toContain('the note someone shared'); expect(a.text()).toContain('a reply nobody filtered'); expect(a.text()).toContain('Ana')
+    expect(a.root.querySelectorAll('details.folded')).toHaveLength(0); expect(a.root.querySelector('.tabbar')).toBeNull()
+    expect(a.root.querySelectorAll('article.note').length).toBe(2 + dupes.length) // the spammy burst is shown too: a guest has no filter
+    expect(a.text()).toContain('without an account'); expect(a.text()).toContain('Read as…') // the way in is right under the note
+    expect(a.mem.get('me')).toBeUndefined()
+  })
+  it('a nevent link works the same, a note that cannot be found says so, and choosing an account afterwards keeps the note', async () => {
+    const link = '#/note/' + nip19.neventEncode({ id: root.id, author: friend, relays: ['wss://x.example'], kind: 1 })
+    const a = boot({ events: [root, reply, list(me, 3, [['p', friend]]), named] }); await a.go(link); await tick(60)
+    expect(a.text()).toContain('the note someone shared')
+    await a.go('#/note/' + 'e'.repeat(64)); await tick(60); expect(a.text()).toContain('Could not find that note')
+    await a.go(link); await tick(60)
+    const input = a.root.querySelector('input[type=text]') as HTMLInputElement; input.value = nip19.npubEncode(me); a.root.querySelector('form.login')!.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })); await tick(120)
+    expect(a.root.querySelector('.tabbar')).not.toBeNull(); expect(a.text()).toContain('the note someone shared'); expect(a.text()).not.toContain('without an account')
+  })
+})

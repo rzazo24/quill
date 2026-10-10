@@ -6,7 +6,7 @@ import { hashtagTags, mentionTags, mergeTags, quoteContent, quoteTags, reactionT
 import { parseIdentity } from '../core/identity.js'
 import { mentionedKeys, shortNpub } from '../core/refs.js'
 import { isReply } from '../core/thread.js'
-import { judgeAll, tally, type Judged, type Settings } from '../core/verdict.js'
+import { judgeAll, tally, type Context, type Judged, type Settings } from '../core/verdict.js'
 import { loadNetwork } from '../data/network.js'
 import { loadProfile, type ProfileInfo } from '../data/profile.js'
 import { followPubkeys, followTemplate, type FollowAction } from '../core/follow.js'
@@ -52,6 +52,10 @@ export interface Deps {
 }
 
 type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'help' } | { name: 'user'; pubkey: string } | { name: 'note'; id: string; from?: string }
+/** Someone with no account who opens a link to a note: they read that one public note and its replies, exactly as they are. No follows, no mutes, no rule that hides anything. */
+const GUEST_CONTEXT: Context = { me: '', follows: new Set(), muted: new Set(), mutedWords: [], graph: { loaded: false, distance: () => null } }
+const GUEST_SETTINGS: Settings = { rules: { repeatedText: false, burst: false, linkOnly: false, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 }
+
 export function parseRoute(hash: string): Route {
   const m = /^#\/note\/([^?]+)(?:\?from=([^&]*))?$/i.exec(hash)
   if (m) {
@@ -108,6 +112,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let loginError: string | null = null
   let status: string | null = null
   let body: HTMLElement | null = null
+  let guestBody: HTMLElement | null = null // the note a visitor without an account came to read
   let run = 0 // a newer navigation makes older loads stop touching the page
   let shownRoute = '' // which view `body` belongs to: old content must not stay on screen under a new tab
   // signing
@@ -210,9 +215,26 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     for (const [k, n] of await loadNames(fetcher, keys)) names.set(k, n)
   }
 
+  async function loadGuestNote(id: string, mine: number): Promise<void> {
+    guestBody = h('p', { class: 'status loading', role: 'status' }, h('span', {}, t(lang, 'loadingFeed'))); draw()
+    let out: HTMLElement
+    try {
+      const th = await loadThread(fetcher, id, GUEST_CONTEXT, GUEST_SETTINGS)
+      if (mine !== run) return
+      if (th) { await nameThem([...(th.root ? [th.root] : []), ...flat(th.replies)]); if (mine !== run) return }
+      out = th ? threadView(th, null, true) : h('p', { class: 'empty' }, t(lang, 'noNote'))
+    } catch { if (mine !== run) return; out = h('p', { class: 'empty' }, t(lang, 'noNote')) }
+    guestBody = h('div', { class: 'stack guest' }, out, h('p', { class: 'meta guest-hint' }, t(lang, 'guestHint')))
+    draw()
+  }
+
   async function load(): Promise<void> {
     const mine = ++run
-    if (!me) return draw()
+    if (!me) {
+      const r = parseRoute(deps.location.hash)
+      if (r.name === 'note') return void loadGuestNote(r.id, mine)
+      guestBody = null; return draw()
+    }
     if (!(await ensureSession()) || mine !== run || !session) return
     const route = parseRoute(deps.location.hash)
     const key = JSON.stringify(route)
@@ -319,12 +341,12 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       shown.length ? renderSummary(tally(shown), view(), toggleSettings) : null, shown.length ? renderList(shown, view()) : h('p', { class: 'empty' }, t(lang, 'profileEmpty')))
   }
 
-  function threadView(th: Thread, source: Judged | null = null): HTMLElement {
+  function threadView(th: Thread, source: Judged | null = null, guest = false): HTMLElement {
     const all = [...(th.root ? [th.root] : []), ...flat(th.replies)]
     return h('div', { class: 'stack' },
-      backLink(),
+      guest ? null : backLink(),
       sourceCard(source),
-      renderSummary(tally(all), view(), toggleSettings),
+      guest ? null : renderSummary(tally(all), view(), toggleSettings),
       th.root ? renderJudged(th.root, view()) : null,
       h('h3', {}, `${th.total} ${t(lang, 'replies')}`),
       ...renderTree(th.replies, view()),
@@ -604,7 +626,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const signOut = h('button', { type: 'button', class: 'danger', onClick: () => { me = null; session = null; body = null; shownRoute = ''; forgetAccount(); safeSet(kv, 'me', null); void signer?.disconnect(); composer = review = result = null; flash = null; deps.setHash(''); draw() } }, t(lang, 'signOut'))
     const helpPage = renderHelp(view(), helpOpen, (id, isOpen) => { if (isOpen) helpOpen.add(id); else helpOpen.delete(id) })
     const content: (HTMLElement | null)[] = route.name === 'help' ? [signArea, helpPage]
-      : !me ? [loginForm, signArea]
+      : !me ? [...(route.name === 'note' && guestBody ? [guestBody] : []), loginForm, signArea]
       : route.name === 'settings' ? [signArea, renderPrefs({ font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, reposts: showReposts, onReposts: changeReposts, relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
         onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
