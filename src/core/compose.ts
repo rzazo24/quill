@@ -73,9 +73,10 @@ export function mergeTags(explicit: string[][], auto: string[][]): string[][] {
 export function quoteRef(target: Event, hint: string): string {
   return 'nostr:' + nip19.neventEncode({ id: target.id, relays: hint ? [hint] : [], author: target.pubkey, kind: target.kind })
 }
-/** What a person copies to point at a note from elsewhere. Both are an nevent (the note's id plus who wrote it and where to look), which other clients find more reliably than a bare note1…; the link opens in any browser (njump). */
-export const noteId = (target: Event, hints: readonly string[] = []): string => nip19.neventEncode({ id: target.id, relays: [...hints], author: target.pubkey, kind: target.kind })
-export const noteLink = (target: Event, hints: readonly string[] = []): string => 'https://njump.me/' + noteId(target, hints)
+/** What a person copies to point at a note from elsewhere. Both are built on an nevent (the note's id plus who wrote it and where to look), which other clients find more reliably than a bare note1…. The id carries the `nostr:` prefix (NIP-21) so pasted into a note it shows as a reference; the link opens in any browser (njump). */
+const nevent = (target: Event, hints: readonly string[]): string => nip19.neventEncode({ id: target.id, relays: [...hints], author: target.pubkey, kind: target.kind })
+export const noteId = (target: Event, hints: readonly string[] = []): string => 'nostr:' + nevent(target, hints)
+export const noteLink = (target: Event, hints: readonly string[] = []): string => 'https://njump.me/' + nevent(target, hints)
 /** The `q` tag points at the note quoted (with where to find it and who wrote it), and the author is mentioned so they are told. */
 export const quoteTags = (target: Event, hint: string): string[][] => [['q', target.id, hint, target.pubkey], ['p', target.pubkey]]
 export const quoteContent = (text: string, target: Event, hint: string): string => `${text.trim()}\n\n${quoteRef(target, hint)}`
