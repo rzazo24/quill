@@ -284,8 +284,9 @@ main.view.wide { display: block; overflow: hidden; padding: 12px 14px 0; scrollb
 
 /* the composer: its two buttons are the same size; on a wide screen an emoji picker opens under the text */
 .composer-buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 8px } .composer-buttons small { margin-right: auto }
-.composer-buttons button:not(.emoji-toggle) { min-width: 96px } /* Review and Cancel: the same size, not the width of their words */
-.composer .emoji-toggle { min-width: 44px; padding: 0; font-size: 1.25rem }
+.composer-buttons button:not(.emoji-toggle) { min-width: 88px } /* Review and Cancel: the same size, not the width of their words */
+.composer-buttons button { min-height: 38px; padding: 0 12px; font-size: .92rem }
+.composer .emoji-toggle { min-width: 38px; padding: 0; font-size: 1.15rem }
 .emoji-panel { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 2px; max-height: 188px; overflow-y: auto; margin: 6px 0; padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg) }
 .emoji-panel[hidden] { display: none }
 .emoji-panel button { min-height: 36px; padding: 0; font-size: 1.3rem; line-height: 1; background: none; border: 0; border-radius: 8px }
@@ -301,10 +302,10 @@ html[data-theme=halloween] ::selection { background: rgba(var(--accent-rgb), .35
 /* the tab bar floats over the bottom of the app shell (absolute inside #app, which never scrolls: NOT fixed to the window, that is what jumped on iPhone) instead of being a row of it: hiding it must not resize what scrolls (a resize in the middle of a flick makes iPhone Safari jerk the feed), so the text keeps room for it underneath */
 #app.has-tabs main.view { padding-bottom: calc(24px + var(--tab-h) + env(safe-area-inset-bottom) * .5 + 1px) }
 /* buttons that sit side by side in the signing panels and notices (Review/Cancel, Retry/Close, Publish/Back…) are the same size; only the small notice that waits for the signer keeps its small Cancel */
-.sign button.link { min-height: 44px; padding: 0 14px; font-size: 1rem }
+.sign button.link { min-height: 38px; padding: 0 12px; font-size: .92rem }
 .sign .popup button.link { min-height: 36px; padding: 0 12px; font-size: .9rem }
 
-/* the buttons of one panel or notice (Publish / Back, Retry / Close, Confirm / Cancel…) are one size: as wide as the widest of them, side by side, or stacked on a phone */
+/* the buttons of one panel or notice (Publish / Back, Retry / Close, Confirm / Cancel…) are one size: as wide as the widest of them, side by side in one row (their words wrap if they must) */
 .sign .buttons, .confirm-signout .buttons { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; width: fit-content; max-width: 100% }
-.sign .buttons button, .confirm-signout .buttons button { min-width: 0; white-space: normal; min-height: 44px; padding: 0 14px; font-size: 1rem }
-@media (max-width: 559px) { .sign .buttons, .confirm-signout .buttons { display: grid; grid-auto-flow: row; grid-auto-columns: auto } }
+.sign .buttons button, .confirm-signout .buttons button { min-width: 0; white-space: normal; min-height: 38px; padding: 4px 10px; font-size: .92rem; line-height: 1.25 }
+@media (max-width: 459px) { .sign .buttons button, .confirm-signout .buttons button { padding: 4px 6px; font-size: .86rem } }

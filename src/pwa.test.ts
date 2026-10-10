@@ -61,7 +61,7 @@ describe('the app shell: the page never scrolls, only <main> does', () => {
 describe('the buttons of a panel are one size', () => {
   it('a group of buttons is a grid of equal columns, and the "link" buttons of the signing panels are as tall as the others', () => {
     const css = text('src/style.css')
-    expect(css).toMatch(/\.sign \.buttons[^{]*\{[^}]*grid-auto-columns: 1fr/); expect(css).toMatch(/\.sign button\.link \{[^}]*min-height: 44px/)
+    expect(css).toMatch(/\.sign \.buttons[^{]*\{[^}]*grid-auto-columns: 1fr/); expect(css).toMatch(/.sign button\.link \{[^}]*min-height: 38px/)
   })
 })
 
