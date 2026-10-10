@@ -79,7 +79,7 @@ export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, sign
     else if (s.shareConfirm) parts.push(sheet(renderShareConfirm(s.shareConfirm, hd, v)))
     else if (s.review) parts.push(sheet(renderReview(s, hd, v)))
     else if (s.composer) parts.push(sheet(renderComposer(s, hd, v)))
-    else if (fab) parts.push(h('button', { type: 'button', class: 'fab', 'aria-label': t(v.lang, 'newNote').replace(/…$/, ''), title: t(v.lang, 'newNote').replace(/…$/, ''), onClick: hd.startNote }, icon('feather', 24)))
+    else if (fab) parts.push(h('button', { type: 'button', class: 'fab', 'aria-label': t(v.lang, 'newNote').replace(/…$/, ''), title: t(v.lang, 'newNote').replace(/…$/, ''), onClick: hd.startNote }, icon('feather', 28)))
   }
   // what is happening shows at the bottom of the screen, where it is seen wherever the reader has scrolled to
   if (toast.some(Boolean)) parts.push(h('div', { class: 'toast' }, ...toast))
