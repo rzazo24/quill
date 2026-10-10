@@ -133,6 +133,14 @@ export interface SettingsPanelProps {
   onWords: (words: string) => void
 }
 
+/** Accounts that started following the reader since the last visit: the first few, with a count of the rest. */
+export function renderFollowers(keys: string[], v: View): HTMLElement | null {
+  if (!keys.length) return null
+  const SHOWN = 8
+  return h('section', { class: 'followers card' }, h('h2', {}, `${t(v.lang, 'followersTitle')} (${keys.length})`),
+    h('ul', {}, ...keys.slice(0, SHOWN).map((k) => h('li', {}, avatarEl(k, v), h('span', {}, nameOf(v, k)))), keys.length > SHOWN ? h('li', { class: 'more-followers' }, t(v.lang, 'followersMore', { n: keys.length - SHOWN })) : null))
+}
+
 /** Following can show the people you follow or the wider network; two buttons, the open one is lit. */
 export function renderFeedMode(mode: FeedMode, onChange: (m: FeedMode) => void, v: View): HTMLElement {
   return h('div', { class: 'seg feedmode', role: 'group', 'aria-label': t(v.lang, 'feedModeTitle') }, ...(['follows', 'network'] as const).map((m) =>

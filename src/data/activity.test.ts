@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { ev, pk } from '../core/testutil.js'
 import { contextOf } from './session.js'
 import { buildGraph } from './graph.js'
-import { countNew, groupReactions, loadActivity, reactionTarget, showReaction } from './activity.js'
+import { countNew, followersOf, groupReactions, loadActivity, MAX_KNOWN_FOLLOWERS, mergeKnown, newFollowers, parseKnown, reactionTarget, showReaction } from './activity.js'
 import { answers, type Fetcher } from '../net/fetcher.js'
 
 const me = pk('1'), friend = pk('a'), stranger = pk('f'), other = pk('b')
@@ -61,5 +61,30 @@ describe('small helpers', () => {
   it('the target of a reaction is the last e tag; + is a like, - a dislike', () => {
     expect(reactionTarget({ tags: [['e', 'a'.repeat(64)], ['e', 'b'.repeat(64)]] })).toBe('b'.repeat(64)); expect(reactionTarget({ tags: [['e', 'zz']] })).toBeUndefined()
     expect([showReaction('+'), showReaction('-'), showReaction('🔥'), showReaction('')]).toEqual(['👍', '👎', '🔥', '👍'])
+  })
+})
+
+describe('followers', () => {
+  const follow = (who: string, at: number, tags: string[][] = [['p', me]]) => ev(who, '', { kind: 3, created_at: at, tags })
+  const ctxOf = (muted: string[] = []) => ({ me, muted: new Set(muted) })
+  it('are the authors of the follow lists that really name the reader, newest first, once each', async () => {
+    const a = await loadActivity(world([follow(friend, 100), follow(friend, 300), follow(other, 200), follow(stranger, 50, [['p', other]]), ev(stranger, '', { kind: 1, tags: [['p', me]] }), follow(me, 400)]), sess())
+    expect(a.followers).toEqual([friend, other]) // friend's newest list wins; stranger's list does not name me; a note is not a list; my own list is not a follower
+  })
+  it('leaves out muted accounts, and a relay that cannot answer the question gives none instead of failing everything', async () => {
+    expect(followersOf([follow(friend, 1), follow(other, 2)], ctxOf([friend]))).toEqual([other])
+    const broken: Fetcher = { query: async (f) => { if (f.kinds?.includes(3)) throw new Error('boom'); return [] } }
+    const a = await loadActivity(broken, sess()); expect(a.followers).toEqual([]); expect(a.notes).toEqual([])
+  })
+  it('a relay that returns lists of other people, or lists without the reader, cannot invent followers', async () => {
+    const hostile: Fetcher = { query: async () => [follow(stranger, 1, [['p', other]]), follow(other, 2, [['e', me]])] }
+    expect((await loadActivity(hostile, sess())).followers).toEqual([])
+  })
+  it('the ones not known before count as new (never as hidden); the known set only grows and has a limit; junk in storage is ignored', () => {
+    const a = { notes: [], reactions: [], targets: new Map(), followers: [friend, other, stranger] }
+    expect(newFollowers(a, new Set([friend]))).toEqual([other, stranger]); expect(countNew(a, 0, new Set([friend]))).toEqual({ shown: 2, hidden: 0 }); expect(countNew(a, 0)).toEqual({ shown: 0, hidden: 0 })
+    expect([...mergeKnown(new Set([pk('1'), friend]), a)].sort()).toEqual([friend, other, pk('1'), stranger].sort())
+    const many = new Set(Array.from({ length: 25_000 }, (_, i) => i.toString(16).padStart(64, '0'))); expect(mergeKnown(many, a).size).toBe(MAX_KNOWN_FOLLOWERS)
+    expect([...parseKnown(JSON.stringify([friend, 'junk', 7, null]))!]).toEqual([friend]); for (const bad of [null, '', 'nope', '{}', '"x"']) expect(parseKnown(bad), String(bad)).toBeNull()
   })
 })

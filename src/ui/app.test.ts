@@ -506,3 +506,55 @@ describe('the refresh button while loading', () => {
     refresh(a).click(); await tick(20); expect(refresh(a).classList.contains('spinning')).toBe(true); await tick(1200); expect(refresh(a).classList.contains('spinning')).toBe(false); expect(a.calls.n).toBeGreaterThan(before)
   })
 })
+
+describe('new followers', () => {
+  const NOW = 10_000
+  const key = (n: number) => ('b' + n.toString(16).padStart(3, '0')).repeat(16) // keys that cannot collide with the fixed ones of this file
+  const follower = (n: number, at = 9000) => ev(key(n), '', { kind: 3, created_at: at, tags: [['p', me]] })
+  const profile = (who: string, name: string) => ev(who, JSON.stringify({ name }), { kind: 0, created_at: 100 })
+  const base = (): Event[] => [list(me, 3, [['p', friend]]), list(friend, 3, []), ev(friend, 'a post from my friend', { created_at: 8000 })]
+  const start = (events: Event[], stored: Record<string, string> = {}) => boot({ events, clock: { now: NOW * 1000 }, stored: { me, [`seen:${me}`]: '5000', ...stored } })
+  const badge = (a: ReturnType<typeof boot>) => a.root.querySelector('.tabbar .badge')?.textContent ?? null
+  const known = (a: ReturnType<typeof boot>) => JSON.parse(a.mem.get(`followers:${me}`) ?? 'null') as string[] | null
+
+  it('the first look only learns who follows you: no number, no list, and the followers are written down', async () => {
+    const a = start([...base(), follower(1), follower(2)]); await tick(250)
+    expect(badge(a)).toBeNull(); expect(known(a)!.sort()).toEqual([follower(1).pubkey, follower(2).pubkey].sort()); await a.go('#/mentions'); await tick(200); expect(a.root.querySelector('.followers')).toBeNull()
+  })
+  it('somebody new is a number on Mentions, then a "New followers" card with their name, then part of the known ones', async () => {
+    const events = [...base(), follower(1), profile(follower(1).pubkey, 'Ana')]; const a = start(events); await tick(250); expect(badge(a)).toBeNull()
+    const newcomer = follower(2); events.push(newcomer, profile(newcomer.pubkey, 'Berta')); a.poll(); await tick(250); expect(badge(a)).toBe('1')
+    await a.go('#/mentions'); await tick(250)
+    const card = a.root.querySelector('.followers')!; expect(card.querySelector('h2')!.textContent).toBe('New followers (1)'); expect([...card.querySelectorAll('li > span:not(.avatar)')].map((x) => x.textContent)).toEqual(['Berta']); expect(card.querySelector('li .avatar')).not.toBeNull()
+    expect(badge(a)).toBeNull(); expect(known(a)).toContain(newcomer.pubkey)
+    await a.go('#/'); await tick(200); await a.go('#/mentions'); await tick(250); expect(a.root.querySelector('.followers')).toBeNull() // seen: not shown again
+  })
+  it('a relay that does not return somebody today cannot make them look new tomorrow', async () => {
+    const events = [...base(), follower(1), follower(2)]; const a = start(events); await tick(250)
+    events.splice(events.indexOf(events.find((e) => e.pubkey === follower(2).pubkey)!), 1); a.poll(); await tick(250); expect(badge(a)).toBeNull() // missing now
+    events.push(follower(2)); a.poll(); await tick(250); expect(badge(a)).toBeNull() // and back: still not new
+  })
+  it('opening Mentions while a relay is missing somebody does not forget them: they are still not new when they come back', async () => {
+    const events = [...base(), follower(1), follower(2)]; const a = start(events); await tick(250)
+    const two = events.find((e) => e.pubkey === follower(2).pubkey)!; events.splice(events.indexOf(two), 1)
+    a.poll(); await tick(250) // this look (it asks the relays again) really does miss follower 2
+    await a.go('#/mentions'); await tick(250); expect(a.root.querySelector('.followers')).toBeNull(); await a.go('#/'); await tick(200); expect(known(a)).toContain(follower(2).pubkey) // opening Mentions did not forget them
+    events.push(two); a.poll(); await tick(250); expect(badge(a)).toBeNull()
+  })
+  it('muted accounts are not announced; many new ones are listed up to eight with a count of the rest', async () => {
+    const events = [...base(), follower(1)]; const a = start(events, { words: '' }); await tick(250)
+    for (let i = 10; i < 22; i++) events.push(follower(i)); a.poll(); await tick(250); expect(badge(a)).toBe('9+')
+    await a.go('#/mentions'); await tick(300); const card = a.root.querySelector('.followers')!
+    expect(card.querySelector('h2')!.textContent).toBe('New followers (12)'); expect(card.querySelectorAll('li').length).toBe(9); expect(card.querySelector('.more-followers')!.textContent).toBe('and 4 more')
+  })
+  it('a muted follower never shows up', async () => {
+    const muteList = ev(me, '', { kind: 10000, created_at: 50, tags: [['p', follower(5).pubkey]] })
+    const events = [...base(), muteList, follower(1)]; const a = start(events); await tick(250); events.push(follower(5)); a.poll(); await tick(250); expect(badge(a)).toBeNull()
+  })
+  it('signing out and in as somebody else carries nothing over', async () => {
+    const events = [...base(), follower(1)]; const a = start(events); await tick(250); expect(known(a)).not.toBeNull()
+    await a.go('#/me'); await tick(150); ;(a.root.querySelector('button.danger') as HTMLElement).click(); await tick(100)
+    const input = a.root.querySelector('input')!; input.value = nip19.npubEncode(friend); a.root.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true })); await tick(300)
+    expect(a.mem.get(`followers:${friend}`)).toBeDefined(); expect(a.mem.get(`followers:${me}`)).toBeDefined(); expect(badge(a)).toBeNull()
+  })
+})

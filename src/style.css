@@ -231,3 +231,8 @@ button.icon.spinning svg { animation: spin .9s linear infinite }
 @keyframes spin { to { transform: rotate(360deg) } }
 /* with "reduce motion" it still turns (a loading indicator is not the motion that setting is about), only slower */
 @media (prefers-reduced-motion: reduce) { button.icon.spinning svg { animation-duration: 2s } }
+
+/* new followers (Mentions) */
+.followers h2 { margin: 0 0 8px; font-size: 14px } .followers ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
+.followers li { display: flex; align-items: center; gap: 10px; min-width: 0 } .followers li span { min-width: 0; overflow-wrap: anywhere } .followers .avatar { width: 28px; height: 28px; font-size: .7rem }
+.followers .more-followers { color: var(--muted); font-size: .9rem; padding-left: 38px }

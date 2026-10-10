@@ -8,7 +8,7 @@ import { judgeAll, tally, type Judged, type Settings } from '../core/verdict.js'
 import { loadNetwork } from '../data/network.js'
 import { loadFollowing, loadMentions, loadMine, loadNames, loadNote, loadThread, type Thread, type ThreadNode } from '../data/feed.js'
 import { Engagement, loadEngagement, normReaction } from '../data/engaged.js'
-import { countNew, groupReactions, loadActivity, type Activity } from '../data/activity.js'
+import { countNew, groupReactions, loadActivity, mergeKnown, newFollowers, parseKnown, type Activity } from '../data/activity.js'
 import { contextOf, loadSession, type Session } from '../data/session.js'
 import { DEFAULT_RELAYS, memo, type Fetcher } from '../net/fetcher.js'
 import { failedRelays, type Publisher } from '../net/publisher.js'
@@ -17,7 +17,7 @@ import { checkTemplate, MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
 import { logo, icon } from './icons.js'
 import { detectLang, problemText, t, type Key, type Lang } from './i18n.js'
-import { renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
+import { renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type Review } from './sign-ui.js'
 import { installHint, type Env } from './install.js'
 import { parseAvatars, parseFeedMode, parseFont, parseLang, parseReposts, parseSettings, parseWords, safeGet, safeSet, type AvatarStyle, type FeedMode, type FontSize, type KV } from './store.js'
@@ -109,6 +109,14 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let seenAt: number | null = null // unix seconds of the last visit to Mentions
   let markFrom: number | null = null // while Mentions is open: notes newer than this are marked as new
   let badge = 0
+  // followers: the ones ever seen (it only grows: relays each return only part of them), and, while Mentions is open, the set as it was when it was opened
+  const followersKey = () => `followers:${me}`
+  let knownFollowers: Set<string> | null = null
+  let followersMark: ReadonlySet<string> | null = null
+  const loadKnown = () => { knownFollowers ??= parseKnown(safeGet(kv, followersKey())); return knownFollowers }
+  const saveKnown = (s: Set<string>) => { knownFollowers = s; safeSet(kv, followersKey(), JSON.stringify([...s])) }
+  /** Switching account: nothing remembered about the notifications of the previous one may leak into the next. */
+  const forgetAccount = () => { seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null }
   const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
@@ -152,8 +160,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     return true
   }
 
-  async function nameThem(items: Judged[]): Promise<void> {
-    const keys = [...items.flatMap((j) => [j.event.pubkey, ...(j.repostedBy ?? []), ...(j.followedBy ?? []).slice(0, 1), ...mentionedKeys(j.event.content)]), ...(signer?.pubkey ? [signer.pubkey] : [])].filter((k) => !names.has(k))
+  async function nameThem(items: Judged[], extra: string[] = []): Promise<void> {
+    const keys = [...extra, ...items.flatMap((j) => [j.event.pubkey, ...(j.repostedBy ?? []), ...(j.followedBy ?? []).slice(0, 1), ...mentionedKeys(j.event.content)]), ...(signer?.pubkey ? [signer.pubkey] : [])].filter((k) => !names.has(k))
     if (!keys.length) return
     for (const [k, n] of await loadNames(fetcher, keys)) names.set(k, n)
   }
@@ -164,7 +172,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (!(await ensureSession()) || mine !== run || !session) return
     const route = parseRoute(deps.location.hash)
     const key = JSON.stringify(route)
-    if (key !== shownRoute) { body = null; shownRoute = key; scrollToTop = true; if (route.name !== 'mentions') markFrom = null }
+    if (key !== shownRoute) { body = null; shownRoute = key; scrollToTop = true; if (route.name !== 'mentions') { markFrom = null; followersMark = null } }
     if (route.name === 'settings' || route.name === 'help') { status = null; body = null; draw(); return }
     status = t(lang, 'loadingFeed'); draw()
     let content: HTMLElement
@@ -182,15 +190,19 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         }
         const items = act ? act.notes : route.name === 'me' ? await loadMine(fetcher, ctx(), settings) : (feedMode === 'network' ? await loadNetwork(fetcher, session!, ctx(), settings) : await loadFollowing(fetcher, ctx(), settings, { reposts: showReposts }))
         if (mine !== run) return
-        await nameThem(act ? [...items, ...act.reactions] : items)
+        // the first visit to Mentions ever takes the followers of today as its starting point (nothing is "new" yet); later, the ones not seen before are
+        const baseline = act ? (loadKnown() ?? new Set(act.followers)) : null
+        if (act && followersMark === null) followersMark = baseline
+        const fresher = act ? newFollowers(act, followersMark!) : []
+        await nameThem(act ? [...items, ...act.reactions] : items, fresher.slice(0, 8))
         if (route.name === 'me' && !names.has(me)) for (const [k, n] of await loadNames(fetcher, [me])) names.set(k, n)
         if (act) {
           if (markFrom === null) markFrom = seenAt ?? nowSec() // first ever visit: nothing is "new"
-          const fresh = countNew(act, markFrom)
-          markSeen()
+          const fresh = countNew(act, markFrom, followersMark!)
+          markSeen(); saveKnown(mergeKnown(baseline!, act))
           const block = renderReactionGroups(groupReactions(act, markFrom), view())
           const line = fresh.shown || fresh.hidden ? h('p', { class: 'meta new-line', role: 'status' }, [fresh.shown ? t(lang, 'newItems', { n: fresh.shown }) : '', fresh.hidden ? t(lang, 'newHidden', { n: fresh.hidden }) : ''].filter(Boolean).join(' · ')) : null
-          content = h('div', { class: 'stack' }, renderSummary(tally(items), view(), toggleSettings), line, block, renderList(items, view()))
+          content = h('div', { class: 'stack' }, renderSummary(tally(items), view(), toggleSettings), line, renderFollowers(fresher, view()), block, renderList(items, view()))
         } else if (route.name === 'me') content = renderList(items, view())
         else {
           // Following: the people you follow, or the network; in the network an empty list says why (no follow lists arrived, or just nothing new)
@@ -209,10 +221,12 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   async function poll(): Promise<void> {
     if (!me || !session || parseRoute(deps.location.hash).name === 'mentions') return
     if (seenAt === null) loadSeen()
-    if (seenAt === null) { markSeen(); return } // first run: start counting from now, do not greet with a pile
     try {
       fetcher.clear()
-      const n = countNew(await loadActivity(fetcher, ctx(), settings), seenAt).shown
+      const a = await loadActivity(fetcher, ctx(), settings)
+      if (loadKnown() === null) saveKnown(new Set(a.followers)) // the first look at followers only learns who they are
+      if (seenAt === null) { markSeen(); return } // first run: start counting from now, do not greet with a pile
+      const n = countNew(a, seenAt, knownFollowers!).shown
       if (n !== badge) { badge = n; draw() }
     } catch { /* a failed look says nothing */ }
   }
@@ -280,7 +294,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   function login(raw: string): void {
     const r = parseIdentity(raw)
     if (!r.ok) { loginError = t(lang, 'loginBad'); return draw() }
-    me = r.pubkey; loginError = null; session = null; body = null; shownRoute = ''
+    me = r.pubkey; loginError = null; session = null; body = null; shownRoute = ''; forgetAccount()
     safeSet(kv, 'me', me)
     void load()
   }
@@ -426,7 +440,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const pills = h('div', { class: 'lang', role: 'group', 'aria-label': 'Language' }, ...(['en', 'es'] as const).map((l) =>
       h('button', { type: 'button', 'aria-pressed': String(lang === l), onClick: () => { if (lang !== l) { lang = l; safeSet(kv, 'lang', lang); void load() } } }, l.toUpperCase())))
     const statusEl = me && status ? h('p', { class: 'status loading', role: 'status' }, h('span', {}, status)) : null
-    const signOut = h('button', { type: 'button', class: 'danger', onClick: () => { me = null; session = null; body = null; shownRoute = ''; safeSet(kv, 'me', null); void signer?.disconnect(); composer = review = result = null; flash = null; deps.setHash(''); draw() } }, t(lang, 'signOut'))
+    const signOut = h('button', { type: 'button', class: 'danger', onClick: () => { me = null; session = null; body = null; shownRoute = ''; forgetAccount(); safeSet(kv, 'me', null); void signer?.disconnect(); composer = review = result = null; flash = null; deps.setHash(''); draw() } }, t(lang, 'signOut'))
     const helpPage = renderHelp(view(), helpOpen, (id, isOpen) => { if (isOpen) helpOpen.add(id); else helpOpen.delete(id) })
     const content: (HTMLElement | null)[] = route.name === 'help' ? [signArea, helpPage]
       : !me ? [loginForm, signArea]
