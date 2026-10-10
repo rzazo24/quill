@@ -184,7 +184,7 @@ describe('the app', () => {
   })
   it('signing out forgets you', async () => {
     const a = boot({ stored: { me } }); await tick(80); await a.go('#/me')
-    ;[...a.root.querySelectorAll('button')].find((b) => b.textContent === 'Sign out')!.click(); await tick(10)
+    ;[...a.root.querySelectorAll('button')].find((b) => b.textContent === 'Sign out')!.click(); await tick(10); ;(a.root.querySelector('.confirm-signout button.danger') as HTMLElement).click(); await tick(10) // it asks first
     expect(a.text()).toContain('Read as…'); expect(a.mem.has('me')).toBe(false)
   })
 })
@@ -553,7 +553,7 @@ describe('new followers', () => {
   })
   it('signing out and in as somebody else carries nothing over', async () => {
     const events = [...base(), follower(1)]; const a = start(events); await tick(250); expect(known(a)).not.toBeNull()
-    await a.go('#/me'); await tick(150); ;(a.root.querySelector('button.danger') as HTMLElement).click(); await tick(100)
+    await a.go('#/me'); await tick(150); ;(a.root.querySelector('button.danger') as HTMLElement).click(); await tick(20); ;(a.root.querySelector('.confirm-signout button.danger') as HTMLElement).click(); await tick(100)
     const input = a.root.querySelector('input')!; input.value = nip19.npubEncode(friend); a.root.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true })); await tick(300)
     expect(a.mem.get(`followers:${friend}`)).toBeDefined(); expect(a.mem.get(`followers:${me}`)).toBeDefined(); expect(badge(a)).toBeNull()
   })
@@ -605,7 +605,7 @@ describe('the counts on Me', () => {
   })
   it('does not carry a count over to another account', async () => {
     const events = [...base(), follower(1)]; const a = start(events); await a.go('#/me'); await tick(300); expect(counts(a)).toContain('~1 follower')
-    ;(a.root.querySelector('button.danger') as HTMLElement).click(); await tick(100)
+    ;(a.root.querySelector('button.danger') as HTMLElement).click(); await tick(20); ;(a.root.querySelector('.confirm-signout button.danger') as HTMLElement).click(); await tick(100)
     const input = a.root.querySelector('input')!; input.value = nip19.npubEncode(far); a.root.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true })); await tick(300)
     await a.go('#/me'); await tick(300); expect(counts(a)).toBe('0 following · no followers seen yet') // `far` follows nobody and nobody follows `far`
   })

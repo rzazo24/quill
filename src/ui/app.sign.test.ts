@@ -299,7 +299,9 @@ describe('writing a reply', () => {
 describe('signing out', () => {
   it('disconnects the signer too', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)
-    await a.go('#/me'); await click(a.root, 'Sign out'); expect(sg.log).toContain('disconnect'); expect(a.mem.has('me')).toBe(false)
+    await a.go('#/me'); await click(a.root, 'Sign out'); expect(sg.log).not.toContain('disconnect'); expect(a.root.querySelector('.confirm-signout')).not.toBeNull(); expect(a.mem.has('me')).toBe(true) // one tap only asks
+    await click(a.root, 'Cancel'); expect(a.root.querySelector('.confirm-signout')).toBeNull(); expect(a.mem.has('me')).toBe(true)
+    await click(a.root, 'Sign out'); ;(a.root.querySelector('.confirm-signout button.danger') as HTMLElement).click(); await tick(40); expect(sg.log).toContain('disconnect'); expect(a.mem.has('me')).toBe(false)
   })
 })
 
@@ -404,6 +406,15 @@ describe('the connection status on Me', () => {
     ;(row().lastElementChild as HTMLElement).click(); await tick(60)
     ;(a.root.querySelector('.confirm-disconnect button.danger') as HTMLElement).click(); await tick(80)
     expect(sg.log).toContain('disconnect'); expect(a.root.querySelector('.signing-as')).toBeNull()
+  })
+  it('on a wide screen Sign out asks too, the question survives the redraw, and Cancel leaves everything as it was', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg, wide: true }); await tick(100); await connectClave(a, sg); await tick(250)
+    const out = () => [...a.root.querySelectorAll('.col[data-col="me"] button.danger')].find((x) => x.textContent === 'Sign out') as HTMLElement
+    out().click(); await tick(60)
+    expect(a.root.querySelector('.confirm-signout')).not.toBeNull(); expect(a.mem.get('me')).toBeTruthy(); expect(sg.log).not.toContain('disconnect')
+    await click(a.root, 'Cancel'); expect(a.root.querySelector('.confirm-signout')).toBeNull(); expect(a.mem.get('me')).toBeTruthy()
+    out().click(); await tick(40); ;(a.root.querySelector('.confirm-signout button.danger') as HTMLElement).click(); await tick(80)
+    expect(a.mem.has('me')).toBe(false); expect(sg.log).toContain('disconnect'); expect(a.text()).toContain('Read as…')
   })
   it('is a status row: a dot, "Clave connected" with who it signs as, and Disconnect on the right as a careful (danger) button', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg); await a.go('#/me'); await tick(80)

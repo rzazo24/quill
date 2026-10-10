@@ -213,7 +213,7 @@ button.icon.on { color: var(--accent); border-color: var(--accent); background: 
 .sign.bare { display: contents }
 
 /* disconnecting asks first */
-.confirm-disconnect { display: grid; gap: 8px } .confirm-disconnect p { margin: 0 } .confirm-disconnect .buttons { display: flex; gap: 8px; flex-wrap: wrap }
+.confirm-disconnect, .confirm-signout { display: grid; gap: 8px } .confirm-disconnect p, .confirm-signout p { margin: 0 } .confirm-disconnect .buttons, .confirm-signout .buttons { display: flex; gap: 8px; flex-wrap: wrap }
 
 /* "Ana reposted" above a note */
 .reposted { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; color: var(--muted); font-size: .85rem } .reposted .icon { flex: none }

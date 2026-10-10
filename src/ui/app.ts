@@ -92,6 +92,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let published: string[] | null | undefined // the relay list on Nostr: undefined = not read (yet), null = none
   let confirmingList = false
   let confirmingDisconnect = false
+  let confirmingSignOut = false // Sign out also asks first: it forgets the account on this device
   // following: the list as the reader was seen to have it (a new list is refused if the one found lacks many of these), and the panel in progress
   const followingKey = () => `following:${me}`
   let knownFollowing: Set<string> | null = null
@@ -690,7 +691,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     return h('div', { class: detailOpen ? 'cols with-detail' : 'cols' },
       column('following', t(lang, 'following'), [panes.following.body], [write]),
       column('mentions', t(lang, 'mentions'), [panes.mentions.body], [count]),
-      column('me', t(lang, 'me'), [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), panes.me.body, h('p', { class: 'foot' }, signOut)]),
+      column('me', t(lang, 'me'), [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), panes.me.body, h('div', { class: 'foot' }, signOut)]),
       detailOpen ? h('section', { class: 'col detail', 'data-col': 'detail' }, h('h2', { class: 'col-title' }, h('span', {}, detailTitle), h('button', { type: 'button', class: 'icon close', 'aria-label': t(lang, 'dismiss'), title: t(lang, 'dismiss'), onClick: () => deps.setHash('') }, '×')), panes.detail.body) : null)
   }
 
@@ -702,6 +703,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const route = parseRoute(deps.location.hash)
     const isWide = wide() && !!me && route.name !== 'settings' && route.name !== 'help'
     if (confirmingDisconnect && ((route.name !== 'me' && !isWide) || signer?.state !== 'connected')) confirmingDisconnect = false // a question left behind is forgotten
+    if (confirmingSignOut && ((route.name !== 'me' && !isWide) || !me)) confirmingSignOut = false
     if (shareConfirm && signer?.state !== 'connected') shareConfirm = null
     if (followFlow && signer?.state !== 'connected') followFlow = null
     const tab = (name: 'following' | 'mentions' | 'me', href: string) => h('a', { href, class: route.name === name ? 'tab on' : 'tab', 'data-tab': name, ...(route.name === name ? { 'aria-current': 'page' } : {}), onClick: (e: Event) => { if (route.name === name) { e.preventDefault(); refresh() } } }, icon(name === 'following' ? 'people' : name === 'mentions' ? 'at' : 'person', 18), t(lang, name), name === 'mentions' && badge > 0 ? h('span', { class: 'badge', role: 'status', 'aria-label': t(lang, 'newItems', { n: badge }) }, badge > 9 ? '9+' : String(badge)) : null)
@@ -721,7 +723,11 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const pills = h('div', { class: 'lang', role: 'group', 'aria-label': 'Language' }, ...(['en', 'es'] as const).map((l) =>
       h('button', { type: 'button', 'aria-pressed': String(lang === l), onClick: () => { if (lang !== l) { lang = l; safeSet(kv, 'lang', lang); void load() } } }, l.toUpperCase())))
     const statusEl = me && status ? h('p', { class: 'status loading', role: 'status' }, h('span', {}, status)) : null
-    const signOut = h('button', { type: 'button', class: 'danger', onClick: () => { me = null; session = null; body = null; shownRoute = ''; forgetAccount(); safeSet(kv, 'me', null); void signer?.disconnect(); composer = review = result = null; flash = null; deps.setHash(''); draw() } }, t(lang, 'signOut'))
+    const doSignOut = () => { confirmingSignOut = false; me = null; session = null; body = null; shownRoute = ''; forgetAccount(); safeSet(kv, 'me', null); void signer?.disconnect(); composer = review = result = null; flash = null; deps.setHash(''); draw() }
+    const signOut = confirmingSignOut
+      ? h('div', { class: 'confirm-signout', role: 'alertdialog', 'aria-label': t(lang, 'signOut') }, h('p', {}, t(lang, 'confirmSignOut')),
+        h('p', { class: 'buttons' }, h('button', { type: 'button', class: 'danger', onClick: doSignOut }, t(lang, 'signOut')), ' ', h('button', { type: 'button', onClick: () => { confirmingSignOut = false; draw() } }, t(lang, 'cancel'))))
+      : h('button', { type: 'button', class: 'danger', onClick: () => { confirmingSignOut = true; draw() } }, t(lang, 'signOut'))
     const helpPage = renderHelp(view(), helpOpen, (id, isOpen) => { if (isOpen) helpOpen.add(id); else helpOpen.delete(id) })
     const content: (HTMLElement | null)[] = route.name === 'help' ? [signArea, helpPage]
       : !me ? [...(route.name === 'note' && guestBody ? [guestBody] : []), loginForm, signArea]
@@ -729,7 +735,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
         onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
       : isWide ? [wideView(route, signArea, signOut)]
-      : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), body, h('p', { class: 'foot' }, signOut)]
+      : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), body, h('div', { class: 'foot' }, signOut)]
       : [signArea, body]
     const page: (HTMLElement | null)[] = [
       h('header', { class: 'top' }, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('div', { class: 'brand' }, h('h1', {}, h('a', { href: '#/', class: 'wordmark' }, logo(26), 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline'))), me ? h('button', { type: 'button', class: status ? 'icon spinning' : 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), ...(status ? { 'aria-busy': 'true' } : {}), onClick: refresh }, icon('refresh', 18)) : null, pills, me ? h('button', { type: 'button', class: route.name === 'settings' ? 'icon on' : 'icon', 'aria-label': t(lang, 'prefsTitle'), title: t(lang, 'prefsTitle'), 'aria-pressed': String(route.name === 'settings'), onClick: () => deps.setHash(route.name === 'settings' ? '' : '#/settings') }, icon('gear', 18)) : null, h('button', { type: 'button', class: route.name === 'help' ? 'icon on' : 'icon', 'aria-label': t(lang, 'helpTitle'), title: t(lang, 'helpTitle'), 'aria-pressed': String(route.name === 'help'), onClick: () => deps.setHash(route.name === 'help' ? '' : '#/help') }, icon('help', 18)), statusEl),
