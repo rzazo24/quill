@@ -757,3 +757,25 @@ describe('the lists behind the counts in Me', () => {
     const a = start([list(me, 3, [])]); await tick(80); await a.go('#/me/following'); await tick(120); expect(a.text()).toContain('Nobody here yet.')
   })
 })
+
+describe('the bottom bar steps aside while you read down', () => {
+  const many = (): Event[] => [list(me, 3, [['p', friend]]), list(friend, 3, []), ...Array.from({ length: 40 }, (_, i) => ev(friend, `post number ${i} from my friend, with enough words`, { created_at: 8000 + i }))]
+  const scrollTo = async (a: ReturnType<typeof boot>, top: number) => { const m = a.root.querySelector('main.view') as HTMLElement; m.scrollTop = top; m.dispatchEvent(new Event('scroll')); await tick(10) }
+  const hidden = (a: ReturnType<typeof boot>) => a.root.classList.contains('bars-hidden')
+  it('hides after a real scroll down, comes back on a scroll up or near the top, and small moves do nothing', async () => {
+    const a = boot({ events: many(), stored: { me } }); await tick(150)
+    expect(hidden(a)).toBe(false)
+    await scrollTo(a, 60); expect(hidden(a)).toBe(false) // too close to the top
+    await scrollTo(a, 130); expect(hidden(a)).toBe(true)
+    await scrollTo(a, 135); expect(hidden(a)).toBe(true) // a small move changes nothing
+    await scrollTo(a, 100); expect(hidden(a)).toBe(false) // up: back
+    await scrollTo(a, 400); expect(hidden(a)).toBe(true)
+    await scrollTo(a, 20); expect(hidden(a)).toBe(false) // near the top: back
+  })
+  it('stays hidden through a redraw while reading, and a new view brings the bar back', async () => {
+    const a = boot({ events: many(), stored: { me } }); await tick(150)
+    await scrollTo(a, 300); expect(hidden(a)).toBe(true)
+    await a.go(''); await tick(80); expect(hidden(a)).toBe(true) // the page was loaded and redrawn, the bar did not jump back
+    await a.go('#/mentions'); await tick(100); expect(hidden(a)).toBe(false)
+  })
+})

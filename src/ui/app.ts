@@ -113,6 +113,9 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let loginError: string | null = null
   let status: string | null = null
   let body: HTMLElement | null = null
+  // the tab bar and the write button give their room back to the text while you read down, and come back when you scroll up (or are near the top, or something needs them)
+  let barsHidden = false
+  const HIDE_AFTER_PX = 120, SCROLL_STEP_PX = 10
   let guestBody: HTMLElement | null = null // the note a visitor without an account came to read
   let run = 0 // a newer navigation makes older loads stop touching the page
   let shownRoute = '' // which view `body` belongs to: old content must not stay on screen under a new tab
@@ -665,9 +668,21 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       me ? h('nav', { class: 'tabbar' }, tab('following', '#/'), tab('mentions', '#/mentions'), tab('me', '#/me')) : null,
     ]
     // put the reader back where they were (unless this is a new view)
+    if (scrollToTop || flash || composer || review || followFlow || shareConfirm || connectOpen) barsHidden = false // a new view, or something that talks to you: the bars stay
     root.replaceChildren(...page.filter((x): x is HTMLElement => x !== null))
+    root.classList.toggle('bars-hidden', barsHidden)
     const main = root.querySelector('main.view')
     if (main) main.scrollTop = scrollToTop ? 0 : kept
+    if (main) {
+      let last = main.scrollTop
+      main.addEventListener('scroll', () => {
+        const top = main.scrollTop, d = top - last
+        if (Math.abs(d) < SCROLL_STEP_PX) return // small moves do not count; a slow drag adds up because `last` stays
+        last = top
+        const hide = d > 0 && top > HIDE_AFTER_PX
+        if (hide !== barsHidden) { barsHidden = hide; root.classList.toggle('bars-hidden', hide) }
+      }, { passive: true })
+    }
     // coming from "Filter settings": land on the filter section, not at the top of Settings
     if (scrollToTop && route.name === 'settings' && route.focus === 'filter') root.querySelector('.settings')?.scrollIntoView({ block: 'start' })
     scrollToTop = false

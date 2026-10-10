@@ -262,3 +262,9 @@ button.icon.spinning svg { animation: spin .9s linear infinite }
 .person { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 12px; color: inherit; text-decoration: none; background: var(--bg) }
 .person .who { display: grid; min-width: 0; flex: 1 } .person .who strong, .person .who .meta { overflow-wrap: anywhere }
 .person .tag { flex: none; font-size: 11px; color: var(--accent); border: 1px solid var(--border); border-radius: 8px; padding: 1px 7px }
+
+/* reading down gives the bottom bar and the write button back to the text; scrolling up (or going near the top) brings them back. Not for people who asked for less motion: there it is instant. */
+.tabbar { transition: transform .2s ease, margin-bottom .2s ease } .fab { transition: transform .2s ease, opacity .2s ease }
+#app.bars-hidden .tabbar { transform: translateY(100%); margin-bottom: calc(-1 * (var(--tab-h) + env(safe-area-inset-bottom) * .5 + 1px)) }
+#app.bars-hidden .fab { transform: translateY(calc(100% + 40px)); opacity: 0; pointer-events: none }
+@media (prefers-reduced-motion: reduce) { .tabbar, .fab { transition: none } }
