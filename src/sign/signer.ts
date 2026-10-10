@@ -87,11 +87,8 @@ export class Signer {
   }
   private save(s: Saved): void { safeSet(this.kv, 'signer', JSON.stringify(s)) }
   hasSavedSession(): boolean { const s = this.load(); return !!(s?.signerPubkey && HEX64.test(s.signerPubkey) && s.relays?.length) }
-  private appKey(): Uint8Array {
-    const saved = this.load()
-    if (saved) return hexToBytes(saved.clientSecret)
-    const sk = generateSecretKey(); this.save({ clientSecret: bytesToHex(sk) }); return sk
-  }
+  /** A new pairing gets a NEW app key. After a connection is deleted in the signer, reusing its old key can get the new pairing ignored (the signer remembers the key it revoked). */
+  private freshKey(): Uint8Array { const sk = generateSecretKey(); this.save({ clientSecret: bytesToHex(sk) }); return sk }
   private params(pool = (this.pool ??= new SimplePool())) { return { pool, skipSwitchRelays: true, onauth: (url: string) => { this.authUrl = cleanText(url, 300) } } }
 
   private async established(b: BunkerSigner, secretHex: string): Promise<void> {
@@ -106,7 +103,7 @@ export class Signer {
   // ---- connecting ----
   /** A link for the user's signer. The session completes in the background; `done` settles when it does (never rejects). */
   startConnect(): { uri: string; claveLink: string; done: Promise<boolean> } {
-    const sk = this.appKey(), secretHex = bytesToHex(sk)
+    const sk = this.freshKey(), secretHex = bytesToHex(sk)
     const secret = bytesToHex(crypto.getRandomValues(new Uint8Array(16)))
     const perms = ['get_public_key', ...ALLOWED_KINDS.map((k) => `sign_event:${k}`)]
     const uri = createNostrConnectURI({ clientPubkey: getPublicKey(sk), relays: this.relays, secret, perms, name: 'Quill', url: this.appUrl })
@@ -140,7 +137,7 @@ export class Signer {
     const pubkey = (url.hostname || url.pathname.replace(/^\/+/, '')).toLowerCase()
     const relays = url.searchParams.getAll('relay').filter((r) => /^wss:\/\/[^\s/]+/.test(r) || (this.allowLoopback && /^ws:\/\/127\.0\.0\.1[:/]/.test(r)))
     if (url.protocol !== 'bunker:' || !HEX64.test(pubkey) || !relays.length) { this.set('disconnected', 'the bunker:// address needs a signer key and at least one wss:// relay'); return false }
-    const sk = this.appKey()
+    const sk = this.freshKey()
     this.set('connecting')
     try {
       const bp: BunkerPointer = { pubkey, relays, secret: url.searchParams.get('secret') }

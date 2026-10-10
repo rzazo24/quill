@@ -43,6 +43,15 @@ describe.skipIf(!bin)('Signer with a pretend Clave through a real relay', () => 
     expect(JSON.stringify([...store.m.values()])).not.toContain(Buffer.from(fake.userSk).toString('hex')) // the user's private key never reaches the app
   }, 30_000)
 
+  it('a new pairing never reuses the app key of an old (deleted) connection', async () => {
+    const store = mem(); const old = Buffer.from(generateSecretKey()).toString('hex')
+    store.m.set('signer', JSON.stringify({ clientSecret: old, signerPubkey: getPublicKey(generateSecretKey()), relays: [relay.url], userPubkey: getPublicKey(generateSecretKey()) }))
+    const signer = new Signer({ kv: store.kv, relays: [relay.url] }); signers.push(signer)
+    const u = new URL(signer.startConnect().uri)
+    expect(u.hostname || u.pathname.replace(/^\/+/, '')).not.toBe(getPublicKey(Buffer.from(old, 'hex')))
+    const saved = JSON.parse(store.m.get('signer')!); expect(saved.clientSecret).not.toBe(old); expect(saved.signerPubkey).toBeUndefined() // the dead session is not carried over
+  })
+
   it('requests ask for sign_event for notes (1), the follow list (3), reposts (6), reactions (7) and the relay list (10002) only', async () => {
     const store = mem(); const signer = new Signer({ kv: store.kv, relays: [relay.url] }); signers.push(signer)
     const u = new URL(signer.startConnect().uri)
