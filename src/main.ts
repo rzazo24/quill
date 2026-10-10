@@ -28,6 +28,8 @@ startApp(document.getElementById('app')!, {
   onPoll: (cb) => { setInterval(() => { if (document.visibilityState === 'visible') cb() }, 60_000) },
   reload: () => location.reload(),
   goBack: () => { if (history.length > 1) history.back(); else location.hash = '' },
+  isWide: () => matchMedia('(min-width: 1100px)').matches,
+  onWide: (cb) => matchMedia('(min-width: 1100px)').addEventListener('change', cb),
   env: detectEnv(navigator as Navigator & { standalone?: boolean }, matchMedia('(display-mode: standalone)').matches),
   onVisible: (cb) => document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') cb() }),
 })

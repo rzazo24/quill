@@ -12,6 +12,7 @@ const en: HelpSection[] = [
 • Nothing is hidden silently: every hidden note says which rule hid it, and one tap shows it.` },
   { id: 'read', title: 'Reading', body: `Sign in with your npub. There are three tabs:
 
+• On a wide screen (a computer, about 1100 px or more) Following, Mentions and Me are shown side by side, each scrolling on its own, and a thread, an account or a list opens in a panel on the right (× closes it). Settings and Help take the whole page. On a phone it is one column with the tabs at the bottom.
 • Following: notes of the people you follow (not their replies) and what they repost, marked “Ana reposted”. A repost does not vouch for the note: the filter judges it by its own author. You can switch reposts off in Settings.
 • At the top of Following a switch chooses **Follows** (the people you follow) or **Network**: the notes of the people they follow, each marked “Followed by Ana and 3 more” so you can see why it is there. Network leaves out the “outside your network” rule (that is what it is showing you); every other rule applies. It looks at the accounts followed by the most of your follows, up to 200.
 • Mentions: replies and mentions from anyone. This is where the filter works hardest.
@@ -70,6 +71,7 @@ const es: HelpSection[] = [
 • Nada se oculta en silencio: cada nota oculta dice qué regla la ocultó, y con un toque se muestra.` },
   { id: 'read', title: 'Leer', body: `Entra con tu npub. Hay tres pestañas:
 
+• En una pantalla ancha (un ordenador, unos 1100 px o más) Siguiendo, Menciones y Yo se muestran una al lado de otra, cada una con su propio desplazamiento, y un hilo, una cuenta o una lista se abre en un panel a la derecha (× lo cierra). Ajustes y Ayuda ocupan toda la página. En un móvil es una sola columna con las pestañas abajo.
 • Siguiendo: notas de la gente que sigues (sin sus respuestas) y lo que comparten, marcado «Ana compartió». Un repost no avala la nota: el filtro la juzga por su propio autor. Puedes desactivar los reposts en Ajustes.
 • Arriba de Siguiendo, un interruptor elige **Seguidos** (la gente que sigues) o **Red**: las notas de la gente a la que ellos siguen, cada una marcada «Seguida por Ana y 3 más» para que veas por qué está ahí. Red deja fuera la regla «fuera de tu red» (es justo lo que enseña); el resto de reglas se aplican. Mira las cuentas seguidas por más de tus seguidos, hasta 200.
 • Menciones: respuestas y menciones de cualquiera. Aquí es donde más trabaja el filtro.

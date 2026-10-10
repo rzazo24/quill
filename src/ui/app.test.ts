@@ -16,17 +16,17 @@ const relays = (events: Event[], delayMs = 0): Fetcher => ({ query: async (f: Fi
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms))
 const roots: HTMLElement[] = []
 
-function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void } = {}) {
+function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean } } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
-  const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs), calls = { n: 0 }
+  const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs), calls = { n: 0 }
   startApp(root, {
-    fetcher: { query: (f) => { calls.n++; return base.query(f) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), reload: () => { reloads.n++ },
+    fetcher: { query: (f) => { calls.n++; return base.query(f) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
     checkVersion: opts.newer ? async () => { asked.n++; return opts.newer!.value } : undefined, languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
     storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
   })
   const go = async (hash: string) => { location.hash = hash; listeners.forEach((l) => l()); await tick() }
-  return { root, go, mem, calls, setRelays, reloads, asked, tick: () => ticks.forEach((t) => t()), poll: () => polls.forEach((t) => t()), comeBack: () => visible.forEach((v) => v()), text: () => root.textContent ?? '' }
+  return { root, go, mem, calls, wideChanged, setRelays, reloads, asked, tick: () => ticks.forEach((t) => t()), poll: () => polls.forEach((t) => t()), comeBack: () => visible.forEach((v) => v()), text: () => root.textContent ?? '' }
 }
 afterEach(() => { roots.forEach((r) => r.remove()); roots.length = 0 })
 
@@ -777,5 +777,55 @@ describe('the bottom bar steps aside while you read down', () => {
     await scrollTo(a, 300); expect(hidden(a)).toBe(true)
     await a.go(''); await tick(80); expect(hidden(a)).toBe(true) // the page was loaded and redrawn, the bar did not jump back
     await a.go('#/mentions'); await tick(100); expect(hidden(a)).toBe(false)
+  })
+})
+
+
+describe('wide screens: three columns and a panel', () => {
+  const wideWorld = (): Event[] => [...world, ev(friend, 'a second post from my friend', { created_at: 8100 })]
+  const col = (a: ReturnType<typeof boot>, id: string) => a.root.querySelector(`.col[data-col="${id}"]`) as HTMLElement
+  const titles = (a: ReturnType<typeof boot>) => [...a.root.querySelectorAll('.col > .col-title > span')].map((x) => x.textContent)
+  it('shows Following, Mentions and Me side by side, each with its own content, and no tab bar', async () => {
+    const a = boot({ events: wideWorld(), stored: { me }, wide: { value: true } }); await tick(250)
+    expect(titles(a)).toEqual(['Following', 'Mentions', 'Me']); expect(a.root.querySelector('.tabbar')).toBeNull(); expect(a.root.classList.contains('wide')).toBe(true)
+    expect(col(a, 'following').textContent).toContain('a post from my friend')
+    expect(col(a, 'mentions').textContent).toContain('a pitch from a stranger')
+    expect(col(a, 'me').querySelector('.account')).not.toBeNull(); expect(col(a, 'me').textContent).toContain('My notes')
+    expect(a.root.querySelector('.col.detail')).toBeNull()
+  })
+  it('a thread opens in a panel on the right and the columns stay exactly as they were (not loaded again)', async () => {
+    const post = wideWorld().find((e) => e.content === 'a post from my friend')!
+    const a = boot({ events: wideWorld(), stored: { me }, wide: { value: true } }); await tick(250)
+    const first = col(a, 'following').querySelector('article.note')!; const calls = a.calls.n
+    await a.go('#/note/' + post.id); await tick(150)
+    expect(titles(a)).toEqual(['Following', 'Mentions', 'Me', 'Thread']); expect(col(a, 'detail').textContent).toContain('a post from my friend')
+    expect(col(a, 'following').querySelector('article.note')).toBe(first) // the very same card: nothing was rebuilt
+    expect(a.calls.n - calls).toBeLessThan(8) // only the thread was asked for
+    ;(col(a, 'detail').querySelector('button.close') as HTMLElement).click(); await tick(60)
+    expect(a.root.querySelector('.col.detail')).toBeNull(); expect(col(a, 'following').querySelector('article.note')).toBe(first)
+  })
+  it('an account and the lists open in the panel too; Settings and Help take the whole page', async () => {
+    const a = boot({ events: wideWorld(), stored: { me }, wide: { value: true } }); await tick(250)
+    await a.go('#/user/' + friend); await tick(150); expect(col(a, 'detail').textContent).toContain('Ana')
+    await a.go('#/me/following'); await tick(150); expect(titles(a).at(-1)).toBe('Following'); expect(col(a, 'detail').querySelector('.people')).not.toBeNull()
+    await a.go('#/settings'); await tick(80); expect(a.root.querySelector('.col')).toBeNull(); expect(a.root.querySelector('main.view.wide')).toBeNull()
+    await a.go('#/help'); await tick(80); expect(a.root.querySelector('.col')).toBeNull(); expect(a.text()).toContain('What Quill is')
+  })
+  it('each column keeps its own place when the page is redrawn', async () => {
+    const a = boot({ events: wideWorld(), stored: { me }, wide: { value: true } }); await tick(250)
+    col(a, 'following').scrollTop = 120; col(a, 'mentions').scrollTop = 40
+    await a.go('#/me/following'); await tick(150)
+    expect(col(a, 'following').scrollTop).toBe(120); expect(col(a, 'mentions').scrollTop).toBe(40)
+  })
+  it('narrowing the window brings the single column and the tab bar back, and widening it again the three columns', async () => {
+    const w = { value: true }; const a = boot({ events: wideWorld(), stored: { me }, wide: w }); await tick(250)
+    w.value = false; a.wideChanged.forEach((cb) => cb()); await tick(200)
+    expect(a.root.querySelector('.col')).toBeNull(); expect(a.root.querySelector('.tabbar')).not.toBeNull(); expect(a.text()).toContain('a post from my friend')
+    w.value = true; a.wideChanged.forEach((cb) => cb()); await tick(250)
+    expect(titles(a)).toEqual(['Following', 'Mentions', 'Me']); expect(a.root.querySelector('.tabbar')).toBeNull()
+  })
+  it('narrow screens are unchanged: one column and the tab bar', async () => {
+    const a = boot({ events: wideWorld(), stored: { me }, wide: { value: false } }); await tick(250)
+    expect(a.root.querySelector('.col')).toBeNull(); expect(a.root.querySelector('.tabbar')).not.toBeNull(); expect(a.root.classList.contains('wide')).toBe(false)
   })
 })

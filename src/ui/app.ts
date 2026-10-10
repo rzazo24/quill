@@ -49,6 +49,8 @@ export interface Deps {
   verifyWaitsMs?: number[]
   /** Called about once a minute while the page is visible: looks for new replies, mentions and reactions. */
   onPoll?: (cb: () => void) => void
+  /** Is the screen wide enough for three columns? And a hook for "it just changed" (a window resized). */
+  isWide?: () => boolean; onWide?: (cb: () => void) => void
 }
 
 type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'help' } | { name: 'user'; pubkey: string } | { name: 'people'; list: 'following' | 'followers' } | { name: 'note'; id: string; from?: string }
@@ -117,6 +119,12 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let barsHidden = false
   const HIDE_AFTER_PX = 120, SCROLL_STEP_PX = 10
   let guestBody: HTMLElement | null = null // the note a visitor without an account came to read
+  // wide screens: three columns that are always there (each with its own content, load and scroll) and a panel on the right for a thread, an account or a list
+  interface Pane { body: HTMLElement | null; run: number; resetScroll: boolean }
+  const newPane = (): Pane => ({ body: null, run: 0, resetScroll: true })
+  const panes = { following: newPane(), mentions: newPane(), me: newPane(), detail: newPane() }
+  let detailKey = ''
+  const wide = (): boolean => !!deps.isWide?.()
   let run = 0 // a newer navigation makes older loads stop touching the page
   let shownRoute = '' // which view `body` belongs to: old content must not stay on screen under a new tab
   // signing
@@ -163,7 +171,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const followersSeen = new Set<string>() // everybody seen following you since this page opened (the known ones are in `knownFollowers`)
   /** How many accounts have been seen following the reader: only a lower bound (each relay knows part of them), and it only grows. Null while nothing has been looked at yet. */
   const followerCount = (): number | null => { const k = loadKnown(); return k === null && followersSeen.size === 0 ? null : new Set([...(k ?? []), ...followersSeen]).size }
-  const forgetAccount = () => { followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
+  const forgetAccount = () => { for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
   const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
@@ -284,7 +292,40 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     return alive() ? content : null
   }
 
-  async function load(): Promise<void> {
+  /** Loads one column (or the panel). The old content stays until the new one is ready, as in a refresh of the single column. */
+  async function loadPane(p: Pane, route: Route): Promise<void> {
+    const my = ++p.run
+    const content = await buildContent(route, () => my === p.run && !!me)
+    if (content === null) return
+    p.body = content; lastLoadAt = deps.nowMs?.() ?? Date.now(); draw()
+  }
+
+  /** Wide screens. 'all': every column and the panel; 'route': only the panel (the address changed, the columns are what they were). */
+  async function loadWide(scope: 'all' | 'route'): Promise<void> {
+    const mine = ++run
+    if (!me) {
+      const r = parseRoute(deps.location.hash)
+      if (r.name === 'note') return void loadGuestNote(r.id, mine)
+      guestBody = null; return draw()
+    }
+    if (!(await ensureSession()) || !session) return
+    const route = parseRoute(deps.location.hash)
+    if (route.name === 'settings' || route.name === 'help') { draw(); return }
+    const jobs: Promise<void>[] = []
+    if (scope === 'all') for (const id of ['following', 'mentions', 'me'] as const) jobs.push(loadPane(panes[id], { name: id }))
+    if (route.name === 'note' || route.name === 'user' || route.name === 'people') {
+      const key = JSON.stringify(route)
+      if (scope === 'all' || key !== detailKey) {
+        if (key !== detailKey) { panes.detail.body = null; panes.detail.resetScroll = true; profileMode = 'notes' }
+        detailKey = key; jobs.push(loadPane(panes.detail, route))
+      }
+    } else { detailKey = ''; panes.detail.body = null; panes.detail.run++ }
+    draw()
+    await Promise.all(jobs)
+  }
+
+  async function load(scope: 'all' | 'route' = 'all'): Promise<void> {
+    if (wide()) return loadWide(scope)
     const mine = ++run
     if (!me) {
       const r = parseRoute(deps.location.hash)
@@ -634,11 +675,28 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       h('div', {}, h('strong', {}, nameOf(view(), me!)), h('div', { class: 'meta' }, shortNpub(me!)), countsLine()))
   }
 
+  /** Wide screens: Following, Mentions and Me side by side, each scrolling on its own, and a panel on the right for the thread, account or list you opened. */
+  function wideView(route: Route, signArea: HTMLElement | null, signOut: HTMLElement): HTMLElement {
+    const column = (id: 'following' | 'mentions' | 'me', title: string, nodes: (Node | null)[], extra: (Node | null)[] = []) =>
+      h('section', { class: 'col', 'data-col': id }, h('h2', { class: 'col-title' }, h('span', {}, title), ...extra), ...nodes)
+    const write = signer?.state === 'connected' ? h('button', { type: 'button', class: 'primary write', onClick: startNote }, icon('feather', 16), t(lang, 'newNote').replace(/…$/, '')) : null
+    const count = badge > 0 ? h('span', { class: 'badge', 'aria-label': `${badge}` }, badge > 9 ? '9+' : String(badge)) : null
+    const detailOpen = route.name === 'note' || route.name === 'user' || route.name === 'people'
+    const detailTitle = route.name === 'note' ? t(lang, 'thread') : route.name === 'people' ? t(lang, route.list === 'following' ? 'peopleFollowing' : 'peopleFollowers') : t(lang, 'account')
+    return h('div', { class: detailOpen ? 'cols with-detail' : 'cols' },
+      column('following', t(lang, 'following'), [panes.following.body], [write]),
+      column('mentions', t(lang, 'mentions'), [panes.mentions.body], [count]),
+      column('me', t(lang, 'me'), [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), panes.me.body, h('p', { class: 'foot' }, signOut)]),
+      detailOpen ? h('section', { class: 'col detail', 'data-col': 'detail' }, h('h2', { class: 'col-title' }, h('span', {}, detailTitle), h('button', { type: 'button', class: 'icon close', 'aria-label': t(lang, 'dismiss'), title: t(lang, 'dismiss'), onClick: () => deps.setHash('') }, '×')), panes.detail.body) : null)
+  }
+
   function draw(): void {
     // <main> is the only thing that scrolls and it is rebuilt on every draw. Read where the reader was FIRST: building the new one moves the list out of
     // the old one, which then collapses to zero.
     const kept = root.querySelector('main.view')?.scrollTop ?? 0
+    const keptCols = new Map<string, number>([...root.querySelectorAll<HTMLElement>('.col[data-col]')].map((c) => [c.dataset.col!, c.scrollTop]))
     const route = parseRoute(deps.location.hash)
+    const isWide = wide() && !!me && route.name !== 'settings' && route.name !== 'help'
     if (confirmingDisconnect && (route.name !== 'me' || signer?.state !== 'connected')) confirmingDisconnect = false // a question left behind is forgotten
     if (shareConfirm && signer?.state !== 'connected') shareConfirm = null
     if (followFlow && signer?.state !== 'connected') followFlow = null
@@ -655,7 +713,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       edit: (x) => { if (composer) composer.text = x }, review: doReview, publish: () => void publish(), back: () => { review = null; draw() }, cancelComposer: () => { composer = null; review = null; draw() },
       retry: () => void retry(), dismissResult: () => { result = null; draw() }, startNote, cancelSigning: () => signing?.abort(),
       editBunker: (x) => { bunkerText = x }, setLinkOpen: (o) => { linkOpen = o },
-    }, view(), true, !me || route.name === 'me' ? 'me' : 'feed', !!me && ['following', 'mentions', 'note', 'user', 'me', 'people'].includes(route.name)) : null
+    }, view(), true, !me || route.name === 'me' || isWide ? 'me' : 'feed', !!me && !isWide && ['following', 'mentions', 'note', 'user', 'me', 'people'].includes(route.name)) : null
     const pills = h('div', { class: 'lang', role: 'group', 'aria-label': 'Language' }, ...(['en', 'es'] as const).map((l) =>
       h('button', { type: 'button', 'aria-pressed': String(lang === l), onClick: () => { if (lang !== l) { lang = l; safeSet(kv, 'lang', lang); void load() } } }, l.toUpperCase())))
     const statusEl = me && status ? h('p', { class: 'status loading', role: 'status' }, h('span', {}, status)) : null
@@ -666,20 +724,27 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       : route.name === 'settings' ? [signArea, renderPrefs({ font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, reposts: showReposts, onReposts: changeReposts, relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
         onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
+      : isWide ? [wideView(route, signArea, signOut)]
       : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), body, h('p', { class: 'foot' }, signOut)]
       : [signArea, body]
     const page: (HTMLElement | null)[] = [
       h('header', { class: 'top' }, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('div', { class: 'brand' }, h('h1', {}, h('a', { href: '#/', class: 'wordmark' }, logo(26), 'Quill')), h('span', { class: 'tag' }, t(lang, 'tagline'))), me ? h('button', { type: 'button', class: status ? 'icon spinning' : 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), ...(status ? { 'aria-busy': 'true' } : {}), onClick: refresh }, icon('refresh', 18)) : null, pills, me ? h('button', { type: 'button', class: route.name === 'settings' ? 'icon on' : 'icon', 'aria-label': t(lang, 'prefsTitle'), title: t(lang, 'prefsTitle'), 'aria-pressed': String(route.name === 'settings'), onClick: () => deps.setHash(route.name === 'settings' ? '' : '#/settings') }, icon('gear', 18)) : null, h('button', { type: 'button', class: route.name === 'help' ? 'icon on' : 'icon', 'aria-label': t(lang, 'helpTitle'), title: t(lang, 'helpTitle'), 'aria-pressed': String(route.name === 'help'), onClick: () => deps.setHash(route.name === 'help' ? '' : '#/help') }, icon('help', 18)), statusEl),
-      h('main', { class: 'view' }, ...content),
-      me ? h('nav', { class: 'tabbar' }, tab('following', '#/'), tab('mentions', '#/mentions'), tab('me', '#/me')) : null,
+      h('main', { class: isWide ? 'view wide' : 'view' }, ...content),
+      me && !isWide ? h('nav', { class: 'tabbar' }, tab('following', '#/'), tab('mentions', '#/mentions'), tab('me', '#/me')) : null,
     ]
     // put the reader back where they were (unless this is a new view)
     if (scrollToTop || flash || composer || review || followFlow || shareConfirm || connectOpen) barsHidden = false // a new view, or something that talks to you: the bars stay
     root.replaceChildren(...page.filter((x): x is HTMLElement => x !== null))
-    root.classList.toggle('bars-hidden', barsHidden)
+    root.classList.toggle('bars-hidden', barsHidden && !isWide)
+    root.classList.toggle('wide', isWide)
+    for (const c of root.querySelectorAll<HTMLElement>('.col[data-col]')) {
+      const id = c.dataset.col as keyof typeof panes
+      c.scrollTop = panes[id].resetScroll ? 0 : keptCols.get(id) ?? 0
+      if (panes[id].body) panes[id].resetScroll = false // the new view is on screen: from now on the reader's place is kept
+    }
     const main = root.querySelector('main.view')
-    if (main) main.scrollTop = scrollToTop ? 0 : kept
-    if (main) {
+    if (main && !isWide) main.scrollTop = scrollToTop ? 0 : kept
+    if (main && !isWide) {
       let last = main.scrollTop
       main.addEventListener('scroll', () => {
         const top = main.scrollTop, d = top - last
@@ -694,7 +759,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     scrollToTop = false
   }
 
-  deps.onHash(() => { void load() })
+  deps.onHash(() => { void load('route') })
+  deps.onWide?.(() => { shownRoute = ''; barsHidden = false; root.classList.remove('bars-hidden'); void load() })
   // Coming back to the app after a while (an installed app stays alive in the background): show fresh notes, not what was there hours ago.
   deps.onVisible?.(() => { void checkUpdate(); if (me && !busy && (deps.nowMs?.() ?? Date.now()) - lastLoadAt > 120_000) refresh() })
   deps.onTick?.(() => { void checkUpdate() })
