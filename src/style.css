@@ -140,7 +140,7 @@ button.icon { display: inline-grid; place-items: center; min-height: var(--ctl-h
 .tab { position: relative }
 .tab .badge { position: absolute; top: 1px; right: 5px; min-width: 16px; box-sizing: border-box; padding: 0 4px; border-radius: 8px; background: var(--accent); color: #04211d; font-size: 10px; font-weight: 800; line-height: 14px; text-align: center } /* in the corner of its tab: it takes no room, so the three tabs stay equal */
 .note.new { border-left: 3px solid var(--accent) }
-.note.new::before { content: attr(data-new); display: inline-block; margin-bottom: 4px; padding: 0 7px; border-radius: 8px; background: rgba(45,212,191,.18); color: var(--accent); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em }
+.note.new::before { content: attr(data-new); grid-column: 1 / -1; justify-self: start; /* a pseudo-element of a grid is a grid item: it takes its own row above the avatar and the text, not their column */ margin-bottom: 4px; padding: 0 7px; border-radius: 8px; background: rgba(45,212,191,.18); color: var(--accent); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em }
 .new-line { margin: 0; color: var(--accent) }
 .reacted h2 { margin: 0 0 8px; font-size: 14px }
 .reacted ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
