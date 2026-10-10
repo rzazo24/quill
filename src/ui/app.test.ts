@@ -793,6 +793,13 @@ describe('wide screens: three columns and a panel', () => {
     expect(col(a, 'me').querySelector('.account')).not.toBeNull(); expect(col(a, 'me').textContent).toContain('My notes')
     expect(a.root.querySelector('.col.detail')).toBeNull()
   })
+  it('the refresh button turns while the columns load and stops when they are done', async () => {
+    const a = boot({ events: wideWorld(), stored: { me }, wide: { value: true }, delayMs: 30 }); await tick(10)
+    const spinning = () => a.root.querySelector('button.icon.spinning') !== null
+    expect(spinning()).toBe(true) // loading
+    await tick(700); expect(col(a, 'following').textContent).toContain('a post from my friend'); expect(spinning()).toBe(false)
+    await a.go('#/me/following'); await tick(400); expect(spinning()).toBe(false) // the panel loaded too
+  })
   it('a thread opens in a panel on the right and the columns stay exactly as they were (not loaded again)', async () => {
     const post = wideWorld().find((e) => e.content === 'a post from my friend')!
     const a = boot({ events: wideWorld(), stored: { me }, wide: { value: true } }); await tick(250)

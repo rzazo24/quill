@@ -293,10 +293,13 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   /** Loads one column (or the panel). The old content stays until the new one is ready, as in a refresh of the single column. */
+  let paneJobs = 0 // loads in flight: the refresh button turns (the `status`) while there is any, and only then
   async function loadPane(p: Pane, route: Route): Promise<void> {
     const my = ++p.run
-    const content = await buildContent(route, () => my === p.run && !!me)
-    if (content === null) return
+    paneJobs++; status = t(lang, 'loadingFeed')
+    let content: HTMLElement | null = null
+    try { content = await buildContent(route, () => my === p.run && !!me) } finally { if (--paneJobs === 0) status = null }
+    if (content === null) { if (paneJobs === 0) draw(); return }
     p.body = content; lastLoadAt = deps.nowMs?.() ?? Date.now(); draw()
   }
 
@@ -309,6 +312,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       guestBody = null; return draw()
     }
     if (!(await ensureSession()) || !session) return
+    if (paneJobs === 0) status = null // reading the account is done; what turns the button now is the columns loading
     const route = parseRoute(deps.location.hash)
     if (route.name === 'settings' || route.name === 'help') { draw(); return }
     const jobs: Promise<void>[] = []
