@@ -35,8 +35,8 @@ export type FeedMode = 'follows' | 'network'
 export const parseFeedMode = (raw: string | null): FeedMode => (raw === 'network' ? 'network' : 'follows')
 
 /** What the round picture of an account is made of. Nothing is loaded in any of them. */
-export type AvatarStyle = 'initials' | 'robots' | 'pixels'
-export const AVATAR_STYLES: readonly AvatarStyle[] = ['initials', 'robots', 'pixels']
+export type AvatarStyle = 'initials' | 'robots' | 'pixels' | 'halloween'
+export const AVATAR_STYLES: readonly AvatarStyle[] = ['initials', 'robots', 'pixels', 'halloween']
 export const parseAvatars = (raw: string | null): AvatarStyle => ((AVATAR_STYLES as readonly string[]).includes(raw ?? '') ? (raw as AvatarStyle) : 'initials')
 
 /** Reposts are shown unless the reader switched them off. */

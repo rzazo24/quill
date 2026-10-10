@@ -430,12 +430,12 @@ describe('the switches in Settings', () => {
 describe('avatar style', () => {
   const people = (a: ReturnType<typeof boot>) => [...a.root.querySelectorAll('article.note > .avatar-link > .avatar')] as HTMLElement[]
   const pick = async (a: ReturnType<typeof boot>, label: string) => { const b = [...a.root.querySelectorAll('.seg.avatars button')].find((x) => x.lastChild!.textContent === label) as HTMLElement; b.click(); await tick(150) }
-  it('starts with initials; Settings offers initials, robots and pixels, each with a sample of the reader\'s own picture', async () => {
+  it('starts with initials; Settings offers initials, robots, pixels and Halloween, each with a sample of the reader\'s own picture', async () => {
     const a = boot({ stored: { me } }); await tick(150)
     expect(people(a).length).toBeGreaterThan(0); expect(people(a).every((x) => !x.classList.contains('art') && /^[A-Z0-9]{2}$/.test(x.textContent!))).toBe(true)
     await a.go('#/settings'); await tick(100); const opts = [...a.root.querySelectorAll('.seg.avatars button')]
-    expect(opts.map((b) => b.lastChild!.textContent)).toEqual(['Initials', 'Robots', 'Pixels']); expect(opts.map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false'])
-    expect(opts[1]!.querySelector('.avatar.art svg.robot')).not.toBeNull(); expect(opts[2]!.querySelector('.avatar.art svg.pixel')).not.toBeNull(); expect(opts[0]!.querySelector('.avatar')!.classList.contains('art')).toBe(false)
+    expect(opts.map((b) => b.lastChild!.textContent)).toEqual(['Initials', 'Robots', 'Pixels', 'Halloween']); expect(opts.map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false', 'false'])
+    expect(opts[1]!.querySelector('.avatar.art svg.robot')).not.toBeNull(); expect(opts[2]!.querySelector('.avatar.art svg.pixel')).not.toBeNull(); expect(opts[3]!.querySelector('.avatar.art svg.spooky')).not.toBeNull(); expect(opts[0]!.querySelector('.avatar')!.classList.contains('art')).toBe(false)
   })
   it('robots and pixels replace the initials everywhere (cards and the account), as page elements and never as images, and the choice is remembered', async () => {
     const a = boot({ stored: { me } }); await tick(150); await a.go('#/settings'); await tick(100); await pick(a, 'Robots')
@@ -443,6 +443,7 @@ describe('avatar style', () => {
     expect(people(a).length).toBeGreaterThan(0); expect(people(a).every((x) => x.classList.contains('art') && x.querySelector('svg.robot') && x.textContent === '')).toBe(true); expect(a.root.querySelectorAll('img').length).toBe(0)
     await a.go('#/me'); await tick(150); expect(a.root.querySelector('.account .avatar.lg.art svg.robot')).not.toBeNull()
     await a.go('#/settings'); await tick(100); await pick(a, 'Pixels'); expect(a.mem.get('avatars')).toBe('pixels'); await a.go('#/'); await tick(200); expect(people(a).every((x) => x.querySelector('svg.pixel'))).toBe(true)
+    await a.go('#/settings'); await tick(100); await pick(a, 'Halloween'); expect(a.mem.get('avatars')).toBe('halloween'); await a.go('#/'); await tick(200); expect(people(a).every((x) => x.querySelector('svg.spooky') && x.textContent === '')).toBe(true); expect(a.root.querySelectorAll('img').length).toBe(0)
     const again = boot({ stored: { me, avatars: 'robots' } }); await tick(200); expect(people(again).every((x) => x.querySelector('svg.robot'))).toBe(true)
     await again.go('#/settings'); await tick(100); await pick(again, 'Initials'); expect(again.mem.has('avatars')).toBe(false)
   })

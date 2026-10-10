@@ -35,3 +35,25 @@ describe('the pixel figure of a key', () => {
     }
   })
 })
+
+import { CREATURES, spookyOf } from './spooky.js'
+
+describe('the Halloween creature of a key', () => {
+  it('is the same every time, and different keys mostly give different pictures', () => {
+    expect(spookyOf(keys[3]!)).toEqual(spookyOf(keys[3]!)); expect(spookyOf(keys[3]!.toUpperCase())).toEqual(spookyOf(keys[3]!))
+    expect(new Set(keys.map((k) => JSON.stringify(spookyOf(k)))).size).toBeGreaterThan(250)
+  })
+  it('uses all seven creatures, evenly enough, over many keys', () => {
+    const count = new Map<string, number>(); for (const k of keys) { const c = spookyOf(k).creature; count.set(c, (count.get(c) ?? 0) + 1) }
+    expect([...count.keys()].sort()).toEqual([...CREATURES].sort()); for (const n of count.values()) expect(n).toBeGreaterThan(15)
+  })
+  it('is always drawable: known shapes only, numbers that are numbers, nothing external', () => {
+    for (const k of [...keys, '', 'zz', 'not a key at all', pk('0'), pk('f')]) {
+      const s = spookyOf(k); expect(s.background).toMatch(/^#[0-9a-f]{6}$/); expect(s.parts.length).toBeGreaterThanOrEqual(4)
+      for (const p of s.parts) {
+        expect(['rect', 'circle', 'ellipse', 'path', 'line']).toContain(p.tag)
+        for (const [name, v] of Object.entries(p.attrs)) { expect(v, `${p.tag}.${name}`).not.toBe(''); expect(v).not.toMatch(/NaN|undefined|http|url\(|href/i) }
+      }
+    }
+  })
+})

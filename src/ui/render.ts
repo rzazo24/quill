@@ -8,6 +8,7 @@ import type { ProfileInfo } from '../data/profile.js'
 import { AVATAR_STYLES, FONT_SIZES, type AvatarStyle, type FeedMode, type FontSize } from './store.js'
 import { robotEl } from './robot-el.js'
 import { pixelEl } from './pixel-el.js'
+import { spookyEl } from './spooky-el.js'
 import { HELP, helpBlocks } from './help-text.js'
 import type { ListState } from '../data/relaylist.js'
 import { icon } from './icons.js'
@@ -47,7 +48,7 @@ export function renderContent(raw: string, v: View, fromId?: string): DocumentFr
 /** A round picture: colour and initials, or a robot, or a pixel figure drawn from the key. Nothing is loaded. The colour goes in through the style object (CSSOM),
  *  which the page's CSP allows. */
 export function avatarEl(pubkey: string, v: View, size: 'md' | 'lg' = 'md', style: AvatarStyle = v.avatars ?? 'initials'): HTMLElement {
-  if (style !== 'initials') return h('span', { class: size === 'lg' ? 'avatar lg art' : 'avatar art', 'aria-hidden': 'true' }, style === 'robots' ? robotEl(pubkey) : pixelEl(pubkey))
+  if (style !== 'initials') return h('span', { class: size === 'lg' ? 'avatar lg art' : 'avatar art', 'aria-hidden': 'true' }, style === 'robots' ? robotEl(pubkey) : style === 'halloween' ? spookyEl(pubkey) : pixelEl(pubkey))
   const a = avatarOf(pubkey, v.names.get(pubkey))
   const el = h('span', { class: size === 'lg' ? 'avatar lg' : 'avatar', 'aria-hidden': 'true' }, a.letters)
   el.style.setProperty('--h', String(a.hue))

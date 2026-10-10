@@ -37,7 +37,7 @@ Principles: behaviour is evidence, **missing data is not** (a key without a prof
 - **React** with one tap; **share** (repost) or **quote** a note after a confirmation; what you already reacted to or replied to is marked; **reply** and **write a note** through a review screen that shows the exact text, kind, tags and relays before anything is asked of your signer.
 - **Wide screens**: on a computer (about 1100 px or more) **Following, Mentions and Me sit side by side**, each scrolling on its own, and a thread, an account or a list opens in a panel on the right. On a phone it stays one column with the tabs at the bottom.
 - **Help**: a page with folding sections (the filter, writing with Clave, settings, install), behind the ? button, in both languages.
-- **Avatars**: initials on a colour, robots or pixel figures, all drawn from the account's key (nothing is loaded).
+- **Avatars**: initials on a colour, robots, pixel figures or Halloween creatures (pumpkins, ghosts, bats, skulls, cats, spiders, witches), all drawn from the account's key (nothing is loaded).
 - **Settings**: your own relay list (with a connection test; optionally published on Nostr as your NIP-65 list, and used as the starting point on a new device) and four text sizes, both remembered on the device.
 - English and Spanish; dark theme; mobile first, and fine on a desktop.
 - Installable as an app on iPhone and Android.

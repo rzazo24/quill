@@ -37,7 +37,7 @@ Principios: la conducta es una prueba, **la falta de datos no lo es** (una clave
 - **Reaccionar** con un toque; **compartir** (repostear) o **citar** una nota tras una confirmación; lo que ya has reaccionado o respondido queda marcado; **responder** y **escribir una nota** con una pantalla de revisión que muestra el texto exacto, el tipo, las etiquetas y los relés antes de pedirle nada al firmador.
 - **Pantallas anchas**: en un ordenador (unos 1100 px o más) **Siguiendo, Menciones y Yo van una al lado de otra**, cada una con su propio desplazamiento, y un hilo, una cuenta o una lista se abre en un panel a la derecha. En el móvil sigue siendo una sola columna con las pestañas abajo.
 - **Ayuda**: una página con secciones plegables (el filtro, escribir con Clave, ajustes, instalar), tras el botón ?, en los dos idiomas.
-- **Avatares**: iniciales sobre un color, robots o figuras de píxeles, todos dibujados a partir de la clave de la cuenta (no se carga nada).
+- **Avatares**: iniciales sobre un color, robots, figuras de píxeles o criaturas de Halloween (calabazas, fantasmas, murciélagos, calaveras, gatos, arañas, brujas), todos dibujados a partir de la clave de la cuenta (no se carga nada).
 - **Ajustes**: tu propia lista de relés (con prueba de conexión; se puede publicar en Nostr como tu lista NIP-65, y se usa como punto de partida en un dispositivo nuevo) y cuatro tamaños de letra, ambos recordados en el dispositivo.
 - Inglés y español; tema oscuro; pensado primero para móvil, y también cómodo en un ordenador.
 - Instalable como app en iPhone y Android.
