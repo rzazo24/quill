@@ -2,6 +2,7 @@
 // Pure of state: give it the state and the handlers, get elements. The text of strangers (a reply's target) only ever goes in as text.
 import type { Event as NostrEvent } from 'nostr-tools'
 import { cleanText } from '../core/text.js'
+import { EMOJI_GROUPS } from '../core/emojis.js'
 import { quoteReserve } from '../core/compose.js'
 import { failedRelays } from '../net/publisher.js'
 import type { Published, Step } from '../sign/pipeline.js'
@@ -31,6 +32,8 @@ export interface SignUiState {
   connectOpen: boolean
   flash: Flash | null
   composer: Composer | null
+  /** A wide screen has no emoji keyboard: the composer offers a small picker. */
+  emojiPicker?: boolean
   review: Review | null
   step: Step | null
   result: Published | null
@@ -124,9 +127,18 @@ function renderComposer(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElemen
   const area = h('textarea', { rows: '4', placeholder: t(v.lang, c.mode === 'quote' ? 'quotePlaceholder' : 'newNote'), 'aria-label': t(v.lang, c.mode === 'reply' ? 'reply' : c.mode === 'quote' ? 'quoteButton' : 'newNote'), onInput: (e: Event) => { hd.edit((e.target as HTMLTextAreaElement).value); count.textContent = t(v.lang, 'chars', { n: [...(e.target as HTMLTextAreaElement).value].length, max }) } })
   area.value = c.text
   const count = h('small', {}, t(v.lang, 'chars', { n: [...c.text].length, max }))
+  // the emoji picker (wide screens): a button that opens a grid; a tap puts the emoji where the cursor is
+  const insert = (emoji: string) => {
+    const at = area.selectionStart ?? area.value.length, to = area.selectionEnd ?? at
+    area.value = area.value.slice(0, at) + emoji + area.value.slice(to)
+    area.selectionStart = area.selectionEnd = at + emoji.length
+    area.dispatchEvent(new Event('input')); area.focus()
+  }
+  const picker = s.emojiPicker ? h('div', { class: 'emoji-panel', role: 'group', 'aria-label': t(v.lang, 'emojis'), hidden: true }, ...EMOJI_GROUPS.flatMap((g) => g).map((e) => h('button', { type: 'button', onClick: () => insert(e) }, e))) : null
+  const toggle = picker ? h('button', { type: 'button', class: 'emoji-toggle', 'aria-label': t(v.lang, 'emojis'), title: t(v.lang, 'emojis'), 'aria-expanded': 'false', onClick: () => { picker.hidden = !picker.hidden; toggle!.setAttribute('aria-expanded', String(!picker.hidden)) } }, '🙂') : null
   return h('div', { class: 'composer' },
     (c.mode === 'reply' || c.mode === 'quote') && c.target ? h('p', { class: 'replying' }, t(v.lang, c.mode === 'quote' ? 'quotingTo' : 'replyingTo', { who: nameOf(v, c.target.pubkey) }), ': ', h('q', {}, excerpt(c.target))) : null,
-    area, h('p', {}, count, ' ', h('button', { type: 'button', onClick: hd.review }, t(v.lang, 'review')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.cancelComposer }, t(v.lang, 'cancel'))),
+    area, picker, h('p', { class: 'composer-buttons' }, count, ' ', toggle, toggle ? ' ' : null, h('button', { type: 'button', onClick: hd.review }, t(v.lang, 'review')), ' ', h('button', { type: 'button', onClick: hd.cancelComposer }, t(v.lang, 'cancel'))),
   )
 }
 

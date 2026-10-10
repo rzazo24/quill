@@ -281,3 +281,12 @@ main.view.wide { display: block; overflow: hidden; padding: 12px 14px 0; scrollb
 .col.detail { background: var(--bg); border-left: 1px solid var(--border); padding-left: 14px }
 #app.wide .sheet > * { width: min(100%, 680px) } #app.wide .sign .toast > * { max-width: 680px }
 #app.wide .sign .toast { bottom: 0 } #app.wide .sign .popup { bottom: 20px } /* no tab bar on a wide screen: the notices sit on the real bottom edge */
+
+/* the composer: its two buttons are the same size; on a wide screen an emoji picker opens under the text */
+.composer-buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 8px } .composer-buttons small { margin-right: auto }
+.composer-buttons button:not(.emoji-toggle) { min-width: 96px } /* Review and Cancel: the same size, not the width of their words */
+.composer .emoji-toggle { min-width: 44px; padding: 0; font-size: 1.25rem }
+.emoji-panel { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 2px; max-height: 188px; overflow-y: auto; margin: 6px 0; padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg) }
+.emoji-panel[hidden] { display: none }
+.emoji-panel button { min-height: 36px; padding: 0; font-size: 1.3rem; line-height: 1; background: none; border: 0; border-radius: 8px }
+@media (hover: hover) { .emoji-panel button:hover { background: var(--btn) } }

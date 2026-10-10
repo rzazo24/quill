@@ -416,6 +416,22 @@ describe('the connection status on Me', () => {
     out().click(); await tick(40); ;(a.root.querySelector('.confirm-signout button.danger') as HTMLElement).click(); await tick(80)
     expect(a.mem.has('me')).toBe(false); expect(sg.log).toContain('disconnect'); expect(a.text()).toContain('Read as…')
   })
+  it('on a wide screen the composer offers an emoji picker that puts the emoji where the cursor is and keeps the counter right; a phone does not get it', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg, wide: true }); await tick(100); await connectClave(a, sg); await tick(250)
+    ;(a.root.querySelector('button.write') as HTMLElement).click(); await tick(60)
+    const ta = a.root.querySelector('.composer textarea') as HTMLTextAreaElement, panel = a.root.querySelector('.emoji-panel') as HTMLElement, toggle = a.root.querySelector('.emoji-toggle') as HTMLElement
+    expect(panel.hidden).toBe(true); toggle.click(); expect(panel.hidden).toBe(false); expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    ta.value = 'hello world'; ta.dispatchEvent(new Event('input')); ta.selectionStart = ta.selectionEnd = 5
+    ;[...panel.querySelectorAll('button')].find((x) => x.textContent === '🔥')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(ta.value).toBe('hello🔥 world'); expect(a.root.querySelector('.composer small')!.textContent).toContain('12') // 11 characters + 1 emoji
+    await click(a.root, 'Review'); expect(a.root.querySelector('pre.preview')!.textContent).toContain('hello🔥 world') // what is reviewed and signed is what is on screen
+  })
+  it('a phone gets no emoji picker (it has its own keyboard), and the composer\'s two buttons are the same kind of button', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg); await a.go('#/'); await tick(80)
+    a.root.querySelector<HTMLElement>('button.fab')!.click(); await tick(60)
+    expect(a.root.querySelector('.emoji-panel')).toBeNull(); expect(a.root.querySelector('.emoji-toggle')).toBeNull()
+    const buttons = [...a.root.querySelectorAll('.composer-buttons button')]; expect(buttons.map((b) => b.textContent)).toEqual(['Review', 'Cancel']); expect(buttons.map((b) => b.className)).toEqual(['', '']) // no "link" on one: that made it smaller
+  })
   it('is a status row: a dot, "Clave connected" with who it signs as, and Disconnect on the right as a careful (danger) button', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg); await a.go('#/me'); await tick(80)
     const row = a.root.querySelector('.signing-as')!
