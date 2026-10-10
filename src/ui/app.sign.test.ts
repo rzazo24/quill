@@ -54,12 +54,12 @@ const publisherFake = (outcomes: Record<string, string> = { 'wss://r1.example': 
   return { p, sent }
 }
 
-function boot(o: { events?: Event[]; signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; stored?: Record<string, string>; clipboard?: string | Error; copied?: string[]; errorMs?: number; verifyWaits?: number[] } = {}) {
+function boot(o: { events?: Event[]; signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; stored?: Record<string, string>; clipboard?: string | Error; copied?: string[]; wide?: boolean; errorMs?: number; verifyWaits?: number[] } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = [], mem = new Map(Object.entries(o.stored ?? { me }))
   const pub = o.pub ?? publisherFake()
   startApp(root, {
-    fetcher: relays(o.events ?? world), languages: ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) }, relays: ['wss://r1.example', 'wss://r2.example'], nowMs: () => 1_700_000_000_000,
+    fetcher: relays(o.events ?? world), isWide: () => !!o.wide, languages: ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) }, relays: ['wss://r1.example', 'wss://r2.example'], nowMs: () => 1_700_000_000_000,
     verifyWaitsMs: o.verifyWaits ?? [0], errorMs: o.errorMs, storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
     copy: (x) => { o.copied?.push(x) },
     readClipboard: async () => { if (o.clipboard instanceof Error) throw o.clipboard; return o.clipboard ?? '' },
@@ -395,6 +395,16 @@ describe('no empty card when everything floats', () => {
 })
 
 describe('the connection status on Me', () => {
+  it('on a wide screen Disconnect asks, cancels and disconnects too (the question must survive the redraw, there is no Me page)', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg, wide: true }); await tick(100); await connectClave(a, sg); await tick(250)
+    const row = () => a.root.querySelector('.col[data-col="me"] .signing-as')!
+    ;(row().lastElementChild as HTMLElement).click(); await tick(60)
+    expect(a.root.querySelector('.confirm-disconnect')).not.toBeNull(); expect(sg.log).not.toContain('disconnect') // it asked, and the question stayed
+    await click(a.root, 'Cancel'); expect(a.root.querySelector('.confirm-disconnect')).toBeNull(); expect(row()).not.toBeNull()
+    ;(row().lastElementChild as HTMLElement).click(); await tick(60)
+    ;(a.root.querySelector('.confirm-disconnect button.danger') as HTMLElement).click(); await tick(80)
+    expect(sg.log).toContain('disconnect'); expect(a.root.querySelector('.signing-as')).toBeNull()
+  })
   it('is a status row: a dot, "Clave connected" with who it signs as, and Disconnect on the right as a careful (danger) button', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg); await a.go('#/me'); await tick(80)
     const row = a.root.querySelector('.signing-as')!

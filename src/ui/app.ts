@@ -701,7 +701,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const keptCols = new Map<string, number>([...root.querySelectorAll<HTMLElement>('.col[data-col]')].map((c) => [c.dataset.col!, c.scrollTop]))
     const route = parseRoute(deps.location.hash)
     const isWide = wide() && !!me && route.name !== 'settings' && route.name !== 'help'
-    if (confirmingDisconnect && (route.name !== 'me' || signer?.state !== 'connected')) confirmingDisconnect = false // a question left behind is forgotten
+    if (confirmingDisconnect && ((route.name !== 'me' && !isWide) || signer?.state !== 'connected')) confirmingDisconnect = false // a question left behind is forgotten
     if (shareConfirm && signer?.state !== 'connected') shareConfirm = null
     if (followFlow && signer?.state !== 'connected') followFlow = null
     const tab = (name: 'following' | 'mentions' | 'me', href: string) => h('a', { href, class: route.name === name ? 'tab on' : 'tab', 'data-tab': name, ...(route.name === name ? { 'aria-current': 'page' } : {}), onClick: (e: Event) => { if (route.name === name) { e.preventDefault(); refresh() } } }, icon(name === 'following' ? 'people' : name === 'mentions' ? 'at' : 'person', 18), t(lang, name), name === 'mentions' && badge > 0 ? h('span', { class: 'badge', role: 'status', 'aria-label': t(lang, 'newItems', { n: badge }) }, badge > 9 ? '9+' : String(badge)) : null)
