@@ -8,8 +8,8 @@ import { cleanText } from '../core/text.js'
 import { safeGet, safeSet, type KV } from '../ui/store.js'
 import { ALLOWED_KINDS, checkTemplate, sameTags, type Template } from './policy.js'
 
-/** Clave only listens on relay.powr.build; the second relay costs nothing and helps other signers. */
-export const SIGNER_RELAYS = ['wss://relay.powr.build', 'wss://relay.hivescope.xyz']
+/** Clave listens on relay.powr.build; the second relay is the one Nostr Vault pairs with Clave over too (relay.damus.io), which works where our own relay as second did not. */
+export const SIGNER_RELAYS = ['wss://relay.powr.build', 'wss://relay.damus.io']
 export const CLAVE_LINK = 'https://clave.casa/connect/?uri='
 
 export type State = 'disconnected' | 'connecting' | 'connected'
