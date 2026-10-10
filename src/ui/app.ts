@@ -43,6 +43,10 @@ export interface Deps {
   /** "Back" button: where the reader came from (the browser's history). */
   goBack?: () => void
   checkVersion?: () => Promise<boolean>; onTick?: (cb: () => void) => void; reload?: () => void
+  /** How long the notices stay (tests make them short). */
+  popupMs?: number; errorMs?: number
+  /** Waits before each re-check of the follow list after publishing it (the relays take a moment to show it). */
+  verifyWaitsMs?: number[]
   /** Called about once a minute while the page is visible: looks for new replies, mentions and reactions. */
   onPoll?: (cb: () => void) => void
 }
@@ -370,11 +374,11 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   // ---- signing ----
-  const POPUP_MS = 3000
-  const say = (kind: Flash['kind'], text: string) => {
+  const POPUP_MS = deps.popupMs ?? 3000
+  const ERROR_MS = deps.errorMs ?? 12_000 // long enough to read, but a message must not stay fixed at the bottom of the screen for ever
+  const say = (kind: Flash['kind'], text: string, ms?: number) => {
     const mine = flash = { kind, text }
-    // a plain notice goes away by itself
-    if (kind === 'info') setTimeout(() => { if (flash === mine) { flash = null; draw() } }, POPUP_MS)
+    setTimeout(() => { if (flash === mine) { flash = null; draw() } }, ms ?? (kind === 'info' ? POPUP_MS : ERROR_MS))
   }
 
   /** The signer's key and the account being read must be the same one; with nobody logged in yet, the signer's key is who you are. */
@@ -521,10 +525,15 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (await send(template, { followBase: fresh! })) {
       const next = new Set(followPubkeys({ tags: template.tags })); session!.follows = next; saveKnownFollowing(next)
       const name = nameOf(view(), f.pubkey)
+      // the relays take a moment to show a new list: look again a couple of times before saying they do not
       let confirmed = false
-      try { fetcher.clear(); const after = await loadFollowList(fetcher, me); confirmed = !!after && sameFollows(new Set(followPubkeys(after)), next) } catch { confirmed = false }
+      for (const wait of deps.verifyWaitsMs ?? [1500, 3000]) {
+        await new Promise((r) => setTimeout(r, wait))
+        try { fetcher.clear(); const after = await loadFollowList(fetcher, me); confirmed = !!after && sameFollows(new Set(followPubkeys(after)), next) } catch { confirmed = false }
+        if (confirmed) break
+      }
       if (result && !failedRelays(result.outcomes).length) result = null
-      say(confirmed ? 'info' : 'error', confirmed ? t(lang, f.action === 'follow' ? 'followDone' : 'unfollowDone', { who: name }) : t(lang, 'followUnconfirmed'))
+      say('info', confirmed ? t(lang, f.action === 'follow' ? 'followDone' : 'unfollowDone', { who: name }) : t(lang, 'followUnconfirmed'), confirmed ? undefined : 7000)
       draw(); void load() // the feed and the counts follow the new list
       return
     }
@@ -583,7 +592,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const signArea = signer ? renderSignArea({
       signer: signer.state, who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, flash, composer, review, step, result, relays, bunkerText, linkOpen, confirmDisconnect: confirmingDisconnect, shareConfirm, followPanel: followPanel(),
     }, {
-      openConnect, startLink, pasteBunker: () => void pasteBunker(), cancelConnect, bunker: (x) => void bunker(x), confirmFollow: () => void confirmFollow(), acceptList, cancelFollow: () => { followFlow = null; draw() }, confirmShare: () => void share(), startQuote: () => { if (shareConfirm) startQuote(shareConfirm) }, cancelShare: () => { shareConfirm = null; draw() }, askDisconnect: () => { confirmingDisconnect = true; draw() }, cancelDisconnect: () => { confirmingDisconnect = false; draw() },
+      openConnect, startLink, pasteBunker: () => void pasteBunker(), cancelConnect, bunker: (x) => void bunker(x), dismissFlash: () => { flash = null; draw() }, confirmFollow: () => void confirmFollow(), acceptList, cancelFollow: () => { followFlow = null; draw() }, confirmShare: () => void share(), startQuote: () => { if (shareConfirm) startQuote(shareConfirm) }, cancelShare: () => { shareConfirm = null; draw() }, askDisconnect: () => { confirmingDisconnect = true; draw() }, cancelDisconnect: () => { confirmingDisconnect = false; draw() },
       disconnect: () => { confirmingDisconnect = false; void signer.disconnect(); composer = review = result = null; flash = null; draw() }, copy: (x) => { deps.copy?.(x); say('info', t(lang, 'copied')); draw() },
       edit: (x) => { if (composer) composer.text = x }, review: doReview, publish: () => void publish(), back: () => { review = null; draw() }, cancelComposer: () => { composer = null; review = null; draw() },
       retry: () => void retry(), dismissResult: () => { result = null; draw() }, startNote, cancelSigning: () => signing?.abort(),

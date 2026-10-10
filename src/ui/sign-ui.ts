@@ -46,7 +46,7 @@ export interface SignUiState {
 }
 
 export interface SignUiHandlers {
-  openConnect(): void; cancelConnect(): void; bunker(text: string): void; confirmFollow(): void; acceptList(): void; cancelFollow(): void; confirmShare(): void; startQuote(): void; cancelShare(): void; askDisconnect(): void; cancelDisconnect(): void; disconnect(): void; copy(text: string): void
+  openConnect(): void; cancelConnect(): void; bunker(text: string): void; dismissFlash(): void; confirmFollow(): void; acceptList(): void; cancelFollow(): void; confirmShare(): void; startQuote(): void; cancelShare(): void; askDisconnect(): void; cancelDisconnect(): void; disconnect(): void; copy(text: string): void
   edit(text: string): void; review(): void; publish(): void; back(): void; cancelComposer(): void; retry(): void; dismissResult(): void
   startNote(): void; cancelSigning(): void; startLink(): void; pasteBunker(): void; editBunker(text: string): void; setLinkOpen(open: boolean): void
 }
@@ -59,7 +59,7 @@ export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, sign
   const parts: (HTMLElement | null)[] = []
   const toast: (HTMLElement | null)[] = []
   // a plain notice is a small popup that fades by itself; an error stays in the bar until something else happens
-  if (s.flash?.kind === 'error') toast.push(h('p', { class: 'error', role: 'alert' }, s.flash.text))
+  if (s.flash?.kind === 'error') toast.push(h('p', { class: 'error', role: 'alert' }, s.flash.text, ' ', h('button', { type: 'button', class: 'link', onClick: hd.dismissFlash }, t(v.lang, 'dismiss'))))
   else if (s.flash) parts.push(h('div', { class: 'popup', role: 'status' }, h('span', {}, s.flash.text)))
   if (where === 'feed' && s.signer !== 'connected') parts.push(h('p', { class: 'hint' }, h('a', { href: '#/me' }, t(v.lang, 'connectToWrite'))))
   if (where === 'me' && s.signer === 'disconnected' && !s.connectOpen) parts.push(h('p', {}, h('button', { type: 'button', onClick: hd.openConnect }, t(v.lang, 'connectSigner'))))

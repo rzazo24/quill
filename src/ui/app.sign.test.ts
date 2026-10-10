@@ -53,13 +53,13 @@ const publisherFake = (outcomes: Record<string, string> = { 'wss://r1.example': 
   return { p, sent }
 }
 
-function boot(o: { events?: Event[]; signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; stored?: Record<string, string>; clipboard?: string | Error } = {}) {
+function boot(o: { events?: Event[]; signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; stored?: Record<string, string>; clipboard?: string | Error; errorMs?: number; verifyWaits?: number[] } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = [], mem = new Map(Object.entries(o.stored ?? { me }))
   const pub = o.pub ?? publisherFake()
   startApp(root, {
     fetcher: relays(o.events ?? world), languages: ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) }, relays: ['wss://r1.example', 'wss://r2.example'], nowMs: () => 1_700_000_000_000,
-    storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
+    verifyWaitsMs: o.verifyWaits ?? [0], errorMs: o.errorMs, storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
     readClipboard: async () => { if (o.clipboard instanceof Error) throw o.clipboard; return o.clipboard ?? '' },
     ...(o.signer ? { signer: o.signer.s, publisher: pub.p } : {}),
   })
@@ -574,5 +574,35 @@ describe('following and unfollowing', () => {
   it('a panel left open is forgotten when the signer disconnects', async () => {
     const { a } = await open(); button(a, 'Follow')!.click(); await tick(200); expect(a.root.querySelector('.sheet .review')).not.toBeNull()
     await a.go('#/me'); await tick(80); ;(a.root.querySelector('.signing-as button') as HTMLElement).click(); await tick(60); ;(a.root.querySelector('.confirm-disconnect button.danger') as HTMLElement).click(); await tick(100); expect(a.root.querySelector('.sheet')).toBeNull()
+  })
+})
+
+describe('messages do not stay fixed at the bottom', () => {
+  const sgn = generateSecretKey(), author = getPublicKey(sgn), signed = finalizeEvent({ kind: 1, created_at: 1_699_999_500, tags: [], content: 'a signed note' }, sgn)
+  const fail = async (errorMs?: number) => {
+    const sg = fakeSigner({ signError: 'user rejected the request' }); const a = boot({ signer: sg, errorMs, events: [list(me, 3, [['p', author]]), list(author, 3, []), signed] })
+    await tick(100); await connectClave(a, sg); await a.go('#/'); await tick(80); (a.root.querySelector('button[aria-label="React ❤️"]') as HTMLElement).click(); await tick(150); return a
+  }
+  it('an error stays long enough to read, then goes away by itself', async () => {
+    const a = await fail(300); expect(a.root.querySelector('.toast .error')).not.toBeNull(); await tick(400); expect(a.root.querySelector('.toast .error')).toBeNull()
+  })
+  it('an error can be closed with its button, at once', async () => {
+    const a = await fail(); const bar = a.root.querySelector('.toast .error')!; expect(bar.querySelector('button')!.textContent).toBe('Close')
+    ;(bar.querySelector('button') as HTMLElement).click(); await tick(60); expect(a.root.querySelector('.toast .error')).toBeNull()
+  })
+  it('a newer message is not cleared by the timer of an older one', async () => {
+    const a = await fail(400); await tick(200); (a.root.querySelector('button[aria-label="React 🙏"]') as HTMLElement).click(); await tick(150) // a second failure, ~350 ms after the first
+    expect(a.root.querySelector('.toast .error')).not.toBeNull() // the first message's timer (400 ms) has passed by now (~500 ms); the second one is still showing
+  })
+})
+
+describe('after following, the relays get time to show the new list', () => {
+  const key = (n: number) => ('b' + n.toString(16).padStart(3, '0')).repeat(16), target = key(9)
+  it('a relay that shows the list a moment late is NOT reported as missing it', async () => {
+    const events: Event[] = [ev(me, '', { kind: 3, created_at: 1000, tags: [['p', friend]] }), list(friend, 3, []), ev(target, JSON.stringify({ name: 'Quinn' }), { kind: 0, created_at: 5 })]
+    const pub = publisherFake(); const real = pub.p.publish; pub.p.publish = async (e, o) => { setTimeout(() => events.push(e), 120); return real(e, o) } // the relay learns it 120 ms later
+    const sg = fakeSigner(); const a = boot({ events, signer: sg, pub, verifyWaits: [0, 250] }); await tick(100); await connectClave(a, sg); await a.go(`#/user/${target}`); await tick(250)
+    ;([...a.root.querySelectorAll('.profile button')].find((b) => b.textContent === 'Follow') as HTMLElement).click(); await tick(200); await click(a.root.querySelector('.sheet')! as HTMLElement, 'Follow'); await tick(700)
+    expect(a.text()).toContain('Now following Quinn'); expect(a.text()).not.toContain('do not show it yet')
   })
 })
