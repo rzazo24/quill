@@ -743,7 +743,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       me && !isWide ? h('nav', { class: 'tabbar' }, tab('following', '#/'), tab('mentions', '#/mentions'), tab('me', '#/me')) : null,
     ]
     // put the reader back where they were (unless this is a new view)
-    if (scrollToTop || flash || composer || review || followFlow || shareConfirm || connectOpen) barsHidden = false // a new view, or something that talks to you: the bars stay
+    if (scrollToTop || flash || composer || review || result || followFlow || shareConfirm || connectOpen) barsHidden = false // a new view, or something that talks to you: the bars stay
     root.replaceChildren(...page.filter((x): x is HTMLElement => x !== null))
     root.classList.toggle('bars-hidden', barsHidden && !isWide)
     root.classList.toggle('wide', isWide)
