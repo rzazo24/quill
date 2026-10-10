@@ -22,7 +22,7 @@ import { checkTemplate, MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
 import { logo, icon } from './icons.js'
 import { detectLang, problemText, t, type Key, type Lang } from './i18n.js'
-import { renderProfileHead, renderProfileMode, renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
+import { PAGE, renderPeople, renderProfileHead, renderProfileMode, renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type FollowPanel, type Review } from './sign-ui.js'
 import { installHint, type Env } from './install.js'
 import { parseAvatars, parseFeedMode, parseFont, parseLang, parseReposts, parseSettings, parseWords, safeGet, safeSet, type AvatarStyle, type FeedMode, type FontSize, type KV } from './store.js'
@@ -51,7 +51,7 @@ export interface Deps {
   onPoll?: (cb: () => void) => void
 }
 
-type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'help' } | { name: 'user'; pubkey: string } | { name: 'note'; id: string; from?: string }
+type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'help' } | { name: 'user'; pubkey: string } | { name: 'people'; list: 'following' | 'followers' } | { name: 'note'; id: string; from?: string }
 /** Someone with no account who opens a link to a note: they read that one public note and its replies, exactly as they are. No follows, no mutes, no rule that hides anything. */
 const GUEST_CONTEXT: Context = { me: '', follows: new Set(), muted: new Set(), mutedWords: [], graph: { loaded: false, distance: () => null } }
 const GUEST_SETTINGS: Settings = { rules: { repeatedText: false, burst: false, linkOnly: false, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 }
@@ -68,6 +68,7 @@ export function parseRoute(hash: string): Route {
       if (d.type === 'nevent') return note(d.data.id)
     } catch { /* not a note id */ }
   }
+  if (hash === '#/me/following' || hash === '#/me/followers') return { name: 'people', list: hash === '#/me/following' ? 'following' : 'followers' }
   const u = /^#\/user\/(.+)$/.exec(hash)
   if (u) { const r = parseIdentity(decodeURIComponent(u[1]!)); if (r.ok) return { name: 'user', pubkey: r.pubkey } } // an account: its key in hex, npub or nprofile
   return hash === '#/mentions' ? { name: 'mentions' } : hash === '#/me' ? { name: 'me' } : hash === '#/help' ? { name: 'help' } : hash === '#/settings' ? { name: 'settings' } : hash === '#/settings/filter' ? { name: 'settings', focus: 'filter' } : { name: 'following' }
@@ -248,6 +249,11 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         if (mine !== run) return
         if (!th) content = h('div', { class: 'stack' }, sourceCard(source), h('p', { class: 'empty' }, t(lang, 'noNote')))
         else { await nameThem([...(th.root ? [th.root] : []), ...flat(th.replies), ...(source ? [source] : [])]); content = threadView(th, source) }
+      } else if (route.name === 'people') {
+        if (route.list === 'followers' && loadKnown() === null && followersSeen.size === 0) await poll() // never looked yet: learn who follows you first
+        if (mine !== run) return
+        content = await peopleView(route.list, mine)
+        if (mine !== run) return
       } else if (route.name === 'user') {
         const { info, notes } = await loadProfile(fetcher, route.pubkey, session!, ctx(), settings)
         if (mine !== run) return
@@ -585,12 +591,33 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     try { const again = await publisher.publish(result.event, failedRelays(result.outcomes)); result = { event: result.event, outcomes: { ...result.outcomes, ...again } } } finally { busy = false; step = null; draw() }
   }
 
+  /** Display names for some keys, asked of the relays only for the ones not known yet. */
+  async function nameKeys(keys: string[]): Promise<void> {
+    const missing = keys.filter((k) => !names.has(k))
+    if (!missing.length) return
+    for (const [k, n] of await loadNames(fetcher, missing)) names.set(k, n)
+  }
+
+  /** The two lists behind the counts in Me. Following is your own list, exact; followers is what this app has seen (the same ~N as the count), so it says so. */
+  async function peopleView(list: 'following' | 'followers', mine: number): Promise<HTMLElement> {
+    const followers = [...new Set([...(loadKnown() ?? []), ...followersSeen])] // oldest seen first
+    const followerSet = new Set(followers)
+    const keys = (list === 'following' ? [...session!.follows] : followers).reverse() // newest first
+    const rows = keys.map((k) => ({ pubkey: k, tag: list === 'following' ? (followerSet.has(k) ? t(lang, 'followsYou') : null) : (session!.follows.has(k) ? t(lang, 'youFollow') : null) }))
+    await nameKeys(rows.slice(0, PAGE).map((r) => r.pubkey))
+    return h('div', { class: 'stack' }, backLink(), renderPeople(rows, view(), {
+      title: t(lang, list === 'following' ? 'peopleFollowing' : 'peopleFollowers'), count: rows.length,
+      note: t(lang, list === 'following' ? 'followingNote' : 'followersNote'), approximate: list === 'followers',
+      nameThem: (ks) => (mine === run ? nameKeys(ks) : Promise.resolve()),
+    }))
+  }
+
   /** "128 following · ~37 followers": the first is exact (it is your own list), the second is approximate (what the relays showed; there is no official count and every app counts its own way). */
   function countsLine(): HTMLElement | null {
     if (!session) return null
     const n = followerCount()
     const followers = n === null ? null : n === 0 ? t(lang, 'followersNone') : t(lang, n === 1 ? 'followersAtLeastOne' : 'followersAtLeast', { n })
-    return h('div', { class: 'meta counts' }, [t(lang, 'followingN', { n: session.follows.size }), followers].filter(Boolean).join(' · '))
+    return h('div', { class: 'meta counts' }, h('a', { href: '#/me/following' }, t(lang, 'followingN', { n: session.follows.size })), followers ? ' · ' : null, followers ? h('a', { href: '#/me/followers' }, followers) : null)
   }
 
   function accountCard(): HTMLElement {
@@ -619,7 +646,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       edit: (x) => { if (composer) composer.text = x }, review: doReview, publish: () => void publish(), back: () => { review = null; draw() }, cancelComposer: () => { composer = null; review = null; draw() },
       retry: () => void retry(), dismissResult: () => { result = null; draw() }, startNote, cancelSigning: () => signing?.abort(),
       editBunker: (x) => { bunkerText = x }, setLinkOpen: (o) => { linkOpen = o },
-    }, view(), true, !me || route.name === 'me' ? 'me' : 'feed', !!me && ['following', 'mentions', 'note', 'user', 'me'].includes(route.name)) : null
+    }, view(), true, !me || route.name === 'me' ? 'me' : 'feed', !!me && ['following', 'mentions', 'note', 'user', 'me', 'people'].includes(route.name)) : null
     const pills = h('div', { class: 'lang', role: 'group', 'aria-label': 'Language' }, ...(['en', 'es'] as const).map((l) =>
       h('button', { type: 'button', 'aria-pressed': String(lang === l), onClick: () => { if (lang !== l) { lang = l; safeSet(kv, 'lang', lang); void load() } } }, l.toUpperCase())))
     const statusEl = me && status ? h('p', { class: 'status loading', role: 'status' }, h('span', {}, status)) : null

@@ -210,6 +210,29 @@ export function renderFollowers(keys: string[], v: View): HTMLElement | null {
     h('ul', {}, ...keys.slice(0, SHOWN).map((k) => h('li', {}, h('a', { class: 'follower-link', href: userHref(k) }, avatarEl(k, v), h('span', {}, nameOf(v, k))))), keys.length > SHOWN ? h('li', { class: 'more-followers' }, t(v.lang, 'followersMore', { n: keys.length - SHOWN })) : null))
 }
 
+export interface Person { pubkey: string; tag: string | null }
+/** A list of accounts, as text: avatar, name, short key and (if any) how it relates to you. Tandas of PAGE, the names of each one asked for just before it is shown. */
+export function renderPeople(people: Person[], v: View, o: { title: string; count: number; note: string; approximate: boolean; nameThem?: (keys: string[]) => Promise<void> }): HTMLElement {
+  const ul = h('ul', { class: 'people' })
+  const more = h('button', { type: 'button', class: 'more' }, '')
+  let shown = 0
+  const row = (p: Person) => h('li', {}, h('a', { class: 'person', href: userHref(p.pubkey) }, avatarEl(p.pubkey, v), h('span', { class: 'who' }, h('strong', {}, nameOf(v, p.pubkey)), h('span', { class: 'meta' }, shortNpub(p.pubkey))), p.tag ? h('span', { class: 'tag' }, p.tag) : null))
+  const add = async () => {
+    const next = people.slice(shown, shown + PAGE)
+    more.disabled = true
+    try { await o.nameThem?.(next.map((p) => p.pubkey)) } catch { /* names are a nicety */ }
+    for (const p of next) ul.append(row(p))
+    shown += next.length; more.disabled = false
+    if (shown >= people.length) more.remove(); else more.textContent = t(v.lang, 'showMore', { n: people.length - shown })
+  }
+  more.addEventListener('click', () => void add())
+  for (const p of people.slice(0, PAGE)) ul.append(row(p)) // the first tanda's names were loaded by the caller
+  shown = Math.min(people.length, PAGE)
+  if (shown < people.length) { more.textContent = t(v.lang, 'showMore', { n: people.length - shown }) }
+  return h('section', { class: 'people-page card' }, h('h2', {}, `${o.title} (${o.approximate ? '~' : ''}${o.count})`), h('p', { class: 'meta' }, o.note),
+    people.length ? ul : h('p', { class: 'empty' }, t(v.lang, 'noPeople')), shown < people.length ? more : null)
+}
+
 /** Following can show the people you follow or the wider network; two buttons, the open one is lit. */
 export function renderFeedMode(mode: FeedMode, onChange: (m: FeedMode) => void, v: View): HTMLElement {
   return h('div', { class: 'seg feedmode', role: 'group', 'aria-label': t(v.lang, 'feedModeTitle') }, ...(['follows', 'network'] as const).map((m) =>

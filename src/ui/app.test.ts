@@ -720,3 +720,40 @@ describe('a note opened by someone with no account', () => {
     expect(a.root.querySelector('.tabbar')).not.toBeNull(); expect(a.text()).toContain('the note someone shared'); expect(a.text()).not.toContain('without an account')
   })
 })
+
+describe('the lists behind the counts in Me', () => {
+  const NOW = 10_000
+  const key = (n: number) => ('c' + n.toString(16).padStart(3, '0')).repeat(16)
+  const fol = (n: number, at = 9000) => ev(key(n), '', { kind: 3, created_at: at, tags: [['p', me]] })
+  const named = (who: string, name: string) => ev(who, JSON.stringify({ name }), { kind: 0, created_at: 100 })
+  const events = (): Event[] => [list(me, 3, [['p', friend], ['p', key(9)]]), list(friend, 3, [['p', me]]), fol(1), fol(2), named(friend, 'Ana'), named(key(9), 'Nina'), named(key(1), 'Uno'), named(key(2), 'Dos')]
+  const start = (evs: Event[]) => boot({ events: evs, clock: { now: NOW * 1000 }, stored: { me, [`seen:${me}`]: '5000' } })
+  const rows = (a: ReturnType<typeof boot>) => [...a.root.querySelectorAll('.people li')].map((li) => [li.querySelector('strong')!.textContent, li.querySelector('.tag')?.textContent ?? null])
+
+  it('the counts in Me are links, one to each list', async () => {
+    const a = start(events()); await tick(80); await a.go('#/me'); await tick(80)
+    const links = [...a.root.querySelectorAll('.counts a')]; expect(links.map((l) => l.getAttribute('href'))).toEqual(['#/me/following', '#/me/followers']); expect(links[0]!.textContent).toBe('2 following')
+  })
+  it('Following is your own list, newest first, and marks who follows you back; a tap on a row opens that account', async () => {
+    const a = start(events()); await tick(80); await a.go('#/me/following'); await tick(120)
+    expect(a.root.querySelector('.people-page h2')!.textContent).toBe('Following (2)'); expect(rows(a)).toEqual([['Nina', null], ['Ana', 'follows you']])
+    expect((a.root.querySelector('.people a.person') as HTMLAnchorElement).getAttribute('href')).toBe(`#/user/${key(9)}`)
+    expect(a.root.querySelector('.tabbar')).not.toBeNull()
+  })
+  it('Followers are the ones this app has seen (so the count is approximate), and marks the ones you follow', async () => {
+    const a = start(events()); await tick(80); await a.go('#/me/followers'); await tick(250)
+    expect(a.root.querySelector('.people-page h2')!.textContent).toMatch(/^Followers \(~3\)$/); expect(a.text()).toContain('no official list')
+    expect(rows(a).map((r) => r[0]).sort()).toEqual(['Ana', 'Dos', 'Uno']); expect(rows(a).find((r) => r[0] === 'Ana')![1]).toBe('you follow'); expect(rows(a).find((r) => r[0] === 'Uno')![1]).toBeNull()
+  })
+  it('a long list comes in tandas of 30 with a button, and the names of each tanda are asked for when it is opened', async () => {
+    const many = Array.from({ length: 70 }, (_, i) => ['p', key(100 + i)])
+    const a = start([list(me, 3, many), ...Array.from({ length: 70 }, (_, i) => named(key(100 + i), `Persona ${i}`))]); await tick(80); await a.go('#/me/following'); await tick(200)
+    expect(a.root.querySelectorAll('.people li')).toHaveLength(30); expect(rows(a)[0]![0]).toBe('Persona 69') // newest (last in the list) first
+    const more = () => a.root.querySelector('.people-page button.more') as HTMLButtonElement
+    expect(more().textContent).toContain('40'); more().click(); await tick(150); expect(a.root.querySelectorAll('.people li')).toHaveLength(60)
+    more().click(); await tick(150); expect(a.root.querySelectorAll('.people li')).toHaveLength(70); expect(more()).toBeNull(); expect(rows(a)[69]![0]).toBe('Persona 0')
+  })
+  it('an empty list says so', async () => {
+    const a = start([list(me, 3, [])]); await tick(80); await a.go('#/me/following'); await tick(120); expect(a.text()).toContain('Nobody here yet.')
+  })
+})

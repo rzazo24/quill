@@ -254,3 +254,11 @@ button.icon.spinning svg { animation: spin .9s linear infinite }
 
 /* share: an icon button among the reactions; lit once you shared the note */
 .actions button.share { display: inline-grid; place-items: center }
+
+/* Me › Following / Followers: the two lists behind the counts */
+.counts a { color: inherit; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; padding: 6px 0 }
+.people-page h2 { margin: 0 0 4px; font-size: 16px } .people-page > .meta { margin: 0 0 10px }
+.people { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px }
+.person { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 12px; color: inherit; text-decoration: none; background: var(--bg) }
+.person .who { display: grid; min-width: 0; flex: 1 } .person .who strong, .person .who .meta { overflow-wrap: anywhere }
+.person .tag { flex: none; font-size: 11px; color: var(--accent); border: 1px solid var(--border); border-radius: 8px; padding: 1px 7px }
