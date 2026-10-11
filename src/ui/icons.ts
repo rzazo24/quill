@@ -27,6 +27,8 @@ const PATHS = {
   /** three dots: more choices */
   more: ['M5 12h.01', 'M12 12h.01', 'M19 12h.01'],
   /** two arrows chasing each other */
+  /** a framed picture: a photo */
+  image: ['M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z', 'M11 9a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z', 'M21 15l-5-5L5 21'],
   refresh: ['M20 11a8 8 0 0 0-14.7-3', 'M4 4v4h4', 'M4 13a8 8 0 0 0 14.7 3', 'M20 20v-4h-4'],
 } as const
 

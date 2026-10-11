@@ -418,12 +418,12 @@ describe('reposts of the people you follow', () => {
 })
 
 describe('the switches in Settings', () => {
-  it('every rule and the reposts option is a switch (a checkbox announced as on/off), with the words first and the switch at the end, and one line that says what on and off mean', async () => {
+  it('every rule, the reposts and the pictures options is a switch (a checkbox announced as on/off), with the words first and the switch at the end, and one line that says what on and off mean', async () => {
     const a = boot({ stored: { me } }); await tick(80); await a.go('#/settings'); await tick(100)
-    const rows = [...a.root.querySelectorAll('label.check')]; expect(rows).toHaveLength(6) // four rules + reposts + the Halloween theme
+    const rows = [...a.root.querySelectorAll('label.check')]; expect(rows).toHaveLength(7) // four rules + reposts + pictures + the Halloween theme
     for (const r of rows) { const input = r.querySelector('input')!; expect(input.type).toBe('checkbox'); expect(input.getAttribute('role')).toBe('switch'); expect(r.firstElementChild!.tagName).toBe('SPAN'); expect(r.lastElementChild).toBe(input) }
     expect(a.root.querySelector('.settings .meta')!.textContent).toBe('On = the rule hides what meets its condition. Off = it hides nothing.')
-    const rules = rows.filter((r) => !/Halloween|repost/.test(r.textContent!)); expect(rules).toHaveLength(4)
+    const rules = rows.filter((r) => !/Halloween|repost|pictures/.test(r.textContent!)); expect(rules).toHaveLength(4)
     expect(rules.map((r) => (r.querySelector('input') as HTMLInputElement).checked)).toEqual([true, true, true, true]) // all on by default
   })
 })
@@ -998,5 +998,24 @@ describe('a quoted note is shown inside the note that quotes it', () => {
     expect(q).not.toBeNull(); expect(q.textContent).toContain('the note being quoted'); expect(q.textContent).toContain('Ana'); expect(q.getAttribute('href')).toBe(`#/note/${quoted.id}?from=${quoting.id}`)
     const hidden = card('and this').querySelector('a.quote')!; expect(hidden.querySelector('.quote-hidden')).not.toBeNull(); expect(hidden.textContent).not.toContain('buy cheap stuff')
     expect(card('and a lost one').querySelector('a.quote')).toBeNull(); expect(card('and a lost one').querySelector('.body a.thread-link')!.textContent).toContain('Quoted note') // no relay has it: the button stays
+  })
+})
+
+describe('pictures linked in a note', () => {
+  it('wait for a tap on a button naming their site; tapped, the picture loads without a referrer and a tap on it opens it whole, not the thread', async () => {
+    const a = boot({ events: [...world, ev(friend, 'my desk https://m.primal.net/abc.jpg and a page https://example.com/x.html', { created_at: 8000 })], stored: { me } }); await tick(800)
+    const card = [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('my desk'))!
+    expect(card.querySelector('img')).toBeNull(); expect(card.querySelector('a.ext')!.getAttribute('href')).toBe('https://example.com/x.html')
+    const btn = card.querySelector('button.pic-btn') as HTMLButtonElement; expect(btn.textContent).toContain('Show image · m.primal.net')
+    btn.click(); await tick(50)
+    const img = card.querySelector('.pic img')!; expect(img.getAttribute('src')).toBe('https://m.primal.net/abc.jpg'); expect(img.getAttribute('referrerpolicy')).toBe('no-referrer')
+    expect(card.querySelector('.pic a.pic-open')!.getAttribute('target')).toBe('_blank'); expect(card.querySelector('.pic-host')!.textContent).toBe('m.primal.net')
+    expect(location.hash).not.toContain('#/note/')
+  })
+  it('with the setting on, load by themselves only from people the reader follows', async () => {
+    const a = boot({ events: [...world, ev(friend, 'friend pic https://image.nostr.build/a.png', { created_at: 8000 }), ev(far, 'stranger pic https://image.nostr.build/b.png', { created_at: 8100 })], stored: { me, autoImages: '1' } }); await tick(800)
+    const card = (text: string) => [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes(text))
+    expect(card('friend pic')!.querySelector('.pic img')).not.toBeNull()
+    const stranger = card('stranger pic'); if (stranger) { expect(stranger.querySelector('.pic img')).toBeNull(); expect(stranger.querySelector('button.pic-btn')).not.toBeNull() }
   })
 })
