@@ -247,7 +247,8 @@ button.icon.spinning svg { animation: spin .9s linear infinite }
 .account .counts { margin-top: 2px }
 
 /* accounts: the picture and the name open the account */
-.avatar-link { display: block; flex: none; border-radius: 50%; color: inherit; text-decoration: none }
+.avatar-link { display: block; flex: none; align-self: start; width: max-content; height: max-content; border-radius: 50%; color: inherit; text-decoration: none; -webkit-tap-highlight-color: transparent } /* only as big as the round picture (a grid item would stretch to the whole note, and iOS paints its tap shade on all of it) */
+.avatar-link:active { opacity: .6 }
 .name-link { color: inherit; text-decoration: none } .name-link:hover, .name-link:focus-visible { text-decoration: underline }
 .follower-link { display: flex; align-items: center; gap: 10px; min-width: 0; color: inherit; text-decoration: none }
 .profile-top { display: flex; align-items: center; gap: 14px } .profile h2 { margin: 0 } .profile .about { margin-top: 10px; overflow-wrap: anywhere } .profile .meta { margin: 6px 0 0 }
@@ -366,3 +367,6 @@ a.quote { display: grid; gap: 4px; margin: 8px 0 4px; padding: 10px 12px; border
 .trust.established .trust-score strong { color: var(--accent) } .trust.unknown .trust-score strong { color: var(--amber) }
 .trust ul { margin: 6px 0; padding-left: 0; list-style: none; display: grid; gap: 4px } .trust-pts { display: inline-block; min-width: 2.6em; color: var(--accent); font-variant-numeric: tabular-nums }
 .trust summary { cursor: pointer; color: var(--muted) }
+
+/* iOS paints a grey shade over whatever is tapped, shaped like the whole element: on a note that is a big blotch. The note gives its own feedback instead. */
+.note, .note a { -webkit-tap-highlight-color: transparent }
