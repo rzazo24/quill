@@ -355,3 +355,7 @@ a.quote { display: grid; gap: 4px; margin: 8px 0 4px; padding: 10px 12px; border
 /* a long name with no spaces wraps instead of widening the page */
 .search-people { min-width: 0 } .search-people ul { grid-template-columns: minmax(0, 1fr) } .search-people li { min-width: 0 }
 .search-people li a { min-width: 0; max-width: 100% } .search-people li strong { min-width: 0; overflow-wrap: anywhere }
+
+/* the lines under the search box start where the box starts, not under the magnifier (20 px icon + 10 px gap) */
+.search-form .search-note { margin: 0 0 0 30px }
+.search-form .search-note[hidden] { display: none }

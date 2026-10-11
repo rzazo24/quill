@@ -350,6 +350,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     })(), 400)
   }
   let searchResults: HTMLElement | null = null
+  let searchTip: HTMLElement | null = null
   let searchPageEl: HTMLElement | null = null
   /** The search page is built once and kept: typing only redraws the results under the box, so the box keeps its focus and what was typed. */
   function searchPage(): HTMLElement {
@@ -359,7 +360,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     searchInput.addEventListener('input', () => { searchQuery = searchInput!.value; drawSearch() })
     searchResults = h('div', { class: 'stack search-results' })
     const form = h('form', { class: 'card search-form', role: 'search', onSubmit: (e: Event) => { e.preventDefault(); const target = parseTarget(searchQuery); if (target) deps.setHash(target.kind === 'user' ? `#/user/${target.pubkey}` : `#/note/${target.id}`); else searchInput?.blur() } },
-      h('label', { class: 'search-row' }, icon('search', 20), searchInput), h('p', { class: 'meta' }, t(lang, 'searchHint')))
+      h('label', { class: 'search-row' }, icon('search', 20), searchInput), h('p', { class: 'meta search-note' }, t(lang, 'searchHint')), searchTip = h('p', { class: 'meta search-note', hidden: true }, t(lang, 'searchType')))
     searchPageEl = h('div', { class: 'stack search' }, form, searchResults)
     drawSearch()
     setTimeout(() => { if (searchInput?.isConnected && !searchQuery) searchInput.focus() }, 0) // opened to type: the box is ready
@@ -370,7 +371,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const q = searchQuery.trim(), v = view(), parts: (HTMLElement | null)[] = []
     const target = parseTarget(q)
     if (target) parts.push(h('p', {}, h('a', { class: 'button primary', href: target.kind === 'user' ? `#/user/${target.pubkey}` : `#/note/${target.id}` }, t(lang, target.kind === 'user' ? 'searchOpenAccount' : 'searchOpenNote'))))
-    else if (q.length < MIN_QUERY) parts.push(h('p', { class: 'meta search-empty' }, t(lang, 'searchType')))
+    else if (q.length < MIN_QUERY) { /* the tip under the box says what to type */ }
     else {
       const tag = tagOf(q)
       if (tag) askTag(tag); else { clearTimeout(tagTimer); tagSearch = null }
@@ -383,6 +384,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       if (!people.length && !notes.length) parts.push(h('p', { class: 'empty' }, t(lang, 'searchNone')))
       parts.push(netSection(q, v, new Set(people.map((p) => p.pubkey)), new Set(notes.map((n) => n.event.id))))
     }
+    if (searchTip) searchTip.hidden = !!target || q.length >= MIN_QUERY
     searchResults.replaceChildren(...parts.filter((x): x is HTMLElement => x !== null))
   }
   function peopleCard(title: string, people: Found[], v: View): HTMLElement {
