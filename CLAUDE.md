@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Quill: a text-only, light Nostr client whose filter explains every decision. Vite + TypeScript, static, no backend. Name chosen by the user (2026-10-09). Status: reading works (login by npub, Following, Mentions, thread, filter settings, EN/ES) and writing through a NIP-46 signer (Clave): note, reply, one-tap reaction. Not yet: notifications, NIP-65 outbox relays, PWA. NOT yet tried against the user's real Clave.
+Quill: a text-first, light Nostr client whose filter explains every decision. Vite + TypeScript, static, no backend. Name chosen by the user (2026-10-09). Status: reading works (login by npub, Following, Mentions, thread, filter settings, EN/ES) and writing through a NIP-46 signer (Clave): note, reply, one-tap reaction. Not yet: notifications, NIP-65 outbox relays, PWA. NOT yet tried against the user's real Clave.
 
 ## Commands
 
@@ -18,7 +18,7 @@ npm run build                 # tsc -b && vite build
 
 ## Rules that must not erode
 
-- **Text only.** Never load anything external (video, previews, profile pictures, fonts from CDNs). The one exception: pictures linked in notes (`imageEl` in `ui/render.ts`, https only, `img-src 'self' https:`), loaded straight from their site only after a tap on a button naming it, or by themselves when the author, or a followed account that reposted or quotes the note, is followed, if the reader turned on the `autoImages` setting (off by default). Video files linked in notes (`videoEl`, `media-src https:`) get the same button but never load by themselves; video pages (YouTube…) stay links. Links are plain text with the whole address visible (`segments` in `core/text.ts`); no `innerHTML` with third-party text, ever: build DOM with `textContent`.
+- **Text first.** Never load anything external (video, previews, profile pictures, fonts from CDNs). The one exception: pictures linked in notes (`imageEl` in `ui/render.ts`, https only, `img-src 'self' https:`), loaded straight from their site only after a tap on a button naming it, or by themselves when the author, or a followed account that reposted or quotes the note, is followed, if the reader turned on the `autoImages` setting (off by default). Video files linked in notes (`videoEl`, `media-src https:`) get the same button but never load by themselves; video pages (YouTube…) stay links. Links are plain text with the whole address visible (`segments` in `core/text.ts`); no `innerHTML` with third-party text, ever: build DOM with `textContent`.
 - **The filter returns a verdict, not a boolean** (`core/verdict.ts`). A hidden note must always be able to say which rule and why; the UI folds it, never drops it. New rules must add a `RuleId`, params for the sentence, tests, and a row in the README table.
 - **Missing data is never evidence**: unloaded graph or absent profile hides nothing alone. People the user follows and the user themself are never hidden by behaviour rules, only by the user's own mutes.
 - Third-party text goes through `cleanText` before display or comparison.

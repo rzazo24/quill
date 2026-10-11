@@ -4,7 +4,7 @@ import type { RuleId, Verdict } from '../core/verdict.js'
 export type Lang = 'en' | 'es'
 
 const en = {
-  tagline: 'Text only. Tells you why it hides things.',
+  tagline: 'Text first. Tells you why it hides things.',
   updateAvailable: 'A new version of Quill is available.', updateNow: 'Update',
   replied: 'Replied', alreadyReacted: 'You already reacted with {emoji} to this note.', reactedWith: 'You reacted with {emoji}',
   reactionsTitle: 'Reactions to your notes', reactedOne: '{who} reacted to your note', reactedMany: '{who} and {n} more reacted to your note', newItems: '{n} new', newHidden: 'hidden by the filter: {n}', newMark: 'new',
@@ -70,7 +70,7 @@ const en = {
 export type Key = keyof typeof en
 
 const es: Record<Key, string> = {
-  tagline: 'Solo texto. Te dice por qué oculta cosas.',
+  tagline: 'Primero el texto. Te dice por qué oculta cosas.',
   updateAvailable: 'Hay una nueva versión de Quill.', updateNow: 'Actualizar',
   replied: 'Respondida', alreadyReacted: 'Ya has reaccionado con {emoji} a esta nota.', reactedWith: 'Reaccionaste con {emoji}',
   reactionsTitle: 'Reacciones a tus notas', reactedOne: '{who} reaccionó a tu nota', reactedMany: '{who} y {n} más reaccionaron a tu nota', newItems: '{n} nuevas', newHidden: 'ocultas por el filtro: {n}', newMark: 'nueva',

@@ -1,7 +1,7 @@
 {
   "name": "Quill",
   "short_name": "Quill",
-  "description": "A tiny text-only Nostr client that tells you why it hides things.",
+  "description": "A tiny text-first Nostr client that tells you why it hides things.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -613,7 +613,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       sourceCard(source),
       guest ? null : renderSummary(tally(all), view(), toggleSettings),
       th.root ? renderJudged(th.root, view()) : null,
-      h('h3', {}, `${th.total} ${t(lang, 'replies')}`),
+      h('h3', {}, th.total === 1 ? t(lang, 'reachRepliesOne') : t(lang, 'reachReplies', { n: th.total })),
       ...renderTree(th.replies, view()),
     )
   }

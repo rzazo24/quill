@@ -17,10 +17,10 @@ const npub = (who) => `nostr:${nip19.npubEncode(people[who].pk)}`
 const TEXT = {
   en: { mine: 'Writing up how my little Nostr client explains what it hides.', ana: 'Published the first version of a tiny relay monitor. Text only, about 200 lines.', bruno: 'Quiet morning, strong coffee and a long article. Good day to write something.',
     carla: 'A filter is only useful if it tells you what it hid. Everything else is a guess.', ana2: 'Reading the NIP list again. Some of them are shorter than I remembered.', eva: 'Small thing I like: when an app explains why it hid something, I trust it more.',
-    dani: 'Nice write-up, thanks for sharing!', evaMention: 'would you mind a quick question about your relay list?', spam: 'Win a free gift card now, limited offer, click the link below' },
+    dani: 'Nice write-up, thanks for sharing!', quote: 'This, exactly.', evaMention: 'would you mind a quick question about your relay list?', spam: 'Win a free gift card now, limited offer, click the link below' },
   es: { mine: 'Escribiendo cómo mi pequeño cliente de Nostr explica lo que oculta.', ana: 'Publicada la primera versión de un monitor de relés minúsculo. Solo texto, unas 200 líneas.', bruno: 'Mañana tranquila, café fuerte y un artículo largo. Buen día para escribir algo.',
     carla: 'Un filtro solo sirve si te dice lo que ocultó. Todo lo demás es adivinar.', ana2: 'Releyendo la lista de NIPs. Algunos son más cortos de lo que recordaba.', eva: 'Algo que me gusta: cuando una app explica por qué ocultó algo, me fío más.',
-    dani: '¡Buen artículo, gracias por compartirlo!', evaMention: '¿te importaría que te hiciera una pregunta sobre tu lista de relés?', spam: 'Gana una tarjeta regalo gratis ahora, oferta limitada, pulsa el enlace de abajo' },
+    dani: '¡Buen artículo, gracias por compartirlo!', quote: 'Esto, exactamente.', evaMention: '¿te importaría que te hiciera una pregunta sobre tu lista de relés?', spam: 'Gana una tarjeta regalo gratis ahora, oferta limitada, pulsa el enlace de abajo' },
 }
 let events = []
 const build = (lang) => {
@@ -29,7 +29,8 @@ const build = (lang) => {
   const follows = (who, list) => events.push(sign(who, 3, '', list.map((n) => ['p', people[n].pk]), ago(4000)))
   follows('Lucía', ['Ana', 'Bruno', 'Carla']); follows('Ana', ['Dani', 'Eva']); follows('Bruno', ['Eva']); follows('Carla', [])
   const mine = sign('Lucía', 1, T.mine, [], ago(2 * 24 * 60))
-  events.push(mine, sign('Ana', 1, T.ana, [], ago(6)), sign('Bruno', 1, T.bruno, [], ago(22)), sign('Carla', 1, T.carla, [], ago(41)), sign('Ana', 1, T.ana2, [], ago(95)))
+  const carla = sign('Carla', 1, T.carla, [], ago(41))
+  events.push(mine, sign('Ana', 1, `${T.ana}\n\nhttps://img.example/monitor.png`, [], ago(6)), sign('Bruno', 1, `${T.quote} nostr:${nip19.noteEncode(carla.id)}`, [['q', carla.id]], ago(15)), sign('Bruno', 1, T.bruno, [], ago(22)), carla, sign('Ana', 1, T.ana2, [], ago(95)))
   const evaNote = sign('Eva', 1, T.eva, [], ago(130))
   events.push(evaNote, sign('Bruno', 6, JSON.stringify(evaNote), [['e', evaNote.id], ['p', people.Eva.pk]], ago(60)))
   events.push(sign('Dani', 1, T.dani, [['e', mine.id, '', 'root'], ['p', people['Lucía'].pk]], ago(12)))

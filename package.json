@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "license": "MIT",
-  "description": "A tiny text-only Nostr client that tells you why it hides things.",
+  "description": "A tiny text-first Nostr client that tells you why it hides things.",
   "type": "module",
   "scripts": {
     "dev": "vite",
