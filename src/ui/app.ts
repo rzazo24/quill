@@ -475,10 +475,10 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const route = parseRoute(deps.location.hash)
     const jobs: Promise<void>[] = [] // Settings and Help too: a change made there (avatars, filter, relays) must already be in the columns when you go back
     if (scope === 'all') for (const id of ['following', 'mentions', 'me'] as const) jobs.push(loadPane(panes[id], { name: id }))
-    if (route.name === 'note' || route.name === 'user' || route.name === 'people' || route.name === 'search') {
+    if (route.name === 'note' || route.name === 'user' || route.name === 'people') {
       const key = JSON.stringify(route)
       if (scope === 'all' || key !== detailKey) {
-        if (key !== detailKey) { panes.detail.body = route.name === 'search' ? searchPage() : null; panes.detail.resetScroll = true; profileMode = 'notes' } // the search page is there at once: its box must not blink out under the cursor
+        if (key !== detailKey) { panes.detail.body = null; panes.detail.resetScroll = true; profileMode = 'notes' }
         detailKey = key; jobs.push(loadPane(panes.detail, route))
       }
     } else { detailKey = ''; panes.detail.body = null; panes.detail.run++ }
@@ -870,12 +870,13 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       h('section', { class: 'col', 'data-col': id }, h('h2', { class: 'col-title' }, h('span', {}, title), ...extra), ...nodes)
     const write = signer?.state === 'connected' ? h('button', { type: 'button', class: 'primary write', onClick: startNote }, icon('feather', 16), t(lang, 'newNote').replace(/…$/, '')) : null
     const count = badge > 0 ? h('span', { class: 'badge', 'aria-label': `${badge}` }, badge > 9 ? '9+' : String(badge)) : null
-    const detailOpen = route.name === 'note' || route.name === 'user' || route.name === 'people' || route.name === 'search'
-    const detailTitle = route.name === 'search' ? t(lang, 'search') : route.name === 'note' ? t(lang, 'thread') : route.name === 'people' ? t(lang, route.list === 'following' ? 'peopleFollowing' : 'peopleFollowers') : t(lang, 'account')
+    const detailOpen = route.name === 'note' || route.name === 'user' || route.name === 'people'
+    const detailTitle = route.name === 'note' ? t(lang, 'thread') : route.name === 'people' ? t(lang, route.list === 'following' ? 'peopleFollowing' : 'peopleFollowers') : t(lang, 'account')
     return h('div', { class: detailOpen ? 'cols with-detail' : 'cols' },
       column('following', t(lang, 'following'), [panes.following.body], [write]),
       column('mentions', t(lang, 'mentions'), [panes.mentions.body], [count]),
-      column('me', t(lang, 'me'), [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), panes.me.body, h('div', { class: 'foot' }, signOut)]),
+      route.name === 'search' ? h('section', { class: 'col search-col' }, h('h2', { class: 'col-title' }, h('span', {}, t(lang, 'search')), h('button', { type: 'button', class: 'icon close', 'aria-label': t(lang, 'dismiss'), title: t(lang, 'dismiss'), onClick: () => deps.setHash('') }, '×')), searchPage()) // the search takes the place of Me: four columns would squeeze the others
+      : column('me', t(lang, 'me'), [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), panes.me.body, h('div', { class: 'foot' }, signOut)]),
       detailOpen ? h('section', { class: 'col detail', 'data-col': 'detail' }, h('h2', { class: 'col-title' }, h('span', {}, detailTitle), h('button', { type: 'button', class: 'icon close', 'aria-label': t(lang, 'dismiss'), title: t(lang, 'dismiss'), onClick: () => deps.setHash('') }, '×')), panes.detail.body) : null)
   }
 
