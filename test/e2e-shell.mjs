@@ -11,7 +11,7 @@ const b = await chromium.launch(); const ctx = await b.newContext({ viewport: { 
 await p.addInitScript(({ me }) => { localStorage.setItem('me', me); localStorage.setItem('lang', 'es'); localStorage.setItem('signer', JSON.stringify({ clientSecret: 'ab'.repeat(32), signerPubkey: me, relays: ['wss://127.0.0.1:9'], userPubkey: me })) }, { me: ME })
 let bad = 0; const say = (ok, m) => { console.log(ok ? 'ok  ' : 'FAIL', m); if (!ok) bad++ }
 const probe = () => p.evaluate(() => { const bar = document.querySelector('nav.tabbar'), main = document.querySelector('main.view'); const r = bar?.getBoundingClientRect(); return { docScrolls: document.scrollingElement.scrollHeight > innerHeight + 1, windowScrollY: scrollY, barBottom: r ? Math.round(r.bottom) : null, vh: innerHeight, mainTop: main ? Math.round(main.scrollTop) : null } })
-await p.goto('http://localhost:4173/', { waitUntil: 'domcontentloaded' }); await p.waitForSelector('.note .actions', { timeout: 40000 }); await new Promise((r) => setTimeout(r, 600))
+await p.goto('http://localhost:4173/', { waitUntil: 'domcontentloaded' }); await p.waitForFunction(() => [...document.querySelectorAll('.note .actions')].some((a) => !a.closest('details:not([open])')), null, { timeout: 40000 }); await new Promise((r) => setTimeout(r, 600))
 let s = await probe(); say(!s.docScrolls && s.barBottom === s.vh, `Following: the page does not scroll and the tab bar sits at the very bottom (bar ${s.barBottom} / viewport ${s.vh})`)
 // scroll the content, then switch to Mentions and sample the footer all through the loading
 await p.evaluate(() => { document.querySelector('main.view').scrollTop = 2500 }); await new Promise((r) => setTimeout(r, 300))
@@ -24,9 +24,9 @@ say(samples.length > 20 && samples.every((x) => x.barBottom === x.vh), `Mencione
 say(samples.every((x) => !x.docScrolls), 'and the page itself never became scrollable meanwhile')
 s = await probe(); say(s.mainTop === 0, `a new view starts at the top (scrollTop ${s.mainTop})`)
 // react in the middle of a long list: nothing may jump
-await p.click('nav.tabbar a[href="#/"]'); await p.waitForSelector('.note .actions'); await new Promise((r) => setTimeout(r, 600))
+await p.click('nav.tabbar a[href="#/"]'); await p.waitForFunction(() => [...document.querySelectorAll('.note .actions')].some((a) => !a.closest('details:not([open])')), null, { timeout: 30000 }); // a note the filter folded away has its buttons out of sight: wait for one that is shown await new Promise((r) => setTimeout(r, 600))
 // find a scroll position where some note has its top edge AND its buttons on screen (a note taller than the screen would make the test tool scroll to reach them, which says nothing about the app)
-const OK_NOTE = (x) => { const r = x.getBoundingClientRect(), a = x.querySelector('.actions')?.getBoundingClientRect(); return r.top > 150 && r.top < 500 && !!a && a.bottom < 700 }
+const OK_NOTE = (x) => { const r = x.getBoundingClientRect(), a = x.querySelector('.actions')?.getBoundingClientRect(); return !x.closest('details:not([open])') && r.top > 150 && r.top < 500 && !!a && a.bottom < 700 }
 for (const y of [1800, 1500, 2100, 1200, 2400, 900, 2700, 600, 3000, 3300, 3600]) {
   await p.evaluate((y) => { document.querySelector('main.view').scrollTop = y }, y); await new Promise((r) => setTimeout(r, 250))
   if (await p.evaluate((src) => [...document.querySelectorAll('article.note')].some(new Function('return ' + src)()), OK_NOTE.toString())) break
