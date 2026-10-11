@@ -13,6 +13,7 @@ import { followPubkeys, followTemplate, type FollowAction } from '../core/follow
 import { addBackup, checkBase, loadFollowList, nextKnown, parseBackups } from '../data/followlist.js'
 import { loadFollowing, loadMentions, loadMine, loadNames, loadNote, loadThread, type Thread, type ThreadNode } from '../data/feed.js'
 import { Engagement, loadEngagement, normReaction } from '../data/engaged.js'
+import { loadReach, type Reach } from '../data/reach.js'
 import { countNew, groupReactions, groupReposts, loadActivity, mergeKnown, newFollowers, parseKnown, type Activity } from '../data/activity.js'
 import { contextOf, loadGraphInfo, loadOwnLists, pendingGraph, type Session } from '../data/session.js'
 import { DEFAULT_RELAYS, memo, type Fetcher } from '../net/fetcher.js'
@@ -151,6 +152,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let current: Promise<boolean> | null = null // the action in progress
   let lastLoadAt = 0
   let engagement = new Engagement() // what the reader already did to each note
+  const reachMap = new Map<string, Reach>() // what each of the reader's notes got from others (reactions, reposts, replies), filled in after the page is up
+  const reachAsked = new Set<string>()
   // The follow graph and the reader's own reactions come AFTER the first screen is on the page (checking hundreds of signatures keeps the browser too busy to answer the
   // feed's own queries: starting them together made the feed wait for them). `startBackground` is set when the account is loaded; `background()` runs it once.
   let startBackground: (() => Promise<void>) | null = null
@@ -186,7 +189,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const followersSeen = new Set<string>() // everybody seen following you since this page opened (the known ones are in `knownFollowers`)
   /** How many accounts have been seen following the reader: only a lower bound (each relay knows part of them), and it only grows. Null while nothing has been looked at yet. */
   const followerCount = (): number | null => { const k = loadKnown(); return k === null && followersSeen.size === 0 ? null : new Set([...(k ?? []), ...followersSeen]).size }
-  const forgetAccount = () => { startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
+  const forgetAccount = () => { reachMap.clear(); reachAsked.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
   const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
@@ -200,7 +203,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
   /** The lists are built once and reused between redraws, so a bar already on screen keeps what it showed: redo the bar(s) of this note in place. */
   const rebar = (e: NostrEvent) => { for (const old of root.querySelectorAll(`article.note[data-id="${e.id}"] .actions`)) old.replaceWith(barFor(e)) }
-  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
+  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
   const ctx = () => contextOf(session!, { mutedWords: words, mutedKeys: [] })
   const who = () => (signer?.pubkey ? nameOf(view(), signer.pubkey) : '')
 
@@ -252,6 +255,24 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const keys = [...extra, ...items.flatMap((j) => [j.event.pubkey, ...(j.repostedBy ?? []), ...(j.followedBy ?? []).slice(0, 1), ...mentionedKeys(j.event.content)]), ...(signer?.pubkey ? [signer.pubkey] : [])].filter((k) => !names.has(k))
     if (!keys.length) return
     for (const [k, n] of await loadNames(fetcher, keys)) names.set(k, n)
+  }
+
+  /** Counts what the given notes got, a moment after the page is up, and builds the Me view once more with the numbers (the answers are remembered: no new questions). */
+  function queueReach(ids: string[]): void {
+    const todo = ids.filter((id) => !reachAsked.has(id))
+    if (!todo.length) return
+    for (const id of todo) reachAsked.add(id)
+    const who = me, s = session
+    setTimeout(() => {
+      if (!who || me !== who || session !== s) return
+      void loadReach(fetcher, todo, ctx()).then((found) => {
+        if (me !== who || session !== s) return
+        for (const [id, r] of found) reachMap.set(id, r)
+        if (!found.size) return
+        const route = parseRoute(deps.location.hash)
+        if (wide()) void loadPane(panes.me, { name: 'me' }); else if (route.name === 'me') void load()
+      }).catch(() => { /* a failed count only means no numbers */ })
+    }, 150)
   }
 
   async function loadGuestNote(id: string, mine: number): Promise<void> {
@@ -310,7 +331,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
           const block = renderReactionGroups(groupReactions(act, markFrom), view())
           const line = fresh.shown || fresh.hidden ? h('p', { class: 'meta new-line', role: 'status' }, [fresh.shown ? t(lang, 'newItems', { n: fresh.shown }) : '', fresh.hidden ? t(lang, 'newHidden', { n: fresh.hidden }) : ''].filter(Boolean).join(' · ')) : null
           content = h('div', { class: 'stack' }, renderSummary(tally(items), view(), toggleSettings), line, renderFollowers(fresher, view()), block, renderRepostGroups(groupReposts(act, markFrom), view()), renderList(items, view()))
-        } else if (route.name === 'me') content = renderList(items, view())
+        } else if (route.name === 'me') { content = renderList(items, view()); queueReach(items.map((j) => j.event.id)) }
         else {
           // Following: the people you follow, or the network; in the network an empty list says why (no follow lists arrived, or just nothing new)
           const network = route.name === 'following' && feedMode === 'network'
@@ -400,7 +421,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   /** Reads everything again from the relays (an installed app has no pull-to-refresh). */
-  function refresh(): void { fetcher.clear(); session = null; void load() }
+  function refresh(): void { fetcher.clear(); reachMap.clear(); reachAsked.clear(); session = null; void load() }
 
   const flat = (nodes: ThreadNode[]): Judged[] => nodes.flatMap((n) => [n.item, ...flat(n.children)])
 

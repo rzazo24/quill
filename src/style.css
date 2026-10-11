@@ -309,3 +309,7 @@ html[data-theme=halloween] ::selection { background: rgba(var(--accent-rgb), .35
 .sign .buttons, .confirm-signout .buttons { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; width: fit-content; max-width: 100% }
 .sign .buttons button, .confirm-signout .buttons button { min-width: 0; white-space: normal; min-height: 38px; padding: 4px 10px; font-size: .92rem; line-height: 1.25 }
 @media (max-width: 459px) { .sign .buttons button, .confirm-signout .buttons button { padding: 4px 6px; font-size: .86rem } }
+
+/* what a note of yours got: reactions, reposts and replies, small and quiet under the text */
+.reach { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; color: var(--muted); font-size: .85rem }
+.reach-item { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap } .reach-item .icon { color: var(--muted) }

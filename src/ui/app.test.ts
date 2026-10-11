@@ -897,3 +897,24 @@ describe('the first screen does not wait for the follow graph', () => {
     await tick(1800); expect(a.text()).toContain('a pitch from a stranger')
   })
 })
+
+describe('what each of my notes got, shown in Me', () => {
+  const mineA = ev(me, 'my first note', { created_at: 7000 }), mineB = ev(me, 'a note nobody noticed', { created_at: 6000 })
+  const events = (): Event[] => [list(me, 3, [['p', friend]]), list(friend, 3, []), mineA, mineB,
+    ev(friend, '❤️', { kind: 7, tags: [['e', mineA.id], ['p', me]] }), ev(far, '+', { kind: 7, tags: [['e', mineA.id], ['p', me]] }), ev(pk('9'), '❤', { kind: 7, tags: [['e', mineA.id], ['p', me]] }),
+    ev(friend, '', { kind: 6, tags: [['e', mineA.id], ['p', me]] }), ev(far, 'a reply', { tags: [['e', mineA.id, '', 'reply'], ['p', me]] }),
+    ev(me, '🔥', { kind: 7, tags: [['e', mineA.id], ['p', me]] })] // the reader's own reaction does not count
+  const reachOfNote = (a: ReturnType<typeof boot>, text: string) => ([...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes(text))?.querySelector('.reach') as HTMLElement | null)
+  it('under each note of mine that got something: the reactions with their number, the reposts and the replies; nothing under one that got nothing', async () => {
+    const a = boot({ events: events(), stored: { me } }); await tick(150); await a.go('#/me'); await tick(500)
+    const r = reachOfNote(a, 'my first note')!; expect(r).not.toBeNull()
+    expect(r.textContent!.replace(/\s+/g, ' ').trim()).toBe('❤ 2👍 1 1 1') // two hearts, a thumb; one repost and one reply (the icons have no text; the gap between them is CSS)
+    expect(r.querySelectorAll('svg')).toHaveLength(2); expect(r.getAttribute('aria-label')).toBe('3 reactions, 1 repost, 1 reply')
+    expect(reachOfNote(a, 'a note nobody noticed')).toBeNull()
+  })
+  it('works in the Me column of a wide screen too, and the numbers are asked for only once', async () => {
+    const a = boot({ events: events(), stored: { me }, wide: { value: true } }); await tick(700)
+    expect(a.root.querySelector('.col[data-col="me"] .reach')).not.toBeNull()
+    const calls = a.calls.n; await tick(600); expect(a.calls.n).toBe(calls) // nothing is asked again while you look
+  })
+})

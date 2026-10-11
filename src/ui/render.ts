@@ -16,9 +16,10 @@ import { cleanText, segments } from '../core/text.js'
 import type { Judged, RuleId, Settings } from '../core/verdict.js'
 import { noteId, noteLink } from '../core/compose.js'
 import type { ThreadNode } from '../data/feed.js'
+import { hasReach, reactionTotal, type Reach } from '../data/reach.js'
 import { ago, reason, t, tallyLabel, type Lang } from './i18n.js'
 
-export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; /** The Halloween theme is on: extra reactions. */ halloween?: boolean; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** The relays put in a copied id/link as places to look for the note. */ hints?: readonly string[]; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
+export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; /** The Halloween theme is on: extra reactions. */ halloween?: boolean; /** What a note of the reader's got from others (reactions, reposts, replies), once it is known. */ reach?: (id: string) => Reach | undefined; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** The relays put in a copied id/link as places to look for the note. */ hints?: readonly string[]; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
 
 export const nameOf = (v: View, pubkey: string): string => v.names.get(pubkey) ?? shortNpub(pubkey)
 
@@ -81,6 +82,17 @@ function moreMenu(event: Judged['event'], v: View): HTMLElement | null {
   return box
 }
 
+/** Under a note of yours: what it got. Up to three emojis with their number, then the rest of the reactions as +N, the reposts and the replies. Nothing when it got nothing. */
+export function reachLine(r: Reach | undefined, v: View): HTMLElement | null {
+  if (!hasReach(r)) return null
+  const top = [...r.reactions].slice(0, 3), rest = reactionTotal(r) - top.reduce((a, [, n]) => a + n, 0), item = (...c: Child[]) => h('span', { class: 'reach-item' }, ...c)
+  const many = (n: number, one: 'reachReactionsOne' | 'reachRepostsOne' | 'reachRepliesOne', other: 'reachReactions' | 'reachReposts' | 'reachReplies') => (n === 0 ? '' : n === 1 ? t(v.lang, one) : t(v.lang, other, { n }))
+  const said = [many(reactionTotal(r), 'reachReactionsOne', 'reachReactions'), many(r.reposts, 'reachRepostsOne', 'reachReposts'), many(r.replies, 'reachRepliesOne', 'reachReplies')].filter(Boolean).join(', ')
+  return h('div', { class: 'reach', role: 'group', 'aria-label': said, title: said },
+    ...top.map(([emoji, n]) => item(emoji, ' ', String(n))), rest > 0 ? item(`+${rest}`) : null,
+    r.reposts ? item(icon('repost', 14), ' ', String(r.reposts)) : null, r.replies ? item(icon('thread', 14), ' ', String(r.replies)) : null)
+}
+
 function card(j: Judged, v: View, extra: Child[] = []): HTMLElement {
   const { event } = j
   return h('article', { class: v.isNew?.(event) ? 'note new' : 'note', 'data-id': event.id, ...(v.isNew?.(event) ? { 'data-new': t(v.lang, 'newMark') } : {}) },
@@ -97,6 +109,7 @@ function card(j: Judged, v: View, extra: Child[] = []): HTMLElement {
         h('span', { class: 'head-end' }, threadChip(`#/note/${event.id}`, v), moreMenu(event, v)),
       ),
       h('div', { class: 'body tappable', onclick: (e: Event) => openThread(e, event.id) }, renderContent(event.content, v, event.id)),
+      reachLine(v.reach?.(event.id), v),
       ...extra, ...(v.actions?.(j) ?? []),
     ),
   )
