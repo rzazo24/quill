@@ -25,3 +25,10 @@ describe('search', () => {
     expect(matchPeople(names, '@ana', ctx).map((p) => [p.name, p.relation])).toEqual([['Ana Friend', 'follow'], ['Ana Network', 'network'], ['Ana Stranger', 'none']])
   })
 })
+
+describe('tag search', () => {
+  it('a search that is one #tag gives the tag; anything else does not', async () => {
+    const { tagOf } = await import('./search.js')
+    expect(tagOf(' #Nostr ')).toBe('nostr'); expect(tagOf('#café')).toBe('café'); expect(tagOf('#nostr bitcoin')).toBeNull(); expect(tagOf('nostr')).toBeNull(); expect(tagOf('#')).toBeNull()
+  })
+})

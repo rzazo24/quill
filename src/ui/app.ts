@@ -9,7 +9,7 @@ import { isReply } from '../core/thread.js'
 import { judgeAll, tally, type Context, type Judged, type Settings } from '../core/verdict.js'
 import { loadNetwork } from '../data/network.js'
 import { loadPopular } from '../data/popular.js'
-import { matchNotes, matchPeople, MIN_QUERY, parseTarget, searchNetwork, SEARCH_RELAYS, type Found } from '../data/search.js'
+import { matchNotes, matchPeople, MIN_QUERY, parseTarget, searchNetwork, searchTag, SEARCH_RELAYS, tagOf, type Found } from '../data/search.js'
 import { loadProfile, type ProfileInfo } from '../data/profile.js'
 import { followPubkeys, followTemplate, type FollowAction } from '../core/follow.js'
 import { addBackup, checkBase, loadFollowList, nextKnown, parseBackups } from '../data/followlist.js'
@@ -331,6 +331,24 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let searchQuery = ''
   let searchNet: { query: string; state: 'loading' } | { query: string; state: 'failed' } | { query: string; state: 'done'; notes: Judged[]; people: Found[] } | null = null
   let searchInput: HTMLInputElement | null = null
+  // a single #tag is also asked of the reader's own relays (they all filter by tag), a moment after typing stops
+  let tagSearch: { tag: string; state: 'loading' | 'failed' | 'done'; notes: Judged[] } | null = null
+  let tagTimer: ReturnType<typeof setTimeout> | undefined
+  function askTag(tag: string): void {
+    if (tagSearch?.tag === tag) return
+    tagSearch = { tag, state: 'loading', notes: [] }
+    clearTimeout(tagTimer)
+    tagTimer = setTimeout(() => void (async () => {
+      const who = me
+      try {
+        const notes = await searchTag(fetcher, tag, ctx(), settings)
+        if (me !== who || tagSearch?.tag !== tag) return
+        await nameThem(notes.slice(0, PAGE)).catch(() => {})
+        if (tagSearch?.tag === tag) tagSearch = { tag, state: 'done', notes }
+      } catch { if (tagSearch?.tag === tag) tagSearch = { tag, state: 'failed', notes: [] } }
+      drawSearch()
+    })(), 400)
+  }
   let searchResults: HTMLElement | null = null
   let searchPageEl: HTMLElement | null = null
   /** The search page is built once and kept: typing only redraws the results under the box, so the box keeps its focus and what was typed. */
@@ -354,7 +372,12 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (target) parts.push(h('p', {}, h('a', { class: 'button primary', href: target.kind === 'user' ? `#/user/${target.pubkey}` : `#/note/${target.id}` }, t(lang, target.kind === 'user' ? 'searchOpenAccount' : 'searchOpenNote'))))
     else if (q.length < MIN_QUERY) parts.push(h('p', { class: 'meta search-empty' }, t(lang, 'searchType')))
     else {
-      const people = matchPeople(names, q, ctx()), notes = matchNotes(knownNotes.values(), q)
+      const tag = tagOf(q)
+      if (tag) askTag(tag); else { clearTimeout(tagTimer); tagSearch = null }
+      const people = matchPeople(names, q, ctx()), local = matchNotes(knownNotes.values(), q)
+      const fromTag = tagSearch?.tag === tag && tagSearch.state === 'done' ? tagSearch.notes.filter((j) => !local.some((l) => l.event.id === j.event.id)) : []
+      const notes = [...local, ...fromTag].sort((a, b) => b.event.created_at - a.event.created_at)
+      if (tag && tagSearch?.tag === tag && tagSearch.state !== 'done') parts.push(h('p', { class: tagSearch.state === 'loading' ? 'status loading' : 'meta', role: 'status' }, h('span', {}, t(lang, tagSearch.state === 'loading' ? 'searchTagLoading' : 'searchTagFailed', { tag: '#' + tag }))))
       if (people.length) parts.push(peopleCard(t(lang, 'searchPeople'), people, v))
       if (notes.length) parts.push(h('h2', { class: 'section' }, `${t(lang, 'searchNotes')} · ${notes.length}`), renderList(notes, { ...v, seen: undefined }))
       if (!people.length && !notes.length) parts.push(h('p', { class: 'empty' }, t(lang, 'searchNone')))

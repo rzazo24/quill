@@ -1118,3 +1118,17 @@ describe('search', () => {
     expect(a.text()).toContain('From the network'); expect(a.text()).toContain('a far note about quill clients'); expect(a.root.querySelector('.search-people')!.textContent).toContain('Quill fan') // its name is known now, so it is listed with the people
   })
 })
+
+describe('searching a #tag', () => {
+  it('also asks the reader\'s own relays for the latest notes with it, from anyone, and adds them to what was loaded', async () => {
+    const far1 = ev(far, 'a far note with the tag #quilltest', { created_at: 7000, tags: [['t', 'quilltest']] })
+    const a = boot({ events: [...world, far1, ev(friend, 'loaded one #quilltest', { created_at: 8000, tags: [['t', 'quilltest']] })], stored: { me } }); await tick(300)
+    await a.go('#/search'); await tick(50)
+    const i = a.root.querySelector('input.search-box') as HTMLInputElement; i.value = '#quilltest'; i.dispatchEvent(new Event('input')); await tick(20)
+    expect(a.text()).toContain('Also asking your relays for #quilltest')
+    await tick(700)
+    const texts = [...a.root.querySelectorAll('.search-results > section.list article.note .body')].map((b) => b.textContent)
+    expect(texts).toEqual(['loaded one #quilltest', 'a far note with the tag #quilltest'])
+    expect(a.filters.some((f) => JSON.stringify((f as Record<string, unknown>)['#t']) === '["quilltest"]')).toBe(true)
+  })
+})

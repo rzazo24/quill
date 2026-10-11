@@ -75,3 +75,17 @@ export async function searchNetwork(f: Fetcher, query: string, ctx: Context, set
   }
   return { notes: judged, people: sortPeople(people) }
 }
+
+/** A search that is a single #tag ("#nostr"): the tag, lower case; anything else: null. Every relay can filter by tag, so these are asked of the reader's own relays. */
+export function tagOf(query: string): string | null {
+  const m = /^#([\p{L}\p{N}_-]{1,60})$/u.exec(query.trim())
+  return m ? m[1]!.toLowerCase() : null
+}
+
+/** The latest notes with that tag on the reader's own relays, judged (the "outside your network" rule off: a tag reaches past it). */
+export async function searchTag(f: Fetcher, tag: string, ctx: Context, settings: Settings, limit = 60): Promise<Judged[]> {
+  const found = await f.query({ kinds: [1], '#t': [tag], limit })
+  const here: Settings = { ...settings, rules: { ...settings.rules, outsideNetwork: false } }
+  const seen = new Set<string>()
+  return judgeAll(found.filter((e) => e.kind === 1 && e.tags.some((t) => t[0] === 't' && (t[1] ?? '').toLowerCase() === tag) && !seen.has(e.id) && seen.add(e.id)), ctx, here)
+}
