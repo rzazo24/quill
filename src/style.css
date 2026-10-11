@@ -350,4 +350,8 @@ a.quote { display: grid; gap: 4px; margin: 8px 0 4px; padding: 10px 12px; border
 .search-people h2 { margin: 0 0 6px; font-size: 1rem } .search-people ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
 .search-people li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap } .search-people li a { display: inline-flex; align-items: center; gap: 8px; color: var(--text); text-decoration: none }
 .search-people .avatar { width: 30px; height: 30px; font-size: .7rem }
-.search-net { display: grid; gap: 6px; justify-items: start } .search-net > button { display: inline-flex; align-items: center; gap: 6px } .search-net .meta { margin: 0 }
+.search, .search-results { min-width: 0 }
+.search-net { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; justify-items: stretch } .search-net > button { justify-self: start } .search-net > button { display: inline-flex; align-items: center; gap: 6px } .search-net .meta { margin: 0 }
+/* a long name with no spaces wraps instead of widening the page */
+.search-people { min-width: 0 } .search-people ul { grid-template-columns: minmax(0, 1fr) } .search-people li { min-width: 0 }
+.search-people li a { min-width: 0; max-width: 100% } .search-people li strong { min-width: 0; overflow-wrap: anywhere }
