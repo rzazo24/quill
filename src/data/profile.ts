@@ -43,12 +43,12 @@ export function followedVia(s: Pick<Session, 'follows' | 'graphInfo'>, pubkey: s
   return out.sort((a, b) => (a < b ? -1 : 1))
 }
 
-export async function loadProfile(f: Fetcher, pubkey: string, s: Session, ctx: Context, settings: Settings = DEFAULT_SETTINGS): Promise<{ info: ProfileInfo; notes: Judged[] }> {
+export async function loadProfile(f: Fetcher, pubkey: string, s: Session, ctx: Context, settings: Settings = DEFAULT_SETTINGS): Promise<{ info: ProfileInfo; notes: Judged[]; own: Event[] }> {
   const [meta, notes] = await Promise.all([f.query({ kinds: [0, 3], authors: [pubkey], limit: 20 }), f.query({ kinds: [1], authors: [pubkey], limit: PROFILE_NOTES })])
   const newest = (kind: number) => newestPerAuthor(meta.filter((e) => e.kind === kind && e.pubkey === pubkey)).get(pubkey)
   const info: ProfileInfo = { pubkey, ...profileFields(newest(0)), following: followingCount(newest(3)), via: followedVia(s, pubkey) }
   // you opened this account on purpose: "outside your network" would only hide everything it wrote; the other rules (muted, bursts, repeats, links) still apply
   const here: Settings = { ...settings, rules: { ...settings.rules, outsideNetwork: false } }
   const mine = notes.filter((e) => e.kind === 1 && e.pubkey === pubkey).sort((a, b) => b.created_at - a.created_at || (a.id < b.id ? -1 : 1))
-  return { info, notes: judgeAll(mine, ctx, here) }
+  return { info, notes: judgeAll(mine, ctx, here), own: [...meta.filter((e) => e.pubkey === pubkey), ...mine] }
 }

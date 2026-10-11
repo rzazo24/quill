@@ -360,3 +360,9 @@ a.quote { display: grid; gap: 4px; margin: 8px 0 4px; padding: 10px 12px; border
 .search-form .search-note { margin: 0 0 0 30px }
 .search-form .search-note[hidden] { display: none }
 .more-list .danger-text { color: var(--red) }
+
+/* how much the network vouches for an account */
+.trust h2 { margin: 0 0 4px; font-size: 1rem } .trust p { margin: 4px 0 } .trust-score strong { font-size: 1.15rem }
+.trust.established .trust-score strong { color: var(--accent) } .trust.unknown .trust-score strong { color: var(--amber) }
+.trust ul { margin: 6px 0; padding-left: 0; list-style: none; display: grid; gap: 4px } .trust-pts { display: inline-block; min-width: 2.6em; color: var(--accent); font-variant-numeric: tabular-nums }
+.trust summary { cursor: pointer; color: var(--muted) }

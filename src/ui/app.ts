@@ -9,6 +9,7 @@ import { isReply } from '../core/thread.js'
 import { judgeAll, tally, type Context, type Judged, type Settings } from '../core/verdict.js'
 import { loadNetwork } from '../data/network.js'
 import { loadPopular } from '../data/popular.js'
+import { loadTrust, type TrustScore } from '../data/trust.js'
 import { matchNotes, matchPeople, MIN_QUERY, parseTarget, searchNetwork, searchTag, SEARCH_RELAYS, tagOf, type Found } from '../data/search.js'
 import { loadProfile, type ProfileInfo } from '../data/profile.js'
 import { followPubkeys, followTemplate, listKindOf, MUTE_LIST_KIND, type FollowAction } from '../core/follow.js'
@@ -25,7 +26,7 @@ import { checkTemplate, MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
 import { cobweb, icon, logo, pumpkin } from './icons.js'
 import { detectLang, problemText, setSpooky, t, type Key, type Lang } from './i18n.js'
-import { PAGE, renderPeople, renderProfileHead, renderProfileMode, renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
+import { PAGE, renderTrust, renderPeople, renderProfileHead, renderProfileMode, renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type FollowPanel, type Review } from './sign-ui.js'
 import { installHint, type Env } from './install.js'
 import { halloweenOn, parseScheme, parseTheme, type Scheme, type ThemeChoice, parseAvatars, parseFeedMode, parseFont, parseLang, parseReposts, parseSettings, parseWords, safeGet, safeSet, type AvatarStyle, type FeedMode, type FontSize, type KV } from './store.js'
@@ -222,7 +223,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const followersSeen = new Set<string>() // everybody seen following you since this page opened (the known ones are in `knownFollowers`)
   /** How many accounts have been seen following the reader: only a lower bound (each relay knows part of them), and it only grows. Null while nothing has been looked at yet. */
   const followerCount = (): number | null => { const k = loadKnown(); return k === null && followersSeen.size === 0 ? null : new Set([...(k ?? []), ...followersSeen]).size }
-  const forgetAccount = () => { reachMap.clear(); reachAsked.clear(); quotedMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
+  const forgetAccount = () => { reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
   const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
@@ -435,8 +436,9 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         content = await peopleView(route.list, alive)
         if (!alive()) return null
       } else if (route.name === 'user') {
-        const { info, notes } = await loadProfile(fetcher, route.pubkey, session!, ctx(), settings)
+        const { info, notes, own } = await loadProfile(fetcher, route.pubkey, session!, ctx(), settings)
         if (!alive()) return null
+        askTrust(route.pubkey, own)
         await nameThem(notes, [info.pubkey, ...info.via.slice(0, 3)]); content = profileView(info, notes)
       } else {
         let act: Activity | null = null
@@ -578,7 +580,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   /** Reads everything again from the relays (an installed app has no pull-to-refresh). */
-  function refresh(): void { fetcher.clear(); reachMap.clear(); reachAsked.clear(); quotedMap.clear(); session = null; void load() }
+  function refresh(): void { fetcher.clear(); reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); session = null; void load() }
 
   const flat = (nodes: ThreadNode[]): Judged[] => nodes.flatMap((n) => [n.item, ...flat(n.children)])
 
@@ -599,12 +601,24 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   /** "Back": to where you came from (the browser's history), or to the start when there is none. */
   const backLink = () => h('a', { class: 'back', href: '#/', onClick: (e: Event) => { e.preventDefault(); if (deps.goBack) deps.goBack(); else deps.setHash('') } }, icon('back', 16), t(lang, 'back'))
 
+  // How much the network vouches for an account (nostrclaw's score): asked once per account and visit, after the page is up; the page is drawn again when it arrives.
+  const trustMap = new Map<string, TrustScore | 'loading' | 'failed'>()
+  function askTrust(pubkey: string, own: NostrEvent[]): void {
+    if (trustMap.has(pubkey) || !session) return
+    trustMap.set(pubkey, 'loading')
+    const who = me
+    void loadTrust(fetcher, pubkey, ctx(), own, nowSec()).then((t) => { trustMap.set(pubkey, t) }, () => { trustMap.set(pubkey, 'failed') }).then(() => {
+      if (me !== who) return
+      const r = parseRoute(deps.location.hash)
+      if (r.name === 'user' && r.pubkey === pubkey) { if (wide()) void loadPane(panes.detail, r); else void load('route') }
+    })
+  }
   /** The page of an account: its profile as text, how it relates to you, and its notes (or replies). */
   function profileView(info: ProfileInfo, notes: Judged[]): HTMLElement {
     const relation = info.pubkey === me ? 'you' : session!.muted.has(info.pubkey) ? 'muted' : session!.follows.has(info.pubkey) ? 'follow' : 'none'
     const shown = notes.filter((n) => isReply(n.event) === (profileMode === 'replies'))
     const canFollow = signer?.state === 'connected' && info.pubkey !== me
-    return h('div', { class: 'stack' }, backLink(), renderProfileHead(info, relation, view(), canFollow ? { following: session!.follows.has(info.pubkey), muted: session!.muted.has(info.pubkey), busy: !!followFlow || busy, onToggle: () => void startFollow(info.pubkey, session!.follows.has(info.pubkey) ? 'unfollow' : 'follow'), onMute: () => void startFollow(info.pubkey, session!.muted.has(info.pubkey) ? 'unmute' : 'mute') } : undefined), renderProfileMode(profileMode, (m) => { profileMode = m; void load() }, view()),
+    return h('div', { class: 'stack' }, backLink(), renderProfileHead(info, relation, view(), canFollow ? { following: session!.follows.has(info.pubkey), muted: session!.muted.has(info.pubkey), busy: !!followFlow || busy, onToggle: () => void startFollow(info.pubkey, session!.follows.has(info.pubkey) ? 'unfollow' : 'follow'), onMute: () => void startFollow(info.pubkey, session!.muted.has(info.pubkey) ? 'unmute' : 'mute') } : undefined), info.pubkey === me ? null : renderTrust(trustMap.get(info.pubkey), view()), renderProfileMode(profileMode, (m) => { profileMode = m; void load() }, view()),
       shown.length ? renderSummary(tally(shown), view(), toggleSettings) : null, shown.length ? renderList(shown, view()) : h('p', { class: 'empty' }, t(lang, 'profileEmpty')))
   }
 

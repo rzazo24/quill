@@ -1,5 +1,6 @@
 // Turning judged notes into DOM. Pure of state: give it data, get elements. Nothing here loads anything external.
 import type { Child } from './dom.js'
+import type { TrustReason, TrustScore } from '../data/trust.js'
 import { h } from './dom.js'
 import { refs, shortNpub } from '../core/refs.js'
 import { avatarOf } from '../core/avatar.js'
@@ -288,6 +289,19 @@ export function renderProfileHead(info: ProfileInfo, relation: 'you' | 'follow' 
     via ? h('p', { class: 'meta' }, via) : null,
     follow ? h('p', { class: 'buttons' }, h('button', { type: 'button', class: follow.following ? '' : 'primary', ...(follow.busy ? { disabled: true } : {}), onClick: follow.onToggle }, t(v.lang, follow.following ? 'unfollowButton' : 'followButton')), ' ',
       h('button', { type: 'button', class: follow.muted ? '' : 'danger', ...(follow.busy ? { disabled: true } : {}), onClick: follow.onMute }, t(v.lang, follow.muted ? 'unmuteButton' : 'muteButton'))) : null)
+}
+
+/** How much the network vouches for an account: the score out of 100, its level, and every point with its reason (folded), plus what it is not. */
+export function renderTrust(tr: TrustScore | 'loading' | 'failed' | undefined, v: View): HTMLElement | null {
+  if (!tr) return null
+  if (tr === 'loading') return h('section', { class: 'card trust' }, h('h2', {}, t(v.lang, 'trustTitle')), h('p', { class: 'meta', role: 'status' }, t(v.lang, 'trustLoading')))
+  if (tr === 'failed') return h('section', { class: 'card trust' }, h('h2', {}, t(v.lang, 'trustTitle')), h('p', { class: 'meta' }, t(v.lang, 'trustFailed')))
+  const line = (r: TrustReason) => h('li', {}, h('span', { class: 'trust-pts' }, `+${r.points}`), ' ', t(v.lang, `trust_${r.key}` as Parameters<typeof t>[1], r.n === undefined ? {} : { n: r.n }))
+  return h('section', { class: `card trust ${tr.level}` },
+    h('h2', {}, t(v.lang, 'trustTitle')),
+    h('p', { class: 'trust-score' }, h('strong', {}, `${tr.score}/100`), ' · ', t(v.lang, `trustLevel_${tr.level}` as Parameters<typeof t>[1])),
+    tr.reasons.length ? h('details', {}, h('summary', {}, t(v.lang, 'trustWhy')), h('ul', {}, ...tr.reasons.map(line))) : h('p', { class: 'meta' }, t(v.lang, 'trustNothing')),
+    h('p', { class: 'meta' }, t(v.lang, 'trustNote')))
 }
 
 /** Notes | Replies on an account's page. */

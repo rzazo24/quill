@@ -1132,3 +1132,12 @@ describe('searching a #tag', () => {
     expect(a.filters.some((f) => JSON.stringify((f as Record<string, unknown>)['#t']) === '["quilltest"]')).toBe(true)
   })
 })
+
+describe('the trust score on an account page', () => {
+  it('appears after the page, with the score, its level and every reason; not on your own page', async () => {
+    const a = boot({ events: [...world, ev(friend, JSON.stringify({ name: 'Ana' }), { kind: 0, created_at: 1 })], stored: { me } }); await tick(200)
+    await a.go(`#/user/${friend}`); await tick(500)
+    const card = a.root.querySelector('.trust')!; expect(card).not.toBeNull(); expect(card.textContent).toContain('/100'); expect(card.textContent).toContain('you follow it'); expect(card.textContent).toContain('not a verdict')
+    await a.go(`#/user/${me}`); await tick(400); expect(a.root.querySelector('.trust')).toBeNull()
+  })
+})
