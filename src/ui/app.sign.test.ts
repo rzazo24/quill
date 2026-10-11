@@ -20,7 +20,7 @@ const click = async (root: HTMLElement, text: string) => { const b = btn(root, t
 
 /** Connecting lives on the Me page now: go there, connect, and come back to the feed where the notes (and their reaction buttons) are. */
 async function connectClave(a: ReturnType<typeof boot>, sg: ReturnType<typeof fakeSigner>) {
-  await a.go('#/me'); await click(a.root, 'Connect Clave'); sg.raw.approve(); await tick(100); await a.go('#/')
+  await a.go('#/me'); await click(a.root, 'Connect a signer'); sg.raw.approve(); await tick(100); await a.go('#/')
 }
 
 /** A signer that does what the test tells it to: connects when asked, signs (or not), and records what it was asked. */
@@ -82,15 +82,15 @@ describe('connecting Clave', () => {
   it('offers a link for Clave, then shows who you are signing as, and reactions appear', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100)
     expect(a.root.querySelector('.actions')).toBeNull() // not connected: nothing to click
-    await a.go('#/me'); await click(a.root, 'Connect Clave') // opens the panel: the bunker:// address comes first, nothing is started yet
-    expect(sg.log).not.toContain('startConnect'); expect(a.text()).toContain('Recommended: paste the bunker address from Clave')
+    await a.go('#/me'); await click(a.root, 'Connect a signer') // opens the panel: the bunker:// address comes first, nothing is started yet
+    expect(sg.log).not.toContain('startConnect'); expect(a.text()).toContain('Recommended: paste the bunker address of your signer')
     expect(a.root.querySelector('a.button')).toBeNull()
-    await click(a.root, 'Connect Clave') // the alternative, inside "Use a link instead"
+    await click(a.root, 'Connect a signer') // the alternative, inside "Use a link instead"
     expect(sg.log).toContain('startConnect')
     expect(a.root.querySelector('a.button')!.getAttribute('href')).toMatch(/^https:\/\/clave\.casa\/connect\/\?uri=/)
     // it must open in a NEW tab: leaving this page would throw away the pending connection that Clave is about to answer
     expect(a.root.querySelector('a.button')!.getAttribute('target')).toBe('_blank'); expect(a.root.querySelector('a.button')!.getAttribute('rel')).toBe('noopener noreferrer')
-    expect(a.text()).toContain('Waiting for Clave')
+    expect(a.text()).toContain('Waiting for the signer')
     sg.raw.approve(); await tick(100)
     expect(a.text()).toContain('Signing as')
     await a.go('#/'); expect(a.root.querySelectorAll('.actions').length).toBeGreaterThan(0) // on the reading pages the notes now carry reply and reactions
@@ -103,12 +103,12 @@ describe('connecting Clave', () => {
   })
   it('connecting from the login screen makes the signer\'s key the reader', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg, stored: {} })
-    expect(a.text()).toContain('Read as…'); await click(a.root, 'Connect Clave'); sg.raw.approve(); await tick(120); await a.go('#/')
+    expect(a.text()).toContain('Read as…'); await click(a.root, 'Connect a signer'); sg.raw.approve(); await tick(120); await a.go('#/')
     expect(a.mem.get('me')).toBe(me); expect(a.text()).toContain('a post <b>from</b> my friend')
   })
   it('a failed bunker:// connection shows why', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100)
-    await a.go('#/me'); await click(a.root, 'Connect Clave')
+    await a.go('#/me'); await click(a.root, 'Connect a signer')
     const input = a.root.querySelector('.connect input') as HTMLInputElement; input.value = 'bunker://x'
     a.root.querySelector('.connect form')!.dispatchEvent(new Event('submit', { cancelable: true })); await tick(60)
     expect(a.text()).toMatch(/Could not connect: nope/)
@@ -118,18 +118,18 @@ describe('connecting Clave', () => {
 describe('pasting the bunker:// address from Clave', () => {
   it('the paste button reads the clipboard and connects with the bunker address', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg, clipboard: 'bunker://' + 'a'.repeat(64) + '?relay=wss%3A%2F%2Frelay.powr.build&secret=s' }); await tick(100)
-    await a.go('#/me'); await click(a.root, 'Connect Clave'); await click(a.root, 'Paste and connect')
+    await a.go('#/me'); await click(a.root, 'Connect a signer'); await click(a.root, 'Paste and connect')
     expect(sg.log.some((l) => l.startsWith('bunker bunker://'))).toBe(true)
   })
   it('a clipboard that is not a bunker address is refused with a message, and nothing is sent anywhere', async () => {
     for (const clip of ['', 'hello world', 'nostrconnect://abc', 'https://example.com', new Error('permission denied')]) {
       const sg = fakeSigner(); const a = boot({ signer: sg, clipboard: clip }); await tick(100)
-      await a.go('#/me'); await click(a.root, 'Connect Clave'); await click(a.root, 'Paste and connect')
+      await a.go('#/me'); await click(a.root, 'Connect a signer'); await click(a.root, 'Paste and connect')
       expect(a.text(), String(clip)).toContain('does not hold a bunker:// address'); expect(sg.log.some((l) => l.startsWith('bunker'))).toBe(false)
     }
   })
   it('the typed address still works, and a failure says why', async () => {
-    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await a.go('#/me'); await click(a.root, 'Connect Clave')
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await a.go('#/me'); await click(a.root, 'Connect a signer')
     const input = a.root.querySelector('.bunker input') as HTMLInputElement; input.value = 'bunker://x'
     a.root.querySelector('.bunker form')!.dispatchEvent(new Event('submit', { cancelable: true })); await tick(60)
     expect(a.text()).toMatch(/Could not connect: nope/)
@@ -138,7 +138,7 @@ describe('pasting the bunker:// address from Clave', () => {
 
 describe('the connect panel survives redraws', () => {
   it('what was typed in the bunker field and the opened "use a link" section are still there after the page redraws', async () => {
-    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await a.go('#/me'); await click(a.root, 'Connect Clave')
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await a.go('#/me'); await click(a.root, 'Connect a signer')
     const input = a.root.querySelector('.bunker input') as HTMLInputElement; input.value = 'bunker://half-typed'; input.dispatchEvent(new Event('input'))
     const det = a.root.querySelector('details.by-link') as HTMLDetailsElement; det.open = true; det.dispatchEvent(new Event('toggle'))
     ;[...a.root.querySelectorAll('.lang button')].find((b) => b.textContent === 'ES')!.dispatchEvent(new Event('click')); await tick(100) // anything that redraws the page
@@ -210,7 +210,7 @@ describe('tapping again while Clave has not answered', () => {
   it('a new tap replaces the old wait (so opening Clave and tapping again works): one request cancelled, one published', async () => {
     const sg = fakeSigner({ hangFirst: true }); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)
     ;(a.root.querySelector('button[aria-label="React ❤️"]') as HTMLElement).click(); await tick(60)
-    expect(a.text()).toMatch(/Waiting for Clave/); expect(a.pub.sent).toEqual([])
+    expect(a.text()).toMatch(/Waiting for the signer/); expect(a.pub.sent).toEqual([])
     ;(a.root.querySelector('button[aria-label="React 🤙"]') as HTMLElement).click(); await tick(120)
     expect(sg.log.filter((l) => l.startsWith('sign'))).toHaveLength(2)
     expect(a.pub.sent).toHaveLength(1); expect(a.pub.sent[0]!.event.content).toBe('🤙')
@@ -225,7 +225,7 @@ describe('tapping again while Clave has not answered', () => {
   it('waiting for the signer is a popup fixed to the screen that stays while it waits, can be cancelled, and goes away when it is over', async () => {
     const sg = fakeSigner({ hang: true }); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)
     ;(a.root.querySelector('button[aria-label="React ❤️"]') as HTMLElement).click(); await tick(60)
-    const pop = a.root.querySelector('.sign .popup.stay')!; expect(pop.textContent).toMatch(/Waiting for Clave/); expect(pop.querySelector('button')!.textContent).toBe('Cancel')
+    const pop = a.root.querySelector('.sign .popup.stay')!; expect(pop.textContent).toMatch(/Waiting for the signer/); expect(pop.querySelector('button')!.textContent).toBe('Cancel')
     await tick(3200); expect(a.root.querySelector('.sign .popup.stay')).not.toBeNull() // it does not fade away like a plain notice
     ;(pop.querySelector('button') as HTMLElement).click(); await tick(80)
     expect(a.root.querySelector('.sign .popup.stay')).toBeNull(); expect(a.pub.sent).toEqual([])
@@ -268,22 +268,22 @@ describe('writing a reply', () => {
   })
   it('a Clave that never answers: clear message, nothing published, and the draft is kept', async () => {
     const sg = fakeSigner({ signError: 'the signer did not answer within 300 s' }); const a = await toReview(sg); await click(a.root, 'Publish'); await tick(40)
-    expect(a.text()).toMatch(/Clave did not answer in time/); expect(a.pub.sent).toEqual([])
+    expect(a.text()).toMatch(/The signer did not answer in time/); expect(a.pub.sent).toEqual([])
     expect(a.root.querySelector('pre.preview')).not.toBeNull()
   })
   it('while waiting for Clave there is a Cancel button: it stops the wait, publishes nothing, keeps the draft', async () => {
     const sg = fakeSigner({ hang: true }); const a = await toReview(sg); await click(a.root, 'Publish')
-    expect(a.text()).toMatch(/Waiting for Clave… If it takes long, open Clave or tap its notification/); expect(sg.log.filter((l) => l.startsWith('sign'))).toHaveLength(1) // ONE request
+    expect(a.text()).toMatch(/Waiting for the signer… If it takes long, open it or tap its notification/); expect(sg.log.filter((l) => l.startsWith('sign'))).toHaveLength(1) // ONE request
     await click(a.root, 'Cancel'); await tick(30)
     expect(a.text()).toContain('Cancelled. Nothing was published.'); expect(a.pub.sent).toEqual([]); expect(a.root.querySelector('pre.preview')).not.toBeNull()
   })
   it('a rejection with no reason says so and what to check, instead of a blank', async () => {
     const a = await toReview(fakeSigner({ signError: ' ' })); await click(a.root, 'Publish'); await tick(40)
-    expect(a.text()).toContain('Clave did not sign: it gave no reason.'); expect(a.text()).toContain('follow lists'); expect(a.text()).toContain('Nothing was published'); expect(a.pub.sent).toEqual([])
+    expect(a.text()).toContain('The signer did not sign: it gave no reason.'); expect(a.text()).toContain('follow lists'); expect(a.text()).toContain('Nothing was published'); expect(a.pub.sent).toEqual([])
   })
   it('a rejection in Clave publishes nothing', async () => {
     const a = await toReview(fakeSigner({ signError: 'user rejected the request' })); await click(a.root, 'Publish'); await tick(40)
-    expect(a.text()).toMatch(/Clave did not sign: user rejected the request. Nothing was published/); expect(a.pub.sent).toEqual([])
+    expect(a.text()).toMatch(/The signer did not sign: user rejected the request. Nothing was published/); expect(a.pub.sent).toEqual([])
   })
   it('relays that failed can be retried without signing again', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg, pub: publisherFake({ 'wss://r1.example': 'ok', 'wss://r2.example': 'no answer from the relay' }) })
@@ -324,7 +324,7 @@ describe('the relay list on Nostr', () => {
   })
   it('without a signer it says what is needed and offers nothing to press', async () => {
     const a = boot(); await open(a)
-    expect(prefs(a).textContent).toContain('Connect Clave (in Me) to publish this list.'); expect([...prefs(a).querySelectorAll('button')].some((b) => b.textContent === 'Publish this list on Nostr')).toBe(false)
+    expect(prefs(a).textContent).toContain('Connect a signer (in Me) to publish this list.'); expect([...prefs(a).querySelectorAll('button')].some((b) => b.textContent === 'Publish this list on Nostr')).toBe(false)
   })
   it('a different published list is reported, and can be used here instead', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg, events: [...world, published(['wss://x.example', 'wss://y.example', 'wss://z.example'])], stored: { me, relays: JSON.stringify(['wss://r1.example']) } }); await open(a, sg)
@@ -435,7 +435,7 @@ describe('the connection status on Me', () => {
   it('is a status row: a dot, "Clave connected" with who it signs as, and Disconnect on the right as a careful (danger) button', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg); await a.go('#/me'); await tick(80)
     const row = a.root.querySelector('.signing-as')!
-    expect([...row.children].map((c) => c.className)).toEqual(['dot', 'who', 'danger']); expect(row.querySelector('strong')!.textContent).toBe('Clave connected'); expect(row.querySelector('.who span')!.textContent).toContain('Signing as')
+    expect([...row.children].map((c) => c.className)).toEqual(['dot', 'who', 'danger']); expect(row.querySelector('strong')!.textContent).toBe('Signer connected'); expect(row.querySelector('.who span')!.textContent).toContain('Signing as')
     expect(row.lastElementChild!.textContent).toBe('Disconnect'); expect(row.querySelector('.dot')!.getAttribute('aria-hidden')).toBe('true')
     // one tap only asks; nothing is disconnected yet
     ;(row.lastElementChild as HTMLElement).click(); await tick(60)
