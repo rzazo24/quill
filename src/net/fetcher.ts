@@ -3,8 +3,11 @@
 import { verifyEvent, type Event, type Filter } from 'nostr-tools'
 import { SimplePool } from 'nostr-tools/pool'
 
+/** How long to wait. By default notes and the like do not wait for the slowest relay and everything else waits for all of them; `quick` and `grace` (ms) override that. */
+export interface QueryOptions { quick?: boolean; grace?: number }
+
 export interface Fetcher {
-  query(filter: Filter): Promise<Event[]>
+  query(filter: Filter, options?: QueryOptions): Promise<Event[]>
 }
 
 export const DEFAULT_RELAYS = [
@@ -36,10 +39,42 @@ export function accept(filter: Filter, events: Event[], verify: (e: Event) => bo
   return out
 }
 
+/** Notes, reposts, reactions, profiles and single notes by id: a relay that is slow to answer holds little that the others do not, so they do not wait for the last one. */
+export const isQuick = (filter: Filter): boolean => !!filter.ids || (filter.kinds ?? [-1]).every((k) => [0, 1, 6, 7, 16].includes(k))
+
+/** One subscription to one relay: `onevent` for each event, `oneose` when it has said all it has (or failed: then there is nothing more to wait for there). */
+export type Subscribe = (url: string, filter: Filter, on: { onevent(e: Event): void; oneose(): void; /** Asked BEFORE the signature is checked: an event another relay already sent is not checked again. */ alreadyHaveEvent(id: string): boolean }) => { close(): void }
+
+/**
+ * Asks every relay at the same time and answers when a majority has finished (plus a short moment for the ones about to), or when everybody has, or after `maxWait`.
+ * What a slower relay sends later is dropped. Each event is kept once, even if several relays send it.
+ */
+export function collectQuick(subscribe: Subscribe, relays: string[], filter: Filter, { maxWait = 6000, grace = 200, share = 0.6 } = {}): Promise<Event[]> {
+  return new Promise((resolve) => {
+    const events: Event[] = [], seen = new Set<string>(), closers: { close(): void }[] = []
+    const need = Math.max(1, Math.ceil(relays.length * share))
+    let done = 0, finished = false, graceTimer: ReturnType<typeof setTimeout> | undefined
+    const finish = () => { if (finished) return; finished = true; clearTimeout(graceTimer); clearTimeout(limit); for (const c of closers) try { c.close() } catch { /* already closed */ } resolve(events) }
+    const limit = setTimeout(finish, maxWait)
+    if (!relays.length) return finish()
+    for (const url of relays) {
+      let counted = false
+      const oneose = () => { if (counted) return; counted = true; done++; if (done >= relays.length) finish(); else if (done >= need && graceTimer === undefined) graceTimer = setTimeout(finish, grace) }
+      closers.push(subscribe(url, filter, { onevent: (e) => { if (!finished && !seen.has(e.id)) { seen.add(e.id); events.push(e) } }, oneose, alreadyHaveEvent: (id) => seen.has(id) }))
+    }
+  })
+}
+
 /** `relays` may be a function, so the list can change while the page is open (the reader edits it in Settings). */
 export function poolFetcher(relays: string[] | (() => string[]) = DEFAULT_RELAYS, maxWait = 6000): Fetcher {
   const pool = new SimplePool()
-  return { query: async (filter) => accept(filter, await pool.querySync(typeof relays === 'function' ? relays() : relays, filter, { maxWait })) }
+  const subscribe: Subscribe = (url, filter, on) => pool.subscribeMany([url], filter, { maxWait, onevent: on.onevent, oneose: on.oneose, onclose: on.oneose, alreadyHaveEvent: on.alreadyHaveEvent })
+  return {
+    query: async (filter, options) => {
+      const list = typeof relays === 'function' ? relays() : relays
+      return accept(filter, options?.quick ?? isQuick(filter) ? await collectQuick(subscribe, list, filter, { maxWait, ...(options?.grace !== undefined ? { grace: options.grace } : {}) }) : await pool.querySync(list, filter, { maxWait }))
+    },
+  }
 }
 
 /** The same query for many authors, a hundred at a time (relays refuse long lists), merged without duplicates. */
@@ -55,10 +90,10 @@ export async function queryAuthors(f: Fetcher, base: Filter, authors: string[], 
 export function memo(f: Fetcher): Fetcher & { clear(): void } {
   const cache = new Map<string, Promise<Event[]>>()
   return {
-    query: (filter) => {
+    query: (filter, options) => {
       const key = JSON.stringify(filter)
       let hit = cache.get(key)
-      if (!hit) { hit = f.query(filter); hit.catch(() => cache.delete(key)); cache.set(key, hit) }
+      if (!hit) { hit = f.query(filter, options); hit.catch(() => cache.delete(key)); cache.set(key, hit) }
       return hit
     },
     clear: () => cache.clear(),

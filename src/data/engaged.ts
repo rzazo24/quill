@@ -25,6 +25,12 @@ export class Engagement {
   }
   addReply(noteId: string): void { if (HEX64.test(noteId)) this.replies.add(noteId) }
   addRepost(noteId: string): void { if (HEX64.test(noteId)) this.shared.add(noteId) }
+  /** Adds everything another index knows (what the relays said arrives later than what was done here in the meantime: both count). */
+  merge(other: Engagement): void {
+    for (const [id, set] of other.reacted) for (const c of set) this.addReaction(id, c)
+    for (const id of other.replies) this.addReply(id)
+    for (const id of other.shared) this.addRepost(id)
+  }
 }
 
 /** `events` are the reader's own reactions (kind 7), notes (kind 1) and reposts (kinds 6 and 16); anything else, or anyone else's, is ignored. */

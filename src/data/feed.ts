@@ -13,10 +13,11 @@ const byNewest = (a: Event, b: Event) => b.created_at - a.created_at || (a.id < 
  *  A reposted note is judged by the filter like any other, by ITS author: a repost does not vouch for it. */
 export async function loadFollowing(f: Fetcher, ctx: Context, settings: Settings = DEFAULT_SETTINGS, opts: { reposts?: boolean } = {}): Promise<Judged[]> {
   const authors = [...new Set([ctx.me, ...ctx.follows])]
+  const reposted = opts.reposts ? loadRepostRefs(f, authors, FEED_LIMIT).catch(() => []) : null // asked at the same time as the notes: they do not depend on each other
   const events = await queryAuthors(f, { kinds: [1], limit: FEED_LIMIT }, authors)
   const roots = events.filter((e) => !isReply(e)).sort(byNewest).slice(0, FEED_LIMIT)
-  if (!opts.reposts) return judgeAll(roots, ctx, settings)
-  const refs = (await loadRepostRefs(f, authors, FEED_LIMIT).catch(() => [])).filter((r) => !ctx.muted.has(r.reposter))
+  if (!reposted) return judgeAll(roots, ctx, settings)
+  const refs = (await reposted).filter((r) => !ctx.muted.has(r.reposter))
   const items = mergeFeed(roots, refs, await fetchOriginals(f, refs).catch(() => new Map()), FEED_LIMIT)
   const by = new Map(items.map((i) => [i.event.id, i.repostedBy]))
   return judgeAll(items.map((i) => i.event), ctx, settings).map((j) => ({ ...j, ...(by.get(j.event.id)?.length ? { repostedBy: by.get(j.event.id)! } : {}) }))

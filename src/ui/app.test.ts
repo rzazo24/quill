@@ -12,14 +12,14 @@ const world: Event[] = [
   ev(friend, 'a post from my friend'), ev(friend, 'hello', { kind: 0, content: JSON.stringify({ name: 'Ana' }) }),
   ev(far, 'a pitch from a stranger', { tags: [['p', me]] }),
 ]
-const relays = (events: Event[], delayMs = 0): Fetcher => ({ query: async (f: Filter) => { if (delayMs) await new Promise((r) => setTimeout(r, delayMs)); return events.filter((e) => answers(f, e)) } })
+const relays = (events: Event[], delayMs = 0, slowFor?: (f: Filter) => number): Fetcher => ({ query: async (f: Filter) => { const wait = delayMs + (slowFor?.(f) ?? 0); if (wait) await new Promise((r) => setTimeout(r, wait)); return events.filter((e) => answers(f, e)) } })
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms))
 const roots: HTMLElement[] = []
 
-function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean } } = {}) {
+function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; slowFor?: (f: Filter) => number } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
-  const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs), calls = { n: 0 }
+  const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs, opts.slowFor), calls = { n: 0 }
   startApp(root, {
     fetcher: { query: (f) => { calls.n++; return base.query(f) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
     checkVersion: opts.newer ? async () => { asked.n++; return opts.newer!.value } : undefined, languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
@@ -879,5 +879,21 @@ describe('the Halloween theme', () => {
     sw().checked = false; sw().dispatchEvent(new Event('change', { bubbles: true })); await tick(60)
     expect(a.mem.get('theme')).toBe('default'); expect(themed(a)).toBe(false); expect(a.root.querySelector('.cobweb')).toBeNull()
     expect(a.text()).toContain('It turns on by itself from 24 October to 1 November')
+  })
+})
+
+
+describe('the first screen does not wait for the follow graph', () => {
+  const graphQuery = (f: Filter) => f.kinds?.length === 1 && f.kinds[0] === 3 && !!f.authors && f.limit === 200 // the follow lists of the people you follow
+  const slow = { slowFor: (f: Filter) => (graphQuery(f) ? 1500 : 0) }
+  it('the Following feed is on the page while the graph is still on its way, and is built again when it arrives', async () => {
+    const a = boot({ stored: { me }, ...slow }); await tick(500)
+    expect(a.text()).toContain('a post from my friend') // the graph needs 1500 ms: the feed did not wait for it
+    await tick(1600); expect(a.text()).toContain('a post from my friend') // and after the graph arrived it is still there (built once more, from what was already asked)
+  })
+  it('Mentions, which judge by the graph, wait for it: nothing is shown with a half-known graph', async () => {
+    const a = boot({ stored: { me }, ...slow }); await tick(200); await a.go('#/mentions'); await tick(400)
+    expect(a.text()).not.toContain('a pitch from a stranger') // not yet: the graph decides whether it is outside the network
+    await tick(1800); expect(a.text()).toContain('a pitch from a stranger')
   })
 })

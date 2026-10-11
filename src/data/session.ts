@@ -15,17 +15,29 @@ export interface Session {
   graphInfo: GraphInfo
 }
 
-export async function loadSession(f: Fetcher, me: string): Promise<Session> {
-  const own = await f.query({ kinds: [3, 10000], authors: [me], limit: 10 })
+/** The first, cheap part: your own lists. With these the Following feed can already be built (everybody in it is somebody you chose). */
+export async function loadOwnLists(f: Fetcher, me: string): Promise<{ follows: Set<string>; muted: Set<string>; mutedWords: string[] }> {
+  const own = await f.query({ kinds: [3, 10000], authors: [me], limit: 10 }, { quick: true, grace: 300 }) // a majority of the relays and a moment more: one that hangs must not hold the first screen
   const newest = (kind: number) => newestPerAuthor(own.filter((e) => e.kind === kind)).get(me)
   const followList = newest(3), muteList = newest(10000)
-  const follows = new Set(followList ? followsOf(followList) : [])
   const mutes = muteList ? mutesOf(muteList) : { pubkeys: [], words: [] }
+  return { follows: new Set(followList ? followsOf(followList) : []), muted: new Set(mutes.pubkeys), mutedWords: mutes.words }
+}
+
+/** The slow part: the follow lists of the people you follow, hundreds of events whose signatures all have to be checked. */
+export async function loadGraphInfo(f: Fetcher, me: string, follows: ReadonlySet<string>): Promise<GraphInfo> {
   const graphOwners = [...follows].slice(0, MAX_GRAPH_FOLLOWS)
   const lists = new Map<string, string[]>()
   for (const [owner, e] of newestPerAuthor(await queryAuthors(f, { kinds: [3], limit: 200 }, graphOwners))) lists.set(owner, followsOf(e))
-  const graphInfo = buildGraph(me, follows, lists, graphOwners.length)
-  return { me, follows, muted: new Set(mutes.pubkeys), mutedWords: mutes.words, graphInfo }
+  return buildGraph(me, follows, lists, graphOwners.length)
+}
+
+/** What the graph says before it is known: nothing is "loaded", so (the principle of the filter) nothing is hidden because of it. */
+export const pendingGraph = (me: string, follows: ReadonlySet<string>): GraphInfo => buildGraph(me, follows, new Map(), Math.min(follows.size, MAX_GRAPH_FOLLOWS))
+
+export async function loadSession(f: Fetcher, me: string): Promise<Session> {
+  const own = await loadOwnLists(f, me)
+  return { me, ...own, graphInfo: await loadGraphInfo(f, me, own.follows) }
 }
 
 /** The filter's context: the reader's own mutes plus whatever they added in this app. */

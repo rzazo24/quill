@@ -14,7 +14,7 @@ import { addBackup, checkBase, loadFollowList, nextKnown, parseBackups } from '.
 import { loadFollowing, loadMentions, loadMine, loadNames, loadNote, loadThread, type Thread, type ThreadNode } from '../data/feed.js'
 import { Engagement, loadEngagement, normReaction } from '../data/engaged.js'
 import { countNew, groupReactions, groupReposts, loadActivity, mergeKnown, newFollowers, parseKnown, type Activity } from '../data/activity.js'
-import { contextOf, loadSession, type Session } from '../data/session.js'
+import { contextOf, loadGraphInfo, loadOwnLists, pendingGraph, type Session } from '../data/session.js'
 import { DEFAULT_RELAYS, memo, type Fetcher } from '../net/fetcher.js'
 import { failedRelays, type Publisher } from '../net/publisher.js'
 import { PipelineError, signAndPublish, type Published, type SignerApi, type Step } from '../sign/pipeline.js'
@@ -151,6 +151,12 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let current: Promise<boolean> | null = null // the action in progress
   let lastLoadAt = 0
   let engagement = new Engagement() // what the reader already did to each note
+  // The follow graph and the reader's own reactions come AFTER the first screen is on the page (checking hundreds of signatures keeps the browser too busy to answer the
+  // feed's own queries: starting them together made the feed wait for them). `startBackground` is set when the account is loaded; `background()` runs it once.
+  let startBackground: (() => Promise<void>) | null = null
+  let backgroundRun: Promise<void> | null = null
+  const background = (): Promise<void> => (backgroundRun ??= startBackground ? startBackground() : Promise.resolve())
+  const afterFirstPaint = (): void => { if (backgroundRun === null && startBackground) setTimeout(() => { void background() }, 60) }
   let scrollToTop = false // set when a different view is shown
   let updateReady = false
   // activity around my notes: what is new since the last time the Mentions tab was open
@@ -180,7 +186,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const followersSeen = new Set<string>() // everybody seen following you since this page opened (the known ones are in `knownFollowers`)
   /** How many accounts have been seen following the reader: only a lower bound (each relay knows part of them), and it only grows. Null while nothing has been looked at yet. */
   const followerCount = (): number | null => { const k = loadKnown(); return k === null && followersSeen.size === 0 ? null : new Set([...(k ?? []), ...followersSeen]).size }
-  const forgetAccount = () => { for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
+  const forgetAccount = () => { startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
   const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
@@ -209,9 +215,11 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   async function loadAccount(): Promise<boolean> {
     const who = me!
     status = t(lang, 'loadingFollows'); draw()
+    // Only what the first screen needs is waited for: your own lists (the Following feed is made of people you chose) and the relay list you published. The follow graph
+    // (hundreds of lists, every signature checked) and what you already did to each note come after, in the background; when they are in, the page is built once more.
     const fetchAll = async () => {
-      const s = await loadSession(fetcher, who)
-      return { s, e: await loadEngagement(fetcher, who).catch(() => new Engagement()), p: await loadPublishedRelays(fetcher, who).catch(() => undefined) } // a failure only means nothing is marked / unknown
+      const [own, p] = await Promise.all([loadOwnLists(fetcher, who), loadPublishedRelays(fetcher, who).catch(() => undefined)]) // a failure only means "unknown"
+      return { own, p }
     }
     let got: Awaited<ReturnType<typeof fetchAll>>
     try {
@@ -219,14 +227,24 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       if (!adoptTried) {
         adoptTried = true
         if (got.p && safeGet(kv, 'relays') === null && !sameList(got.p, relays)) { // a new device: start from the list the reader published
-          relays = got.p; safeSet(kv, 'relays', JSON.stringify(relays)); deps.setRelays?.(relays); fetcher.clear(); say('info', t(lang, 'listAdopted', { n: relays.length })) // from now on it is this device's own list: the notice shows once
+          relays = got.p; safeSet(kv, 'relays', JSON.stringify(relays)); deps.setRelays?.(relays); fetcher.clear(); say('info', t(lang, 'listAdopted', { n: relays.length })) // from now on it is this device's own list: this happens once
           got = await fetchAll()
         }
       }
     } catch { status = null; return false }
     if (me !== who) return false // signed out or switched while loading
-    session = got.s; engagement = got.e; published = got.p
-    saveKnownFollowing(nextKnown(loadKnownFollowing(), got.s.follows)) // what the reader follows, as far as it is trusted
+    const s: Session = { me: who, ...got.own, graphInfo: pendingGraph(who, got.own.follows) }
+    session = s; published = got.p
+    const mineEngagement = engagement = new Engagement()
+    saveKnownFollowing(nextKnown(loadKnownFollowing(), s.follows)) // what the reader follows, as far as it is trusted
+    backgroundRun = null
+    startBackground = async () => {
+      await Promise.allSettled([
+        loadGraphInfo(fetcher, who, s.follows).then((g) => { if (session === s) s.graphInfo = g }),
+        loadEngagement(fetcher, who).then((e) => mineEngagement.merge(e)), // what was done here in the meantime stays
+      ])
+      if (me === who && session === s) void load() // judge again with the graph and mark what you did
+    }
     return true
   }
 
@@ -251,6 +269,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
 
   /** The content of one view (a feed, a thread, an account, a list…). `alive` says whether the answer is still wanted: when it is not, null comes back. */
   async function buildContent(route: Route, alive: () => boolean): Promise<HTMLElement | null> {
+    if (route.name === 'mentions' || route.name === 'note' || (route.name === 'following' && feedMode === 'network')) await background() // they judge by the graph; the Following feed and Me do not
     let content: HTMLElement
     try {
       if (route.name === 'note') {
@@ -280,7 +299,9 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         if (act) for (const k of act.followers) followersSeen.add(k)
         if (act && followersMark === null) followersMark = baseline
         const fresher = act ? newFollowers(act, followersMark!) : []
-        await nameThem(act ? [...items, ...act.reactions, ...act.reposts] : items, fresher.slice(0, 8))
+        // the names of what is on the first page come first; the rest are asked for once it is on screen (a card of a later page is built when "Show more" is tapped, by then they are in)
+        await nameThem(act ? [...items.slice(0, PAGE), ...act.reactions, ...act.reposts] : items.slice(0, PAGE), fresher.slice(0, 8))
+        if (items.length > PAGE) setTimeout(() => { void nameThem(items.slice(PAGE)) }, 300)
         if (route.name === 'me' && !names.has(me!)) for (const [k, n] of await loadNames(fetcher, [me!])) names.set(k, n)
         if (act) {
           if (markFrom === null) markFrom = seenAt ?? nowSec() // first ever visit: nothing is "new"
@@ -309,7 +330,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     let content: HTMLElement | null = null
     try { content = await buildContent(route, () => my === p.run && !!me) } finally { if (--paneJobs === 0) status = null }
     if (content === null) { if (paneJobs === 0) draw(); return }
-    p.body = content; lastLoadAt = deps.nowMs?.() ?? Date.now(); draw()
+    p.body = content; lastLoadAt = deps.nowMs?.() ?? Date.now(); draw(); afterFirstPaint()
   }
 
   /** Wide screens. 'all': every column and the panel; 'route': only the panel (the address changed, the columns are what they were). */
@@ -352,7 +373,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     status = t(lang, 'loadingFeed'); draw()
     const content = await buildContent(route, () => mine === run)
     if (content === null) return
-    status = null; body = content; lastLoadAt = deps.nowMs?.() ?? Date.now(); draw()
+    status = null; body = content; lastLoadAt = deps.nowMs?.() ?? Date.now(); draw(); afterFirstPaint()
     if (route.name !== 'mentions') void poll()
   }
 

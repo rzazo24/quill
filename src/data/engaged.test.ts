@@ -53,3 +53,15 @@ describe('what the reader already shared', () => {
     const e = engagementOf([ev(me, '', { kind: 6, tags: [] }), ev(me, '', { kind: 6, tags: [['e', 'nothex']] })], me); expect(e.of('nothex').reposted).toBe(false)
   })
 })
+
+
+import { Engagement as Eng } from './engaged.js'
+describe('merging what the relays say with what was done meanwhile', () => {
+  it('keeps both: a reaction given before the relays answered is not lost, and what they know is added', () => {
+    const a = 'a'.repeat(64), b = 'b'.repeat(64), c = 'c'.repeat(64)
+    const local = new Eng(); local.addReaction(a, '❤️'); local.addReply(b)
+    const fromRelays = new Eng(); fromRelays.addReaction(a, '🔥'); fromRelays.addReaction(c, '+'); fromRelays.addRepost(c)
+    local.merge(fromRelays)
+    expect([...local.of(a).reactions].sort()).toEqual(['❤', '🔥']); expect(local.of(b).replied).toBe(true); expect(local.of(c).reactions.has('+')).toBe(true); expect(local.of(c).reposted).toBe(true)
+  })
+})

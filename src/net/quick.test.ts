@@ -1,0 +1,48 @@
+import { describe, expect, it, vi } from 'vitest'
+import type { Event } from 'nostr-tools'
+import { collectQuick, isQuick, type Subscribe } from './fetcher.js'
+
+const ev = (id: string) => ({ id, pubkey: 'p', kind: 1, content: '', tags: [], created_at: 1, sig: 's' }) as Event
+/** Pretend relays: each answers after its own delay (null: never) with its own events. */
+function fakeRelays(spec: Record<string, { after: number | null; events: string[] }>): Subscribe {
+  return (url, _f, on) => {
+    const r = spec[url]!; const timers: ReturnType<typeof setTimeout>[] = []
+    if (r.after !== null) timers.push(setTimeout(() => { for (const id of r.events) on.onevent(ev(id)); on.oneose() }, r.after))
+    return { close: () => timers.forEach(clearTimeout) }
+  }
+}
+const urls = ['a', 'b', 'c', 'd', 'e', 'f']
+
+describe('collectQuick: do not wait for the last relay', () => {
+  it('answers when a majority has finished (plus a moment), without what a slow relay would have added, each event once', async () => {
+    vi.useFakeTimers()
+    const spec = Object.fromEntries(urls.map((u, i) => [u, { after: i < 4 ? 50 + i * 10 : 5000, events: i === 0 ? ['x', 'y'] : ['x'] }]))
+    const p = collectQuick(fakeRelays(spec), urls, { kinds: [1] }); await vi.advanceTimersByTimeAsync(400)
+    expect((await p).map((e) => e.id).sort()).toEqual(['x', 'y']); vi.useRealTimers()
+  })
+  it('asks, for each event, whether it was already received before the (costly) signature check: an event sent by six relays is checked once', async () => {
+    vi.useFakeTimers(); let checked = 0
+    const sub: Subscribe = (_url, _f, on) => { const t = setTimeout(() => { for (const id of ['a', 'b', 'c']) { if (!on.alreadyHaveEvent(id)) { checked++; on.onevent(ev(id)) } } on.oneose() }, 10); return { close: () => clearTimeout(t) } }
+    const p = collectQuick(sub, urls, { kinds: [1] }); await vi.advanceTimersByTimeAsync(400)
+    expect((await p).length).toBe(3); expect(checked).toBe(3); vi.useRealTimers() // six relays, three events: three checks, not eighteen
+  })
+  it('a relay that never answers or fails does not hold it back, and when everybody answers it does not wait for the grace', async () => {
+    vi.useFakeTimers()
+    const dead = collectQuick(fakeRelays({ a: { after: 30, events: ['1'] }, b: { after: null, events: [] }, c: { after: 40, events: ['2'] } }), ['a', 'b', 'c'], { kinds: [1] }); await vi.advanceTimersByTimeAsync(300)
+    expect((await dead).map((e) => e.id).sort()).toEqual(['1', '2'])
+    let t = 0; const all = collectQuick(fakeRelays({ a: { after: 10, events: ['q'] }, b: { after: 20, events: [] } }), ['a', 'b'], { kinds: [1] }).then((r) => { t = Date.now(); return r })
+    const start = Date.now(); await vi.advanceTimersByTimeAsync(25); expect((await all).length).toBe(1); expect(t - start).toBeLessThan(100); vi.useRealTimers()
+  })
+  it('gives up after maxWait with what it has, and answers at once for an empty list of relays', async () => {
+    vi.useFakeTimers()
+    const p = collectQuick(fakeRelays({ a: { after: 10, events: ['k'] }, b: { after: null, events: [] }, c: { after: null, events: [] } }), ['a', 'b', 'c'], { kinds: [1] }, { maxWait: 1000 }); await vi.advanceTimersByTimeAsync(1100)
+    expect((await p).map((e) => e.id)).toEqual(['k']); expect(await collectQuick(fakeRelays({}), [], { kinds: [1] })).toEqual([]); vi.useRealTimers()
+  })
+})
+
+describe('which queries are quick', () => {
+  it('notes, reposts, reactions, profiles and ids are; your own lists, follow lists and anything mixed with them are not (they must be complete)', () => {
+    expect([{ kinds: [1] }, { kinds: [6, 16] }, { kinds: [7] }, { kinds: [0] }, { ids: ['a'] }, { kinds: [1], '#p': ['x'] }].map(isQuick)).toEqual([true, true, true, true, true, true])
+    expect([{ kinds: [3] }, { kinds: [3, 10000] }, { kinds: [10002] }, { kinds: [0, 3] }, {}].map(isQuick)).toEqual([false, false, false, false, false])
+  })
+})
