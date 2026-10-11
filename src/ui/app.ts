@@ -161,6 +161,29 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let engagement = new Engagement() // what the reader already did to each note
   const reachMap = new Map<string, Reach>() // what each of the reader's notes got from others (reactions, reposts, replies), filled in after the page is up
   const reachAsked = new Set<string>()
+  // notes quoted inside other notes: asked for together once the page is up, then the view is built again with them inside
+  const quotedMap = new Map<string, Judged | null>()
+  const quoteWanted = new Set<string>()
+  let quoteTimer: ReturnType<typeof setTimeout> | undefined
+  function wantQuote(id: string): void {
+    if (quotedMap.has(id) || quoteWanted.has(id)) return
+    quoteWanted.add(id)
+    clearTimeout(quoteTimer); quoteTimer = setTimeout(() => void fetchQuotes(), 150)
+  }
+  async function fetchQuotes(): Promise<void> {
+    const ids = [...quoteWanted].filter((id) => !quotedMap.has(id)).slice(0, 100)
+    quoteWanted.clear()
+    if (!ids.length || !session || !me) return
+    const who = me
+    let found: NostrEvent[] = []
+    try { found = await fetcher.query({ ids, kinds: [1], limit: ids.length }) } catch { /* not found: the button stays */ }
+    if (me !== who || !session) return
+    const judged = judgeAll(found.filter((e) => ids.includes(e.id)), ctx(), settings)
+    for (const id of ids) quotedMap.set(id, judged.find((j) => j.event.id === id) ?? null)
+    if (!judged.length) return
+    await nameKeys(judged.map((j) => j.event.pubkey)).catch(() => {})
+    if (me === who) void load('all')
+  }
   // The follow graph and the reader's own reactions come AFTER the first screen is on the page (checking hundreds of signatures keeps the browser too busy to answer the
   // feed's own queries: starting them together made the feed wait for them). `startBackground` is set when the account is loaded; `background()` runs it once.
   let startBackground: (() => Promise<void>) | null = null
@@ -196,7 +219,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const followersSeen = new Set<string>() // everybody seen following you since this page opened (the known ones are in `knownFollowers`)
   /** How many accounts have been seen following the reader: only a lower bound (each relay knows part of them), and it only grows. Null while nothing has been looked at yet. */
   const followerCount = (): number | null => { const k = loadKnown(); return k === null && followersSeen.size === 0 ? null : new Set([...(k ?? []), ...followersSeen]).size }
-  const forgetAccount = () => { reachMap.clear(); reachAsked.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
+  const forgetAccount = () => { reachMap.clear(); reachAsked.clear(); quotedMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
   const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
@@ -210,7 +233,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
   /** The lists are built once and reused between redraws, so a bar already on screen keeps what it showed: redo the bar(s) of this note in place. */
   const rebar = (e: NostrEvent) => { for (const old of root.querySelectorAll(`article.note[data-id="${e.id}"] .actions`)) old.replaceWith(barFor(e)) }
-  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
+  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), quoted: (id: string) => quotedMap.get(id), wantQuote, copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
   const ctx = () => contextOf(session!, { mutedWords: words, mutedKeys: [] })
   const who = () => (signer?.pubkey ? nameOf(view(), signer.pubkey) : '')
 
@@ -455,7 +478,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   /** Reads everything again from the relays (an installed app has no pull-to-refresh). */
-  function refresh(): void { fetcher.clear(); reachMap.clear(); reachAsked.clear(); session = null; void load() }
+  function refresh(): void { fetcher.clear(); reachMap.clear(); reachAsked.clear(); quotedMap.clear(); session = null; void load() }
 
   const flat = (nodes: ThreadNode[]): Judged[] => nodes.flatMap((n) => [n.item, ...flat(n.children)])
 

@@ -986,3 +986,17 @@ describe('light and dark', () => {
     await a.go('#/settings'); await tick(80); expect(a.text()).toContain('While the Halloween theme is on, Quill stays dark.')
   })
 })
+
+describe('a quoted note is shown inside the note that quotes it', () => {
+  it('once it is known it replaces the "Quoted note" button: its author and text, a link to it; a hidden one shows only why', async () => {
+    const quoted = ev(friend, 'the note being quoted', { created_at: 7000 }), spam = ev(far, 'buy cheap stuff https://spam.example/x', { created_at: 7100 })
+    const quoting = ev(friend, `look at this nostr:${nip19.noteEncode(quoted.id)}`, { created_at: 8000 }), quotingSpam = ev(friend, `and this nostr:${nip19.noteEncode(spam.id)}`, { created_at: 8100 })
+    const missing = ev(friend, `and a lost one nostr:${nip19.noteEncode('e'.repeat(64))}`, { created_at: 8200 })
+    const a = boot({ events: [...world, quoted, spam, quoting, quotingSpam, missing, ev(friend, JSON.stringify({ name: 'Ana' }), { kind: 0 })], stored: { me } }); await tick(800)
+    const card = (text: string) => [...a.root.querySelectorAll('article.note')].find((n) => n.querySelector('.body')!.textContent!.startsWith(text))!
+    const q = card('look at this').querySelector('a.quote') as HTMLAnchorElement
+    expect(q).not.toBeNull(); expect(q.textContent).toContain('the note being quoted'); expect(q.textContent).toContain('Ana'); expect(q.getAttribute('href')).toBe(`#/note/${quoted.id}?from=${quoting.id}`)
+    const hidden = card('and this').querySelector('a.quote')!; expect(hidden.querySelector('.quote-hidden')).not.toBeNull(); expect(hidden.textContent).not.toContain('buy cheap stuff')
+    expect(card('and a lost one').querySelector('a.quote')).toBeNull(); expect(card('and a lost one').querySelector('.body a.thread-link')!.textContent).toContain('Quoted note') // no relay has it: the button stays
+  })
+})

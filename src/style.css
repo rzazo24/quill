@@ -322,3 +322,10 @@ button.reach { min-height: 0; padding: 4px 6px; margin-left: -6px; background: n
 @media (hover: hover) { button.reach:hover { background: var(--btn) } } button.reach[aria-expanded=true] { color: var(--text) }
 .reach-who { margin-top: 4px; display: grid; gap: 4px; font-size: .9rem } .reach-who[hidden] { display: none } .reach-who p { margin: 0; display: flex; gap: 8px; align-items: baseline }
 .reach-mark { flex: none; min-width: 22px; text-align: center; color: var(--muted) } .reach-people { min-width: 0; overflow-wrap: anywhere }
+
+/* a quoted note shown inside the note that quotes it */
+a.quote { display: grid; gap: 4px; margin: 8px 0 4px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--text); text-decoration: none; white-space: normal }
+@media (hover: hover) { a.quote:hover { border-color: var(--accent) } }
+.quote-head { display: flex; align-items: center; gap: 8px; font-size: .85rem; color: var(--muted) } .quote-head strong { color: var(--text) } .quote-head .avatar { width: 22px; height: 22px; font-size: .6rem }
+.quote-body { white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden }
+.quote-hidden { color: var(--muted); font-size: .9rem }

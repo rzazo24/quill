@@ -19,7 +19,7 @@ import type { ThreadNode } from '../data/feed.js'
 import { hasReach, reactionTotal, type Reach } from '../data/reach.js'
 import { ago, reason, t, tallyLabel, type Lang } from './i18n.js'
 
-export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; /** The Halloween theme is on: extra reactions. */ halloween?: boolean; /** What a note of the reader's got from others (reactions, reposts, replies), once it is known. */ reach?: (id: string) => Reach | undefined; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** The relays put in a copied id/link as places to look for the note. */ hints?: readonly string[]; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
+export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; /** The Halloween theme is on: extra reactions. */ halloween?: boolean; /** What a note of the reader's got from others (reactions, reposts, replies), once it is known. */ reach?: (id: string) => Reach | undefined; /** A note quoted in a text, once it is known (undefined: not yet asked; null: not found); `wantQuote` asks for it. */ quoted?: (id: string) => Judged | null | undefined; wantQuote?: (id: string) => void; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** The relays put in a copied id/link as places to look for the note. */ hints?: readonly string[]; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
 
 export const nameOf = (v: View, pubkey: string): string => v.names.get(pubkey) ?? shortNpub(pubkey)
 
@@ -34,11 +34,23 @@ export function threadChip(href: string, v: View, label: 'thread' | 'quotedNote'
 }
 
 /** `fromId`: the note this text belongs to; a quoted-note chip carries it so the page it opens can show where you came from. */
+/** A quoted note shown inside the one that quotes it: its author and its text (a quote inside it stays a button: no endless nesting). Judged like any note:
+ *  if the filter hides it, only the reason is shown. A tap opens it. */
+function quoteCard(j: Judged, v: View, href: string): HTMLElement {
+  const inner: View = { ...v, quoted: undefined, wantQuote: undefined }
+  const head = h('span', { class: 'quote-head' }, avatarEl(j.event.pubkey, v), h('strong', {}, nameOf(v, j.event.pubkey)), ' ', h('time', { datetime: new Date(j.event.created_at * 1000).toISOString() }, ago(v.lang, j.event.created_at, v.nowMs)))
+  return h('a', { class: 'quote', href }, head, j.verdict.hidden ? h('span', { class: 'quote-hidden' }, `${t(v.lang, 'hiddenBy')}: `, reason(v.lang, j.verdict)) : h('span', { class: 'quote-body' }, renderContent(j.event.content, inner)))
+}
+
 export function renderContent(raw: string, v: View, fromId?: string): DocumentFragment {
   const frag = document.createDocumentFragment()
   for (const part of refs(cleanText(raw, 4000))) {
     if (part.type === 'person') frag.append(h('a', { class: 'ref', href: userHref(part.pubkey) }, '@' + nameOf(v, part.pubkey)))
-    else if (part.type === 'note') frag.append(threadChip(`#/note/${part.id}${fromId && fromId !== part.id ? `?from=${fromId}` : ''}`, v, 'quotedNote'))
+    else if (part.type === 'note') {
+      const href = `#/note/${part.id}${fromId && fromId !== part.id ? `?from=${fromId}` : ''}`, q = v.quoted?.(part.id)
+      if (q === undefined) v.wantQuote?.(part.id)
+      frag.append(q ? quoteCard(q, v, href) : threadChip(href, v, 'quotedNote')) // the quoted note itself, inside; until it is known (or if no relay has it), the button to it
+    }
     else for (const seg of segments(part.value)) {
       frag.append(seg.type === 'link' ? h('a', { class: 'ext', href: seg.href, rel: 'noopener noreferrer nofollow', target: '_blank' }, seg.value) : seg.value)
     }
