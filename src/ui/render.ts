@@ -46,6 +46,13 @@ function quoteCard(j: Judged, v: View, href: string): HTMLElement {
 export const isImageUrl = (href: string): boolean => { try { const u = new URL(href); return u.protocol === 'https:' && /\.(jpe?g|png|gif|webp|avif)$/i.test(u.pathname) } catch { return false } }
 /** The site a picture or video comes from, short enough for a button: a very long name (some hosts put a whole key in it) keeps only its end. */
 const shortHost = (href: string): string => { const n = new URL(href).hostname; return n.length > 28 ? '…' + n.split('.').slice(-2).join('.') : n }
+/** A link inside a quoted note (itself one link, so nothing in it can be tapped on its own): a picture shows itself if it would load by itself, else
+ *  a short "[picture · site]"; a video says "[video · site]"; any other address stays as text. */
+function plainLink(href: string, text: string, v: View, auto: boolean): HTMLElement {
+  if (isImageUrl(href) && auto) return h('span', { class: 'pic' }, h('img', { src: href, alt: t(v.lang, 'imageAlt', { host: shortHost(href) }), loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' }))
+  if (isImageUrl(href) || isVideoUrl(href)) return h('span', { class: 'meta' }, `[${t(v.lang, isImageUrl(href) ? 'imageWord' : 'videoWord')} · ${shortHost(href)}]`)
+  return h('span', { class: 'ext' }, text)
+}
 /** Pictures the reader asked for in this visit: they stay open when the page is drawn again. */
 const shownImages = new Set<string>()
 /** A picture linked in a note. Quill keeps no copy: the reader's browser asks the site where it lives, which sees their IP address, so by default
@@ -97,7 +104,7 @@ export function renderContent(raw: string, v: View, fromId?: string, author?: st
       frag.append(q ? quoteCard(q, v, href) : threadChip(href, v, 'quotedNote')) // the quoted note itself, inside; until it is known (or if no relay has it), the button to it
     }
     else for (const seg of segments(part.value)) {
-      frag.append(seg.type !== 'link' ? seg.value : v.plainLinks ? h('span', { class: 'ext' }, seg.value) : isImageUrl(seg.href) ? imageEl(seg.href, v, !!author && !!v.autoImages?.(author)) : isVideoUrl(seg.href) ? videoEl(seg.href, v) : h('a', { class: 'ext', href: seg.href, rel: 'noopener noreferrer nofollow', target: '_blank' }, seg.value))
+      frag.append(seg.type !== 'link' ? seg.value : v.plainLinks ? plainLink(seg.href, seg.value, v, !!author && !!v.autoImages?.(author)) : isImageUrl(seg.href) ? imageEl(seg.href, v, !!author && !!v.autoImages?.(author)) : isVideoUrl(seg.href) ? videoEl(seg.href, v) : h('a', { class: 'ext', href: seg.href, rel: 'noopener noreferrer nofollow', target: '_blank' }, seg.value))
     }
   }
   return frag

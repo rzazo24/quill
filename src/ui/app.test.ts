@@ -1037,7 +1037,7 @@ describe('inside a quoted note', () => {
     const quoted = ev(friend, `pic https://npub17nd4yu9anyd3004pumgrtazaacujjxwzj36thtqsxskjy0r5urgqf6950x.blossom.band/a.png hi nostr:${nip19.npubEncode(friend)} see nostr:${nip19.noteEncode('e'.repeat(64))}`, { created_at: 7000 })
     const a = boot({ events: [...world, quoted, ev(friend, `look nostr:${nip19.noteEncode(quoted.id)} and https://cdn.example/x.jpg`, { created_at: 8000 })], stored: { me } }); await tick(800)
     const q = a.root.querySelector('a.quote')!
-    expect(q.querySelectorAll('a, button')).toHaveLength(0); expect(q.textContent).toContain('blossom.band/a.png')
+    expect(q.querySelectorAll('a, button')).toHaveLength(0); expect(q.textContent).toContain('[picture · …blossom.band]'); expect(q.querySelector('img')).toBeNull()
     const outer = q.closest('article')!.querySelector('button.pic-btn')!; expect(outer.textContent).toContain('cdn.example')
   })
   it('a very long site name is shortened on the button', async () => {
@@ -1070,5 +1070,13 @@ describe('the Popular view in Following', () => {
   it('says so when there is nothing', async () => {
     const a = boot({ events: world, stored: { me, feed: 'popular' } }); await tick(300)
     expect(a.text()).toContain('Nothing that the people you follow reacted to or reposted in the last 24 hours.')
+  })
+})
+
+describe('a picture inside a quoted note', () => {
+  it('shows itself when pictures load by themselves and its author is followed (a tap opens the quoted note)', async () => {
+    const quoted = ev(friend, 'desk https://image.nostr.build/q.png', { created_at: 7000 })
+    const a = boot({ events: [...world, quoted, ev(friend, `look nostr:${nip19.noteEncode(quoted.id)}`, { created_at: 8000 })], stored: { me, autoImages: '1' } }); await tick(800)
+    const q = a.root.querySelector('a.quote')!; expect(q.querySelector('img')!.getAttribute('src')).toBe('https://image.nostr.build/q.png'); expect(q.querySelectorAll('a, button')).toHaveLength(0)
   })
 })
