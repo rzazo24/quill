@@ -165,6 +165,7 @@ function card(j: Judged, v: View, extra: Child[] = []): HTMLElement {
     isKey(event.pubkey) ? h('a', { class: 'avatar-link', href: userHref(event.pubkey), tabindex: '-1', 'aria-hidden': 'true' }, avatarEl(event.pubkey, v)) : avatarEl(event.pubkey, v),
     h('div', { class: 'note-main' },
       j.followedBy?.length ? h('p', { class: 'reposted' }, icon('people', 14), j.followedBy.length > 1 ? t(v.lang, 'followedByMany', { who: nameOf(v, j.followedBy[0]!), n: j.followedBy.length - 1 }) : t(v.lang, 'followedByOne', { who: nameOf(v, j.followedBy[0]!) })) : null,
+      j.pickedBy?.length ? h('p', { class: 'reposted' }, icon('people', 14), j.pickedBy.length > 1 ? t(v.lang, 'pickedByMany', { who: nameOf(v, j.pickedBy[0]!), n: j.pickedBy.length - 1 }) : t(v.lang, 'pickedByOne', { who: nameOf(v, j.pickedBy[0]!) })) : null,
       j.repostedBy?.length ? h('p', { class: 'reposted' }, icon('repost', 14), j.repostedBy.length > 1 ? t(v.lang, 'repostedMany', { who: nameOf(v, j.repostedBy[0]!), n: j.repostedBy.length - 1 }) : t(v.lang, 'repostedOne', { who: nameOf(v, j.repostedBy[0]!) })) : null,
       h('header', {},
         // name and time run together and may wrap onto two lines; the thread button stays at the top right, always
@@ -314,7 +315,7 @@ export function renderPeople(people: Person[], v: View, o: { title: string; coun
 
 /** Following can show the people you follow or the wider network; two buttons, the open one is lit. */
 export function renderFeedMode(mode: FeedMode, onChange: (m: FeedMode) => void, v: View): HTMLElement {
-  return h('div', { class: 'seg feedmode', role: 'group', 'aria-label': t(v.lang, 'feedModeTitle') }, ...(['follows', 'network'] as const).map((m) =>
+  return h('div', { class: 'seg feedmode', role: 'group', 'aria-label': t(v.lang, 'feedModeTitle') }, ...(['follows', 'network', 'popular'] as const).map((m) =>
     h('button', { type: 'button', 'aria-pressed': String(mode === m), onClick: () => { if (mode !== m) onChange(m) } }, t(v.lang, `feedMode_${m}` as Parameters<typeof t>[1]))))
 }
 

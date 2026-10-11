@@ -463,7 +463,7 @@ describe('the Network view in Following', () => {
   const net = [...world.filter((e) => !(e.kind === 3 && e.pubkey === friend)), list(friend, 3, [['p', far]]), ev(far, 'a note from far, followed by my friend', { created_at: 1_900_000_000 })]
   it('has a switch Follows | Network on Following only, with Follows open by default', async () => {
     const a = boot({ events: net, stored: { me } }); await tick(150)
-    expect([...mode(a)!.querySelectorAll('button')].map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([['Follows', 'true'], ['Network', 'false']])
+    expect([...mode(a)!.querySelectorAll('button')].map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([['Follows', 'true'], ['Network', 'false'], ['Popular', 'false']])
     expect(a.text()).toContain('a post from my friend'); expect(a.text()).not.toContain('a note from far')
     await a.go('#/mentions'); await tick(100); expect(mode(a)).toBeNull(); await a.go('#/me'); await tick(100); expect(mode(a)).toBeNull()
   })
@@ -1043,5 +1043,32 @@ describe('inside a quoted note', () => {
   it('a very long site name is shortened on the button', async () => {
     const a = boot({ events: [...world, ev(friend, 'pic https://npub17nd4yu9anyd3004pumgrtazaacujjxwzj36thtqsxskjy0r5urgqf6950x.blossom.band/a.png', { created_at: 8000 })], stored: { me } }); await tick(800)
     expect(a.root.querySelector('button.pic-btn')!.textContent).toBe('Show image · …blossom.band')
+  })
+})
+
+describe('the Popular view in Following', () => {
+  const now = Math.floor(Date.now() / 1000)
+  const btn = (a: ReturnType<typeof boot>, label: string) => [...a.root.querySelectorAll('.seg.feedmode button')].find((b) => b.textContent === label) as HTMLButtonElement
+  const stranger = pk('9'), other = pk('8')
+  const liked = ev(stranger, 'a note by a stranger my friend liked', { created_at: now - 3600 })
+  const twice = ev(other, 'picked by two follows', { created_at: now - 7200 })
+  const old = ev(other, 'liked two days ago', { created_at: now - 3 * 86400 })
+  const disliked = ev(stranger, 'only a dislike', { created_at: now - 600 })
+  const reply = ev(stranger, 'a reply someone liked', { created_at: now - 500, tags: [['e', 'd'.repeat(64), '', 'reply']] })
+  const react = (who: string, target: Event, content = '+', at = now - 100) => ev(who, content, { kind: 7, created_at: at, tags: [['e', target.id], ['p', target.pubkey]] })
+  const second = pk('b')
+  const events = [...world.filter((e) => !(e.kind === 3 && e.pubkey === me)), list(me, 3, [['p', friend], ['p', second]]), liked, twice, old, disliked, reply,
+    react(friend, liked), react(friend, twice), ev(second, '', { kind: 6, created_at: now - 50, tags: [['e', twice.id], ['p', twice.pubkey]] }), react(friend, old, '+', now - 2 * 86400), react(friend, disliked, '-'), react(friend, reply), react(stranger, liked)]
+  it('shows notes by anyone that your follows reacted to or reposted in the last day, the most picked first, each saying who; not dislikes, old picks or replies', async () => {
+    const a = boot({ events, stored: { me, feed: 'popular', names: '' } }); await tick(300)
+    expect(btn(a, 'Popular').getAttribute('aria-pressed')).toBe('true')
+    const cards = [...a.root.querySelectorAll('article.note')]
+    expect(cards.map((c) => c.querySelector('.body')!.textContent)).toEqual(['picked by two follows', 'a note by a stranger my friend liked'])
+    expect(cards[0]!.querySelector('.reposted')!.textContent).toMatch(/and 1 more reacted or reposted$/); expect(cards[1]!.querySelector('.reposted')!.textContent).toMatch(/reacted or reposted$/)
+    expect(a.root.querySelector('details.folded')).toBeNull() // "outside your network" does not hide them
+  })
+  it('says so when there is nothing', async () => {
+    const a = boot({ events: world, stored: { me, feed: 'popular' } }); await tick(300)
+    expect(a.text()).toContain('Nothing that the people you follow reacted to or reposted in the last 24 hours.')
   })
 })
