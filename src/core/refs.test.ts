@@ -23,3 +23,13 @@ describe('refs', () => {
     expect(shortNpub(pk)).toMatch(/^npub1[a-z0-9]{4}…[a-z0-9]{4}$/)
   })
 })
+
+describe('where a quoted note can be found', () => {
+  it('a nevent keeps its relay hints, tidied (secure addresses only, at most 3)', async () => {
+    const { refs } = await import('./refs.js')
+    const { nip19 } = await import('nostr-tools')
+    const id = 'e'.repeat(64)
+    const [part] = refs(`nostr:${nip19.neventEncode({ id, relays: ['wss://Relay.Ditto.pub/', 'ws://insecure.example', 'wss://a.example', 'wss://b.example', 'wss://c.example'] })}`)
+    expect(part).toMatchObject({ type: 'note', id, relays: ['wss://relay.ditto.pub', 'wss://a.example', 'wss://b.example'] })
+  })
+})

@@ -167,9 +167,10 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const reachAsked = new Set<string>()
   // notes quoted inside other notes: asked for together once the page is up, then the view is built again with them inside
   const quotedMap = new Map<string, Judged | null>()
-  const quoteWanted = new Set<string>()
+  const quoteWanted = new Set<string>(), quoteHints = new Map<string, string[]>() // where each quote says its note can be found
   let quoteTimer: ReturnType<typeof setTimeout> | undefined
-  function wantQuote(id: string): void {
+  function wantQuote(id: string, relays?: string[]): void {
+    if (relays?.length && !quoteHints.has(id)) quoteHints.set(id, relays)
     if (quotedMap.has(id) || quoteWanted.has(id)) return
     quoteWanted.add(id)
     clearTimeout(quoteTimer); quoteTimer = setTimeout(() => void fetchQuotes(), 150)
@@ -181,6 +182,13 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const who = me
     let found: NostrEvent[] = []
     try { found = await fetcher.query({ ids, kinds: [1], limit: ids.length }) } catch { /* not found: the button stays */ }
+    // the quick question stops at a majority of the relays: a note held by only one of them (or by the relay its quote names) is asked for again,
+    // this time waiting for every relay and asking those named relays too
+    const missing = ids.filter((id) => !found.some((e) => e.id === id))
+    if (missing.length && me === who) {
+      const also = [...new Set(missing.flatMap((id) => quoteHints.get(id) ?? []))].slice(0, 4)
+      try { found = [...found, ...await fetcher.query({ ids: missing, kinds: [1], limit: missing.length }, { quick: false, also })] } catch { /* still not found */ }
+    }
     if (me !== who || !session) return
     const judged = judgeAll(found.filter((e) => ids.includes(e.id)), ctx(), settings)
     for (const id of ids) quotedMap.set(id, judged.find((j) => j.event.id === id) ?? null)

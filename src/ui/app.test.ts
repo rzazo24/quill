@@ -12,16 +12,16 @@ const world: Event[] = [
   ev(friend, 'a post from my friend'), ev(friend, 'hello', { kind: 0, content: JSON.stringify({ name: 'Ana' }) }),
   ev(far, 'a pitch from a stranger', { tags: [['p', me]] }),
 ]
-const relays = (events: Event[], delayMs = 0, slowFor?: (f: Filter) => number): Fetcher => ({ query: async (f: Filter) => { const wait = delayMs + (slowFor?.(f) ?? 0); if (wait) await new Promise((r) => setTimeout(r, wait)); return events.filter((e) => answers(f, e)) } })
+const relays = (events: Event[], delayMs = 0, slowFor?: (f: Filter) => number, onlyWhenAll?: (e: Event) => boolean): Fetcher => ({ query: async (f: Filter, o?: { quick?: boolean }) => { const wait = delayMs + (slowFor?.(f) ?? 0); if (wait) await new Promise((r) => setTimeout(r, wait)); return events.filter((e) => answers(f, e) && !(onlyWhenAll?.(e) && o?.quick !== false)) } })
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms))
 const roots: HTMLElement[] = []
 
-function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; searchable?: Event[]; slowFor?: (f: Filter) => number; light?: { value: boolean } } = {}) {
+function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; light?: { value: boolean } } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
-  const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], schemeChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs, opts.slowFor), calls = { n: 0 }, filters: Filter[] = []
+  const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], schemeChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs, opts.slowFor, opts.onlyWhenAll), calls = { n: 0 }, filters: Filter[] = []
   startApp(root, {
-    fetcher: { query: (f) => { calls.n++; filters.push(f); return base.query(f) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', prefersLight: () => !!opts.light?.value, onSchemeChange: (cb) => schemeChanged.push(cb), onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
+    fetcher: { query: (f, o) => { calls.n++; filters.push(f); return base.query(f, o) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', prefersLight: () => !!opts.light?.value, onSchemeChange: (cb) => schemeChanged.push(cb), onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
     searchFetcher: opts.searchable ? { query: async (f: Filter) => opts.searchable!.filter((e) => answers(f, e) && (!(f as { search?: string }).search || e.content.toLowerCase().includes((f as { search: string }).search.toLowerCase()))) } : undefined,
     checkVersion: opts.newer ? async () => { asked.n++; return opts.newer!.value } : undefined, languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
     storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
@@ -1139,5 +1139,14 @@ describe('the trust score on an account page', () => {
     await a.go(`#/user/${friend}`); await tick(500)
     const card = a.root.querySelector('.trust')!; expect(card).not.toBeNull(); expect(card.textContent).toContain('/100'); expect(card.textContent).toContain('you follow it'); expect(card.textContent).toContain('not a verdict')
     await a.go(`#/user/${me}`); await tick(400); expect(a.root.querySelector('.trust')).toBeNull()
+  })
+})
+
+describe('a quoted note held by few relays', () => {
+  it('is asked for again, waiting for every relay, when the quick question did not find it; then it is shown inside', async () => {
+    const quoted = ev(far, 'held by only one relay', { created_at: 7000 })
+    const a = boot({ events: [...world, quoted, ev(friend, `look nostr:${nip19.neventEncode({ id: quoted.id, relays: ['wss://relay.example.com/'] })}`, { created_at: 8000 })], stored: { me, settings: JSON.stringify({ rules: { repeatedText: true, burst: true, linkOnly: true, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 }) }, onlyWhenAll: (e) => e.id === quoted.id })
+    await tick(1000)
+    expect(a.root.querySelector('a.quote')!.textContent).toContain('held by only one relay')
   })
 })

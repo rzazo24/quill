@@ -6,7 +6,8 @@ import { AbstractSimplePool } from 'nostr-tools/abstract-pool'
 import type { VerifyMany } from './verifier.js'
 
 /** How long to wait. By default notes and the like do not wait for the slowest relay and everything else waits for all of them; `quick` and `grace` (ms) override that. */
-export interface QueryOptions { quick?: boolean; grace?: number }
+/** `also`: a few more relays to ask this once (where a note says it can be found), besides the reader's own. */
+export interface QueryOptions { quick?: boolean; grace?: number; also?: string[] }
 
 export interface Fetcher {
   query(filter: Filter, options?: QueryOptions): Promise<Event[]>
@@ -113,7 +114,7 @@ export function poolFetcher(relays: string[] | (() => string[]) = DEFAULT_RELAYS
   }
   return {
     query: async (filter, options) => {
-      const list = health.usable(typeof relays === 'function' ? relays() : relays)
+      const list = health.usable([...new Set([...(typeof relays === 'function' ? relays() : relays), ...(options?.also ?? []).slice(0, 4)])])
       return check(filter, options?.quick ?? isQuick(filter) ? await collectQuick(subscribe, list, filter, { maxWait, ...(options?.grace !== undefined ? { grace: options.grace } : {}) }) : await pool.querySync(list, filter, { maxWait }))
     },
   }
@@ -133,7 +134,7 @@ export function memo(f: Fetcher): Fetcher & { clear(): void } {
   const cache = new Map<string, Promise<Event[]>>()
   return {
     query: (filter, options) => {
-      const key = JSON.stringify(filter)
+      const key = JSON.stringify([filter, options?.quick === false ? 'all' : '', options?.also ?? []]) // waiting for every relay, or asking more, is another question
       let hit = cache.get(key)
       if (!hit) { hit = f.query(filter, options); hit.catch(() => cache.delete(key)); cache.set(key, hit) }
       return hit

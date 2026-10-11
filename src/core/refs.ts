@@ -1,10 +1,11 @@
 // `nostr:npub1…` and `nostr:note1…` inside a note: found and decoded so the interface can show a name or a link instead of 60 characters.
+import { normalizeRelay } from '../net/relays.js'
 import { nip19 } from 'nostr-tools'
 
 export type Part =
   | { type: 'text'; value: string }
   | { type: 'person'; value: string; pubkey: string }
-  | { type: 'note'; value: string; id: string }
+  | { type: 'note'; value: string; id: string; /** where the reference says the note can be found (nevent), tidy secure addresses only */ relays?: string[] }
 
 const REF = /nostr:(npub1[a-z0-9]{58}|nprofile1[a-z0-9]+|note1[a-z0-9]{58}|nevent1[a-z0-9]+)/g
 
@@ -14,7 +15,7 @@ function decode(ref: string): Part | null {
     if (d.type === 'npub') return { type: 'person', value: ref, pubkey: d.data }
     if (d.type === 'nprofile') return { type: 'person', value: ref, pubkey: d.data.pubkey }
     if (d.type === 'note') return { type: 'note', value: ref, id: d.data }
-    if (d.type === 'nevent') return { type: 'note', value: ref, id: d.data.id }
+    if (d.type === 'nevent') { const hints = [...new Set((d.data.relays ?? []).map((r) => normalizeRelay(r)).filter((r): r is string => !!r))].slice(0, 3); return { type: 'note', value: ref, id: d.data.id, ...(hints.length ? { relays: hints } : {}) } }
   } catch { /* a malformed reference stays plain text */ }
   return null
 }
