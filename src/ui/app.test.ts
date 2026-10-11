@@ -16,12 +16,13 @@ const relays = (events: Event[], delayMs = 0, slowFor?: (f: Filter) => number, o
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms))
 const roots: HTMLElement[] = []
 
-function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; light?: { value: boolean } } = {}) {
+function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; copy?: (text: string) => void; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; light?: { value: boolean } } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
   const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], schemeChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs, opts.slowFor, opts.onlyWhenAll), calls = { n: 0 }, filters: Filter[] = []
   startApp(root, {
     fetcher: { query: (f, o) => { calls.n++; filters.push(f); return base.query(f, o) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', prefersLight: () => !!opts.light?.value, onSchemeChange: (cb) => schemeChanged.push(cb), onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
+    copy: opts.copy,
     searchFetcher: opts.searchable ? { query: async (f: Filter) => opts.searchable!.filter((e) => answers(f, e) && (!(f as { search?: string }).search || e.content.toLowerCase().includes((f as { search: string }).search.toLowerCase()))) } : undefined,
     checkVersion: opts.newer ? async () => { asked.n++; return opts.newer!.value } : undefined, languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
     storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
@@ -1148,5 +1149,15 @@ describe('a quoted note held by few relays', () => {
     const a = boot({ events: [...world, quoted, ev(friend, `look nostr:${nip19.neventEncode({ id: quoted.id, relays: ['wss://relay.example.com/'] })}`, { created_at: 8000 })], stored: { me, settings: JSON.stringify({ rules: { repeatedText: true, burst: true, linkOnly: true, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 }) }, onlyWhenAll: (e) => e.id === quoted.id })
     await tick(1000)
     expect(a.root.querySelector('a.quote')!.textContent).toContain('held by only one relay')
+  })
+})
+
+describe('the npub on an account page', () => {
+  it('a tap copies the whole npub and says so for a moment', async () => {
+    const copied: string[] = []
+    const a = boot({ events: world, stored: { me }, copy: (x: string) => copied.push(x) }); await tick(200)
+    await a.go(`#/user/${friend}`); await tick(300)
+    const b = a.root.querySelector('.profile button.npub-copy') as HTMLButtonElement; expect(b.textContent).toMatch(/^npub1.+…/)
+    b.click(); expect(copied).toEqual([nip19.npubEncode(friend)]); expect(b.textContent).toBe('Copied')
   })
 })

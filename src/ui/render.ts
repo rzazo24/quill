@@ -1,4 +1,5 @@
 // Turning judged notes into DOM. Pure of state: give it data, get elements. Nothing here loads anything external.
+import { nip19 } from 'nostr-tools'
 import type { Child } from './dom.js'
 import type { TrustReason, TrustScore } from '../data/trust.js'
 import { h } from './dom.js'
@@ -277,12 +278,20 @@ export function renderRepostGroups(groups: ReactionGroup[], v: View): HTMLElemen
 
 /** The head of an account's page: who it is, as text. */
 /** `follow`: the Follow / Unfollow button (only offered with a signer connected, never for yourself). */
+/** The account's npub, short; a tap copies the whole of it and says so for a moment. Without a way to copy, just the text. */
+function npubEl(pubkey: string, v: View): HTMLElement {
+  const short = shortNpub(pubkey)
+  if (!v.copy) return h('div', { class: 'meta' }, short)
+  const b = h('button', { type: 'button', class: 'npub-copy meta', title: t(v.lang, 'copyNpub'), 'aria-label': `${t(v.lang, 'copyNpub')}: ${short}`, onClick: () => { v.copy!(nip19.npubEncode(pubkey)); b.textContent = t(v.lang, 'copied'); setTimeout(() => { b.textContent = short }, 1200) } }, short)
+  return b
+}
+
 export function renderProfileHead(info: ProfileInfo, relation: 'you' | 'follow' | 'muted' | 'none', v: View, follow?: { following: boolean; muted: boolean; busy: boolean; onToggle: () => void; onMute: () => void }): HTMLElement {
   const rel = relation === 'you' ? 'profileYou' : relation === 'follow' ? 'profileFollowed' : relation === 'muted' ? 'profileMuted' : 'profileNotFollowed'
   const via = info.via.length > 1 ? t(v.lang, 'followedByMany', { who: nameOf(v, info.via[0]!), n: info.via.length - 1 }) : info.via.length === 1 ? t(v.lang, 'followedByOne', { who: nameOf(v, info.via[0]!) }) : null
   return h('section', { class: 'profile card' },
     h('div', { class: 'profile-top' }, avatarEl(info.pubkey, v, 'lg'),
-      h('div', {}, h('h2', {}, nameOf(v, info.pubkey)), h('div', { class: 'meta' }, shortNpub(info.pubkey)), info.nip05 ? h('div', { class: 'meta' }, info.nip05) : null)),
+      h('div', {}, h('h2', {}, nameOf(v, info.pubkey)), npubEl(info.pubkey, v), info.nip05 ? h('div', { class: 'meta' }, info.nip05) : null)),
     info.about ? h('div', { class: 'about' }, renderContent(info.about, v)) : null,
     info.website ? h('p', { class: 'meta' }, info.website) : null,
     h('p', { class: 'meta relation' }, [t(v.lang, rel), info.following === null ? null : t(v.lang, 'profileFollowing', { n: info.following })].filter(Boolean).join(' · ')),

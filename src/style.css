@@ -370,3 +370,6 @@ a.quote { display: grid; gap: 4px; margin: 8px 0 4px; padding: 10px 12px; border
 
 /* iOS paints a grey shade over whatever is tapped, shaped like the whole element: on a note that is a big blotch. The note gives its own feedback instead. */
 .note, .note a { -webkit-tap-highlight-color: transparent }
+
+/* the npub on an account page: a tap copies it */
+button.npub-copy { display: block; min-height: 0; padding: 0; background: none; border: 0; text-align: left; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; -webkit-tap-highlight-color: transparent }
