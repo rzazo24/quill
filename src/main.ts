@@ -1,5 +1,6 @@
 import './style.css'
 import { poolFetcher } from './net/fetcher.js'
+import { workerVerifier } from './net/verifier.js'
 import { poolPublisher } from './net/publisher.js'
 import { probeRelay } from './net/relays.js'
 import { Signer } from './sign/signer.js'
@@ -11,7 +12,7 @@ const storage = ((): Storage | undefined => { try { return window.localStorage }
 let relays: string[] = [] // set by the app at start, then whenever the reader edits the list in Settings
 const current = () => relays
 startApp(document.getElementById('app')!, {
-  fetcher: poolFetcher(current),
+  fetcher: poolFetcher(current, 6000, typeof Worker === 'undefined' ? undefined : workerVerifier(() => new Worker(new URL('./net/verify.worker.ts', import.meta.url), { type: 'module' }), Math.min(3, Math.max(1, (navigator.hardwareConcurrency || 2) - 1)))),
   publisher: poolPublisher(current),
   setRelays: (list) => { relays = list },
   probeRelay: (url) => probeRelay(url),

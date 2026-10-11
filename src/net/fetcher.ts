@@ -2,6 +2,8 @@
 // A relay is a stranger: what it returns is dropped unless the signature is valid and the event really answers the question asked.
 import { verifyEvent, type Event, type Filter } from 'nostr-tools'
 import { SimplePool } from 'nostr-tools/pool'
+import { AbstractSimplePool } from 'nostr-tools/abstract-pool'
+import type { VerifyMany } from './verifier.js'
 
 /** How long to wait. By default notes and the like do not wait for the slowest relay and everything else waits for all of them; `quick` and `grace` (ms) override that. */
 export interface QueryOptions { quick?: boolean; grace?: number }
@@ -66,13 +68,23 @@ export function collectQuick(subscribe: Subscribe, relays: string[], filter: Fil
 }
 
 /** `relays` may be a function, so the list can change while the page is open (the reader edits it in Settings). */
-export function poolFetcher(relays: string[] | (() => string[]) = DEFAULT_RELAYS, maxWait = 6000): Fetcher {
-  const pool = new SimplePool()
+/** Like `accept`, but the signatures are checked all together by `verifyMany` (workers in the browser). */
+export async function acceptMany(filter: Filter, events: Event[], verifyMany: VerifyMany): Promise<Event[]> {
+  const seen = new Set<string>()
+  const candidates = events.filter((e) => !seen.has(e.id) && seen.add(e.id) && answers(filter, e))
+  const ok = await verifyMany(candidates)
+  return candidates.filter((_, i) => ok[i])
+}
+
+/** With `verifyMany`, the relay layer does not check signatures as they arrive (that froze the page): they are checked in one go, off the page, before anything is returned. */
+export function poolFetcher(relays: string[] | (() => string[]) = DEFAULT_RELAYS, maxWait = 6000, verifyMany?: VerifyMany): Fetcher {
+  const pool: SimplePool = verifyMany ? (new AbstractSimplePool({ verifyEvent: () => true, maxWaitForConnection: 3000 }) as unknown as SimplePool) : new SimplePool()
+  const check = (filter: Filter, events: Event[]) => (verifyMany ? acceptMany(filter, events, verifyMany) : Promise.resolve(accept(filter, events)))
   const subscribe: Subscribe = (url, filter, on) => pool.subscribeMany([url], filter, { maxWait, onevent: on.onevent, oneose: on.oneose, onclose: on.oneose, alreadyHaveEvent: on.alreadyHaveEvent })
   return {
     query: async (filter, options) => {
       const list = typeof relays === 'function' ? relays() : relays
-      return accept(filter, options?.quick ?? isQuick(filter) ? await collectQuick(subscribe, list, filter, { maxWait, ...(options?.grace !== undefined ? { grace: options.grace } : {}) }) : await pool.querySync(list, filter, { maxWait }))
+      return check(filter, options?.quick ?? isQuick(filter) ? await collectQuick(subscribe, list, filter, { maxWait, ...(options?.grace !== undefined ? { grace: options.grace } : {}) }) : await pool.querySync(list, filter, { maxWait }))
     },
   }
 }
