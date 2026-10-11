@@ -912,6 +912,16 @@ describe('what each of my notes got, shown in Me', () => {
     expect(r.querySelectorAll('svg')).toHaveLength(2); expect(r.getAttribute('aria-label')).toBe('3 reactions, 1 repost, 1 reply')
     expect(reachOfNote(a, 'a note nobody noticed')).toBeNull()
   })
+  it('a tap on the numbers shows who: the people of each emoji and the reposters, each a link to the account, and the replies lead to the conversation', async () => {
+    const a = boot({ events: [...events(), ev(friend, JSON.stringify({ name: 'Ana' }), { kind: 0 })], stored: { me } }); await tick(150); await a.go('#/me'); await tick(500)
+    const r = reachOfNote(a, 'my first note')!; const box = r.parentElement!, panel = box.querySelector('.reach-who') as HTMLElement
+    expect(panel.hidden).toBe(true); r.click(); expect(panel.hidden).toBe(false); expect(r.getAttribute('aria-expanded')).toBe('true')
+    const rows = [...panel.querySelectorAll('p')].map((p) => p.textContent!.replace(/\s+/g, ' ').trim())
+    expect(rows[0]).toMatch(/^❤ ?Ana, /); expect(rows).toContain(rows.find((x) => x.startsWith('👍'))!); expect(rows.some((x) => x.includes('Ana') && !x.startsWith('❤'))).toBe(true) // Ana also reposted
+    expect([...panel.querySelectorAll('a')].some((l) => l.getAttribute('href') === `#/user/${friend}`)).toBe(true)
+    expect([...panel.querySelectorAll('a')].find((l) => l.textContent === '1 reply')!.getAttribute('href')).toBe(`#/note/${mineA.id}`)
+    r.click(); expect(panel.hidden).toBe(true)
+  })
   it('works in the Me column of a wide screen too, and the numbers are asked for only once', async () => {
     const a = boot({ events: events(), stored: { me }, wide: { value: true } }); await tick(700)
     expect(a.root.querySelector('.col[data-col="me"] .reach')).not.toBeNull()

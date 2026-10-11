@@ -267,10 +267,11 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const who = me, s = session
     setTimeout(() => {
       if (!who || me !== who || session !== s) return
-      void loadReach(fetcher, todo, ctx()).then((found) => {
+      void loadReach(fetcher, todo, ctx()).then(async (found) => {
         if (me !== who || session !== s) return
         for (const [id, r] of found) reachMap.set(id, r)
         if (!found.size) return
+        await nameKeys([...new Set([...found.values()].flatMap((r) => [...(r.who?.reactions.flatMap(([, k]) => k) ?? []), ...(r.who?.reposts ?? [])]))].slice(0, 300)).catch(() => {}) // the names the list of who reacted needs
         const route = parseRoute(deps.location.hash)
         if (wide()) void loadPane(panes.me, { name: 'me' }); else if (route.name === 'me') void load()
       }).catch(() => { /* a failed count only means no numbers */ })

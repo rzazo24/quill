@@ -83,14 +83,22 @@ function moreMenu(event: Judged['event'], v: View): HTMLElement | null {
 }
 
 /** Under a note of yours: what it got. Up to three emojis with their number, then the rest of the reactions as +N, the reposts and the replies. Nothing when it got nothing. */
-export function reachLine(r: Reach | undefined, v: View): HTMLElement | null {
+export function reachLine(r: Reach | undefined, v: View, noteId?: string): HTMLElement | null {
   if (!hasReach(r)) return null
   const top = [...r.reactions].slice(0, 3), rest = reactionTotal(r) - top.reduce((a, [, n]) => a + n, 0), item = (...c: Child[]) => h('span', { class: 'reach-item' }, ...c)
   const many = (n: number, one: 'reachReactionsOne' | 'reachRepostsOne' | 'reachRepliesOne', other: 'reachReactions' | 'reachReposts' | 'reachReplies') => (n === 0 ? '' : n === 1 ? t(v.lang, one) : t(v.lang, other, { n }))
   const said = [many(reactionTotal(r), 'reachReactionsOne', 'reachReactions'), many(r.reposts, 'reachRepostsOne', 'reachReposts'), many(r.replies, 'reachRepliesOne', 'reachReplies')].filter(Boolean).join(', ')
-  return h('div', { class: 'reach', role: 'group', 'aria-label': said, title: said },
-    ...top.map(([emoji, n]) => item(emoji, ' ', String(n))), rest > 0 ? item(`+${rest}`) : null,
-    r.reposts ? item(icon('repost', 14), ' ', String(r.reposts)) : null, r.replies ? item(icon('thread', 14), ' ', String(r.replies)) : null)
+  const items = [...top.map(([emoji, n]) => item(emoji, ' ', String(n))), rest > 0 ? item(`+${rest}`) : null, r.reposts ? item(icon('repost', 14), ' ', String(r.reposts)) : null, r.replies ? item(icon('thread', 14), ' ', String(r.replies)) : null]
+  if (!r.who) return h('div', { class: 'reach', role: 'group', 'aria-label': said, title: said }, ...items)
+  // a tap shows who: the people of each emoji and the reposters, each a link to the account; the replies are in the conversation
+  const who = r.who
+  const people = (keys: string[]) => h('span', { class: 'reach-people' }, ...keys.flatMap((k, i) => [i ? ', ' : '', h('a', { href: userHref(k) }, nameOf(v, k))]))
+  const panel = h('div', { class: 'reach-who', hidden: true },
+    ...who.reactions.map(([emoji, keys]) => h('p', {}, h('span', { class: 'reach-mark' }, emoji), people(keys))),
+    who.reposts.length ? h('p', {}, h('span', { class: 'reach-mark' }, icon('repost', 14)), people(who.reposts)) : null,
+    r.replies && noteId ? h('p', {}, h('span', { class: 'reach-mark' }, icon('thread', 14)), h('a', { href: `#/note/${noteId}` }, t(v.lang, r.replies === 1 ? 'reachRepliesOne' : 'reachReplies', { n: r.replies }))) : null)
+  const toggle = h('button', { type: 'button', class: 'reach', 'aria-expanded': 'false', 'aria-label': said, title: said, onClick: () => { panel.hidden = !panel.hidden; toggle.setAttribute('aria-expanded', String(!panel.hidden)) } }, ...items)
+  return h('div', { class: 'reach-box' }, toggle, panel)
 }
 
 function card(j: Judged, v: View, extra: Child[] = []): HTMLElement {
@@ -109,7 +117,7 @@ function card(j: Judged, v: View, extra: Child[] = []): HTMLElement {
         h('span', { class: 'head-end' }, threadChip(`#/note/${event.id}`, v), moreMenu(event, v)),
       ),
       h('div', { class: 'body tappable', onclick: (e: Event) => openThread(e, event.id) }, renderContent(event.content, v, event.id)),
-      reachLine(v.reach?.(event.id), v),
+      reachLine(v.reach?.(event.id), v, event.id),
       ...extra, ...(v.actions?.(j) ?? []),
     ),
   )

@@ -8,7 +8,8 @@ import { reactionTarget, showReaction } from './activity.js'
 
 const HEX64 = /^[0-9a-f]{64}$/
 
-export interface Reach { reactions: ReadonlyMap<string, number>; reposts: number; replies: number }
+/** `who`: the people behind the numbers (reactions by emoji, reposts), in the same order. */
+export interface Reach { reactions: ReadonlyMap<string, number>; reposts: number; replies: number; who?: { reactions: [string, string[]][]; reposts: string[] } }
 export const NO_REACH: Reach = { reactions: new Map(), reposts: 0, replies: 0 }
 export const hasReach = (r: Reach | undefined): r is Reach => !!r && (r.reposts > 0 || r.replies > 0 || r.reactions.size > 0)
 /** How many reactions in all. */
@@ -37,8 +38,9 @@ export function reachOf(events: Event[], ids: readonly string[], ctx: Pick<Conte
   }
   const out = new Map<string, Reach>()
   for (const id of wanted) {
-    const reactions = new Map([...(reacted.get(id) ?? new Map<string, Set<string>>())].map(([emoji, people]) => [emoji, people.size] as const).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)))
-    const r: Reach = { reactions, reposts: reposted.get(id)?.size ?? 0, replies: replied.get(id)?.size ?? 0 }
+    const byEmoji = [...(reacted.get(id) ?? new Map<string, Set<string>>())].map(([emoji, people]) => [emoji, [...people]] as [string, string[]]).sort((a, b) => b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1))
+    const reactions = new Map(byEmoji.map(([emoji, people]) => [emoji, people.length] as const))
+    const r: Reach = { reactions, reposts: reposted.get(id)?.size ?? 0, replies: replied.get(id)?.size ?? 0, who: { reactions: byEmoji, reposts: [...(reposted.get(id) ?? [])] } }
     if (hasReach(r)) out.set(id, r)
   }
   return out
