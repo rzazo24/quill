@@ -337,3 +337,6 @@ a.quote { display: grid; gap: 4px; margin: 8px 0 4px; padding: 10px 12px; border
 .pic video { display: block; width: 100%; max-height: 480px; border-radius: 12px; border: 1px solid var(--border); background: #000 }
 .pic img { display: block; max-width: 100%; max-height: 480px; object-fit: cover; border-radius: 12px; border: 1px solid var(--border); background: var(--btn) }
 .pic-host { display: block; font-size: .75rem; margin-top: 2px }
+/* the repost and reply icons as big as the emojis beside them, in the line of numbers and in the list of who */
+.reach-item .icon, .reach-mark .icon { width: 1.25em; height: 1.25em; vertical-align: -0.25em }
+.reach-who p { align-items: center }
