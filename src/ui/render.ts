@@ -19,7 +19,7 @@ import type { ThreadNode } from '../data/feed.js'
 import { hasReach, reactionTotal, type Reach } from '../data/reach.js'
 import { ago, reason, t, tallyLabel, type Lang } from './i18n.js'
 
-export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; /** The Halloween theme is on: extra reactions. */ halloween?: boolean; /** What a note of the reader's got from others (reactions, reposts, replies), once it is known. */ reach?: (id: string) => Reach | undefined; /** A note quoted in a text, once it is known (undefined: not yet asked; null: not found); `wantQuote` asks for it. */ quoted?: (id: string) => Judged | null | undefined; wantQuote?: (id: string) => void; /** Pictures linked in a note by this author load by themselves (the reader's setting); otherwise each waits for a tap. */ autoImages?: (pubkey: string) => boolean; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** The relays put in a copied id/link as places to look for the note. */ hints?: readonly string[]; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
+export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; /** The Halloween theme is on: extra reactions. */ halloween?: boolean; /** What a note of the reader's got from others (reactions, reposts, replies), once it is known. */ reach?: (id: string) => Reach | undefined; /** A note quoted in a text, once it is known (undefined: not yet asked; null: not found); `wantQuote` asks for it. */ quoted?: (id: string) => Judged | null | undefined; wantQuote?: (id: string) => void; /** Pictures linked in a note by this author load by themselves (the reader's setting); otherwise each waits for a tap. */ autoImages?: (pubkey: string) => boolean; /** Inside a quoted note (itself one link): addresses are plain text, no links or buttons inside the link. */ plainLinks?: boolean; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** The relays put in a copied id/link as places to look for the note. */ hints?: readonly string[]; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
 
 export const nameOf = (v: View, pubkey: string): string => v.names.get(pubkey) ?? shortNpub(pubkey)
 
@@ -37,19 +37,21 @@ export function threadChip(href: string, v: View, label: 'thread' | 'quotedNote'
 /** A quoted note shown inside the one that quotes it: its author and its text (a quote inside it stays a button: no endless nesting). Judged like any note:
  *  if the filter hides it, only the reason is shown. A tap opens it. */
 function quoteCard(j: Judged, v: View, href: string): HTMLElement {
-  const inner: View = { ...v, quoted: undefined, wantQuote: undefined }
+  const inner: View = { ...v, quoted: undefined, wantQuote: undefined, plainLinks: true }
   const head = h('span', { class: 'quote-head' }, avatarEl(j.event.pubkey, v), h('strong', {}, nameOf(v, j.event.pubkey)), ' ', h('time', { datetime: new Date(j.event.created_at * 1000).toISOString() }, ago(v.lang, j.event.created_at, v.nowMs)))
   return h('a', { class: 'quote', href }, head, j.verdict.hidden ? h('span', { class: 'quote-hidden' }, `${t(v.lang, 'hiddenBy')}: `, reason(v.lang, j.verdict)) : h('span', { class: 'quote-body' }, renderContent(j.event.content, inner, undefined, j.event.pubkey)))
 }
 
 /** A link to a picture (an https address ending in a picture's extension). */
 export const isImageUrl = (href: string): boolean => { try { const u = new URL(href); return u.protocol === 'https:' && /\.(jpe?g|png|gif|webp|avif)$/i.test(u.pathname) } catch { return false } }
+/** The site a picture or video comes from, short enough for a button: a very long name (some hosts put a whole key in it) keeps only its end. */
+const shortHost = (href: string): string => { const n = new URL(href).hostname; return n.length > 28 ? '…' + n.split('.').slice(-2).join('.') : n }
 /** Pictures the reader asked for in this visit: they stay open when the page is drawn again. */
 const shownImages = new Set<string>()
 /** A picture linked in a note. Quill keeps no copy: the reader's browser asks the site where it lives, which sees their IP address, so by default
  *  it waits for a tap on a button that names that site. Open, it shows the picture (a tap opens it whole) and where it came from. */
 function imageEl(href: string, v: View, auto: boolean): HTMLElement {
-  const host = new URL(href).hostname
+  const host = shortHost(href)
   const box = h('span', { class: 'pic' })
   const show = () => {
     shownImages.add(href)
@@ -62,17 +64,40 @@ function imageEl(href: string, v: View, auto: boolean): HTMLElement {
   return box
 }
 
+/** A link to a video file (https, ending in a video's extension). Pages like YouTube are not: showing them inside would load their code and tracking. */
+export const isVideoUrl = (href: string): boolean => { try { const u = new URL(href); return u.protocol === 'https:' && /\.(mp4|webm|mov|m4v)$/i.test(u.pathname) } catch { return false } }
+/** Videos the reader started in this visit. The element itself is kept and put back when the page is drawn again, so a video that is playing goes on. */
+const shownVideos = new Map<string, HTMLElement>()
+/** A video linked in a note: never loads by itself (not even with the pictures setting: it weighs far more), only after a tap on a button naming its site,
+ *  and then plays there, straight from that site (Quill keeps no copy). */
+function videoEl(href: string, v: View): HTMLElement {
+  const kept = shownVideos.get(href)
+  if (kept) return kept
+  const host = shortHost(href)
+  const box = h('span', { class: 'pic vid', onclick: (e: Event) => e.stopPropagation() })
+  const show = () => {
+    const vid = h('video', { src: href, controls: '', playsinline: '', preload: 'metadata', 'aria-label': t(v.lang, 'videoAlt', { host }) }) as HTMLVideoElement
+    vid.addEventListener('error', () => box.replaceChildren(h('a', { class: 'ext', href, rel: 'noopener noreferrer nofollow', target: '_blank' }, href), ' ', h('span', { class: 'meta' }, t(v.lang, 'videoFailed'))))
+    box.replaceChildren(vid, h('span', { class: 'pic-host meta' }, host))
+    shownVideos.set(href, box)
+    void vid.play()?.catch(() => {}) // the tap was the reader's choice; if the phone still says no, the controls are there
+  }
+  box.append(h('button', { type: 'button', class: 'thread-link pic-btn', onclick: (e: Event) => { e.stopPropagation(); show() } }, icon('video'), `${t(v.lang, 'showVideo')} · ${host}`))
+  return box
+}
+
 export function renderContent(raw: string, v: View, fromId?: string, author?: string): DocumentFragment {
   const frag = document.createDocumentFragment()
   for (const part of refs(cleanText(raw, 4000))) {
-    if (part.type === 'person') frag.append(h('a', { class: 'ref', href: userHref(part.pubkey) }, '@' + nameOf(v, part.pubkey)))
+    if (part.type === 'person') frag.append(v.plainLinks ? h('span', { class: 'ref' }, '@' + nameOf(v, part.pubkey)) : h('a', { class: 'ref', href: userHref(part.pubkey) }, '@' + nameOf(v, part.pubkey)))
+    else if (part.type === 'note' && v.plainLinks) frag.append(h('span', { class: 'meta' }, `[${t(v.lang, 'quotedNote')}]`))
     else if (part.type === 'note') {
       const href = `#/note/${part.id}${fromId && fromId !== part.id ? `?from=${fromId}` : ''}`, q = v.quoted?.(part.id)
       if (q === undefined) v.wantQuote?.(part.id)
       frag.append(q ? quoteCard(q, v, href) : threadChip(href, v, 'quotedNote')) // the quoted note itself, inside; until it is known (or if no relay has it), the button to it
     }
     else for (const seg of segments(part.value)) {
-      frag.append(seg.type !== 'link' ? seg.value : isImageUrl(seg.href) ? imageEl(seg.href, v, !!author && !!v.autoImages?.(author)) : h('a', { class: 'ext', href: seg.href, rel: 'noopener noreferrer nofollow', target: '_blank' }, seg.value))
+      frag.append(seg.type !== 'link' ? seg.value : v.plainLinks ? h('span', { class: 'ext' }, seg.value) : isImageUrl(seg.href) ? imageEl(seg.href, v, !!author && !!v.autoImages?.(author)) : isVideoUrl(seg.href) ? videoEl(seg.href, v) : h('a', { class: 'ext', href: seg.href, rel: 'noopener noreferrer nofollow', target: '_blank' }, seg.value))
     }
   }
   return frag

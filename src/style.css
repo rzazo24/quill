@@ -334,5 +334,6 @@ a.quote { display: grid; gap: 4px; margin: 8px 0 4px; padding: 10px 12px; border
 .pic { display: block; margin: 8px 0 4px; white-space: normal }
 .pic-btn { font-size: .85rem; padding: 4px 10px; cursor: pointer }
 .pic-open { display: block }
+.pic video { display: block; width: 100%; max-height: 480px; border-radius: 12px; border: 1px solid var(--border); background: #000 }
 .pic img { display: block; max-width: 100%; max-height: 480px; object-fit: cover; border-radius: 12px; border: 1px solid var(--border); background: var(--btn) }
 .pic-host { display: block; font-size: .75rem; margin-top: 2px }

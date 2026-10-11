@@ -1019,3 +1019,29 @@ describe('pictures linked in a note', () => {
     const stranger = card('stranger pic'); if (stranger) { expect(stranger.querySelector('.pic img')).toBeNull(); expect(stranger.querySelector('button.pic-btn')).not.toBeNull() }
   })
 })
+
+describe('videos linked in a note', () => {
+  it('wait for a tap on "Show video · site" (even with pictures loading by themselves), then play inline from that site; a video page stays a link', async () => {
+    const a = boot({ events: [...world, ev(friend, 'clip https://v.nostr.build/c.mp4 and https://www.youtube.com/watch?v=x', { created_at: 8000 })], stored: { me, autoImages: '1' } }); await tick(800)
+    const card = [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('clip'))!
+    expect(card.querySelector('video')).toBeNull(); expect(card.querySelector('a.ext')!.getAttribute('href')).toContain('youtube.com')
+    const btn = card.querySelector('button.pic-btn') as HTMLButtonElement; expect(btn.textContent).toContain('Show video · v.nostr.build')
+    btn.click(); await tick(50)
+    const vid = card.querySelector('.pic video')!; expect(vid.getAttribute('src')).toBe('https://v.nostr.build/c.mp4'); expect(vid.hasAttribute('controls')).toBe(true); expect(vid.hasAttribute('playsinline')).toBe(true)
+    expect(location.hash).not.toContain('#/note/')
+  })
+})
+
+describe('inside a quoted note', () => {
+  it('holds no links or buttons (it is one link itself): addresses, pictures, mentions and quotes are plain text', async () => {
+    const quoted = ev(friend, `pic https://npub17nd4yu9anyd3004pumgrtazaacujjxwzj36thtqsxskjy0r5urgqf6950x.blossom.band/a.png hi nostr:${nip19.npubEncode(friend)} see nostr:${nip19.noteEncode('e'.repeat(64))}`, { created_at: 7000 })
+    const a = boot({ events: [...world, quoted, ev(friend, `look nostr:${nip19.noteEncode(quoted.id)} and https://cdn.example/x.jpg`, { created_at: 8000 })], stored: { me } }); await tick(800)
+    const q = a.root.querySelector('a.quote')!
+    expect(q.querySelectorAll('a, button')).toHaveLength(0); expect(q.textContent).toContain('blossom.band/a.png')
+    const outer = q.closest('article')!.querySelector('button.pic-btn')!; expect(outer.textContent).toContain('cdn.example')
+  })
+  it('a very long site name is shortened on the button', async () => {
+    const a = boot({ events: [...world, ev(friend, 'pic https://npub17nd4yu9anyd3004pumgrtazaacujjxwzj36thtqsxskjy0r5urgqf6950x.blossom.band/a.png', { created_at: 8000 })], stored: { me } }); await tick(800)
+    expect(a.root.querySelector('button.pic-btn')!.textContent).toBe('Show image · …blossom.band')
+  })
+})

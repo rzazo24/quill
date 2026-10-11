@@ -42,7 +42,7 @@ describe('both security policies allow the app\'s own manifest and icons, and no
   const policies = { 'build meta (vite.config.ts)': text('vite.config.ts'), 'Caddy header (deploy/quill.caddy.template)': text('deploy/quill.caddy.template') }
   for (const [where, src] of Object.entries(policies)) {
     it(where, () => {
-      expect(src).toContain("img-src 'self' https:;"); expect(src).toContain("manifest-src 'self'"); expect(src).toContain("default-src 'none'")
+      expect(src).toContain("img-src 'self' https:;"); expect(src).toContain("media-src https:;"); expect(src).not.toMatch(/media-src[^;"]*(http:|data:|blob:|\*)/); expect(src).toContain("manifest-src 'self'"); expect(src).toContain("default-src 'none'")
       expect(src).toContain("connect-src 'self' wss:"); expect(src).toContain("script-src 'self'")
       expect(src).not.toMatch(/img-src[^;"]*(http:|data:|blob:|\*)/) // only secure external pictures (those linked in notes, loaded when the reader asks), none inline
     })
