@@ -31,13 +31,16 @@ export interface ActivityOptions {
   known?: ReadonlySet<string>
   /** Also check the newest list of every known follower (it costs one more query: done now and then, not at every look). */
   verifyKnown?: boolean
+  /** Only what is newer than this (unix seconds): the look once a minute asks for what is new, not for everything again. */
+  since?: number
 }
 
 /** NIP-25: the note reacted to is the LAST e tag. */
 export const reactionTarget = (e: Pick<Event, 'tags'>): string | undefined => [...e.tags].reverse().find((t) => t[0] === 'e' && HEX64.test(t[1] ?? ''))?.[1]
 
 export async function loadActivity(f: Fetcher, ctx: Context, settings: Settings = DEFAULT_SETTINGS, opts: ActivityOptions = {}): Promise<Activity> {
-  const [mentions, reacts, lists, reposted] = await Promise.all([f.query({ kinds: [1], '#p': [ctx.me], limit: LIMIT }), f.query({ kinds: [7], '#p': [ctx.me], limit: LIMIT }), f.query({ kinds: [3], '#p': [ctx.me], limit: FOLLOWER_LIMIT }, { quick: true, grace: 600 }).catch(() => []) /* the followers are approximate anyway: a majority of the relays is enough */, f.query({ kinds: [6, 16], '#p': [ctx.me], limit: LIMIT }).catch(() => [])])
+  const since = opts.since !== undefined ? { since: opts.since } : {}
+  const [mentions, reacts, lists, reposted] = await Promise.all([f.query({ kinds: [1], '#p': [ctx.me], limit: LIMIT, ...since }), f.query({ kinds: [7], '#p': [ctx.me], limit: LIMIT, ...since }), f.query({ kinds: [3], '#p': [ctx.me], limit: FOLLOWER_LIMIT, ...since }, { quick: true, grace: 600 }).catch(() => []) /* the followers are approximate anyway: a majority of the relays is enough */, f.query({ kinds: [6, 16], '#p': [ctx.me], limit: LIMIT, ...since }).catch(() => [])])
   const notes = mentions.filter((e) => e.pubkey !== ctx.me).sort(byNewest)
   // Anyone can put the reader's key in a `p` tag of a reaction to somebody else's note: only reactions to notes the reader really wrote count.
   const candidate = reacts.filter((e) => e.pubkey !== ctx.me && reactionTarget(e))

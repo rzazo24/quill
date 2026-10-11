@@ -19,14 +19,14 @@ const roots: HTMLElement[] = []
 function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; slowFor?: (f: Filter) => number } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
-  const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs, opts.slowFor), calls = { n: 0 }
+  const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs, opts.slowFor), calls = { n: 0 }, filters: Filter[] = []
   startApp(root, {
-    fetcher: { query: (f) => { calls.n++; return base.query(f) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
+    fetcher: { query: (f) => { calls.n++; filters.push(f); return base.query(f) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
     checkVersion: opts.newer ? async () => { asked.n++; return opts.newer!.value } : undefined, languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
     storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
   })
   const go = async (hash: string) => { location.hash = hash; listeners.forEach((l) => l()); await tick() }
-  return { root, go, mem, calls, wideChanged, setRelays, reloads, asked, tick: () => ticks.forEach((t) => t()), poll: () => polls.forEach((t) => t()), comeBack: () => visible.forEach((v) => v()), text: () => root.textContent ?? '' }
+  return { root, go, mem, calls, filters, wideChanged, setRelays, reloads, asked, tick: () => ticks.forEach((t) => t()), poll: () => polls.forEach((t) => t()), comeBack: () => visible.forEach((v) => v()), text: () => root.textContent ?? '' }
 }
 afterEach(() => { roots.forEach((r) => r.remove()); roots.length = 0 })
 
@@ -934,5 +934,23 @@ describe('the feed from last time is shown at once', () => {
     await tick(2500); await again.go('#/me'); await tick(150)
     ;[...again.root.querySelectorAll('button')].find((b) => b.textContent === 'Sign out')!.click(); await tick(20); ;(again.root.querySelector('.confirm-signout button.danger') as HTMLElement).click(); await tick(20)
     expect(again.mem.has(`feedcache:${me}`)).toBe(false)
+  })
+})
+
+
+describe('the look once a minute asks only for what is new', () => {
+  it('after the first look it asks with "since" (the last visit to Mentions, with a margin), and a new mention still makes the number', async () => {
+    const NOW = 10_000
+    const events: Event[] = [list(me, 3, [['p', friend]]), list(friend, 3, []), ev(friend, 'old post', { created_at: 4000 }), ev(friend, '', { kind: 3, created_at: 3000, tags: [['p', me]] })]
+    const a = boot({ events, clock: { now: NOW * 1000 }, stored: { me, [`seen:${me}`]: '5000', [`followers:${me}`]: JSON.stringify([friend]) } }); await tick(300)
+    a.filters.length = 0; a.poll(); await tick(200)
+    const mentionQueries = a.filters.filter((f) => (f as Record<string, unknown>)['#p'])
+    expect(mentionQueries.length).toBeGreaterThan(0)
+    // the first look of this page checks every known follower (a full look); the next one is incremental
+    a.filters.length = 0; a.poll(); await tick(200)
+    const next = a.filters.filter((f) => (f as Record<string, unknown>)['#p'])
+    expect(next.length).toBe(4); expect(next.every((f) => f.since === 5000 - 120)).toBe(true)
+    events.push(ev(friend, 'hello, a new mention', { created_at: 9000, tags: [['p', me]] })); a.poll(); await tick(200)
+    expect(a.root.querySelector('.tabbar .badge')?.textContent).toBe('1')
   })
 })

@@ -430,7 +430,9 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (seenAt === null) loadSeen()
     try {
       fetcher.clear()
-      const opts = activityOptions(), a = await loadActivity(fetcher, ctx(), settings, opts)
+      // only what is new since the last visit to Mentions (with two minutes of margin), unless it is time to check every follower again (then everything)
+      const base = activityOptions(), incremental = seenAt !== null && loadKnown() !== null && !base.verifyKnown
+      const opts = incremental ? { ...base, since: seenAt! - 120 } : base, a = await loadActivity(fetcher, ctx(), settings, opts)
       const before = followerCount()
       afterActivity(a, !!opts.verifyKnown)
       if (loadKnown() === null) saveKnown(new Set(a.followers)) // the first look at followers only learns who they are
