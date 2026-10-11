@@ -7,7 +7,7 @@ export interface HelpSection { id: string; title: string; body: string }
 const en: HelpSection[] = [
   { id: 'about', title: 'What Quill is', body: `A small Nostr client made only of text, that tells you why it hides things.
 
-• Nothing external loads unless you ask: no video, link previews or profile pictures from other servers. Links are shown as text and only open when you tap them. A link to a picture shows a “Show image · site” button: tap it and your browser asks that site for the picture (Quill keeps no copy; the site sees your IP address). In Settings you can let pictures from people you follow load by themselves. A link to a video file works the same way with “Show video · site”, but a video never loads by itself; pages like YouTube stay plain links.
+• Nothing external loads unless you ask: no video, link previews or profile pictures from other servers. Links are shown as text and only open when you tap them. A link to a picture shows a “Show image · site” button: tap it and your browser asks that site for the picture (Quill keeps no copy; the site sees your IP address). In Settings you can let pictures load by themselves when they come from people you follow, or from a note one of them reposted or quotes. A link to a video file works the same way with “Show video · site”, but a video never loads by itself; pages like YouTube stay plain links.
 • It never sees your private key: to write, it asks your signer to sign.
 • Nothing is hidden silently: every hidden note says which rule hid it, and one tap shows it.` },
   { id: 'read', title: 'Reading', body: `Sign in with your npub. There are three tabs:
@@ -72,7 +72,7 @@ Installed, it opens full screen with its own icon. It keeps its own data, separa
 const es: HelpSection[] = [
   { id: 'about', title: 'Qué es Quill', body: `Un cliente pequeño de Nostr hecho solo de texto, que te dice por qué oculta cosas.
 
-• No se carga nada externo sin que lo pidas: ni vídeo, ni vistas previas de enlaces, ni fotos de perfil de otros servidores. Los enlaces se muestran como texto y solo se abren cuando los tocas. Un enlace a una imagen muestra un botón «Mostrar imagen · sitio»: al tocarlo, tu navegador pide la imagen a ese sitio (Quill no guarda copia; el sitio ve tu dirección IP). En Ajustes puedes dejar que las imágenes de la gente que sigues se carguen solas. Un enlace a un archivo de vídeo funciona igual con «Mostrar vídeo · sitio», pero un vídeo nunca se carga solo; páginas como YouTube siguen siendo enlaces normales.
+• No se carga nada externo sin que lo pidas: ni vídeo, ni vistas previas de enlaces, ni fotos de perfil de otros servidores. Los enlaces se muestran como texto y solo se abren cuando los tocas. Un enlace a una imagen muestra un botón «Mostrar imagen · sitio»: al tocarlo, tu navegador pide la imagen a ese sitio (Quill no guarda copia; el sitio ve tu dirección IP). En Ajustes puedes dejar que las imágenes se carguen solas cuando vienen de gente que sigues, o de una nota que alguno de ellos compartió o cita. Un enlace a un archivo de vídeo funciona igual con «Mostrar vídeo · sitio», pero un vídeo nunca se carga solo; páginas como YouTube siguen siendo enlaces normales.
 • Nunca ve tu clave privada: para escribir, le pide a tu firmador que firme.
 • Nada se oculta en silencio: cada nota oculta dice qué regla la ocultó, y con un toque se muestra.` },
   { id: 'read', title: 'Leer', body: `Entra con tu npub. Hay tres pestañas:

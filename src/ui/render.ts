@@ -36,10 +36,10 @@ export function threadChip(href: string, v: View, label: 'thread' | 'quotedNote'
 /** `fromId`: the note this text belongs to; a quoted-note chip carries it so the page it opens can show where you came from. */
 /** A quoted note shown inside the one that quotes it: its author and its text (a quote inside it stays a button: no endless nesting). Judged like any note:
  *  if the filter hides it, only the reason is shown. A tap opens it. */
-function quoteCard(j: Judged, v: View, href: string): HTMLElement {
+function quoteCard(j: Judged, v: View, href: string, vouch: string[]): HTMLElement {
   const inner: View = { ...v, quoted: undefined, wantQuote: undefined, plainLinks: true }
   const head = h('span', { class: 'quote-head' }, avatarEl(j.event.pubkey, v), h('strong', {}, nameOf(v, j.event.pubkey)), ' ', h('time', { datetime: new Date(j.event.created_at * 1000).toISOString() }, ago(v.lang, j.event.created_at, v.nowMs)))
-  return h('a', { class: 'quote', href }, head, j.verdict.hidden ? h('span', { class: 'quote-hidden' }, `${t(v.lang, 'hiddenBy')}: `, reason(v.lang, j.verdict)) : h('span', { class: 'quote-body' }, renderContent(j.event.content, inner, undefined, j.event.pubkey)))
+  return h('a', { class: 'quote', href }, head, j.verdict.hidden ? h('span', { class: 'quote-hidden' }, `${t(v.lang, 'hiddenBy')}: `, reason(v.lang, j.verdict)) : h('span', { class: 'quote-body' }, renderContent(j.event.content, inner, undefined, [j.event.pubkey, ...vouch])))
 }
 
 /** A link to a picture (an https address ending in a picture's extension). */
@@ -93,18 +93,21 @@ function videoEl(href: string, v: View): HTMLElement {
   return box
 }
 
-export function renderContent(raw: string, v: View, fromId?: string, author?: string): DocumentFragment {
+/** `vouch`: the author, and whoever brought the note to the reader (a followed account that reposted it or quotes it). Its pictures load by themselves
+ *  (with the setting on) when any of them is followed. */
+export function renderContent(raw: string, v: View, fromId?: string, vouch: string[] = []): DocumentFragment {
   const frag = document.createDocumentFragment()
+  const auto = vouch.some((k) => !!v.autoImages?.(k))
   for (const part of refs(cleanText(raw, 4000))) {
     if (part.type === 'person') frag.append(v.plainLinks ? h('span', { class: 'ref' }, '@' + nameOf(v, part.pubkey)) : h('a', { class: 'ref', href: userHref(part.pubkey) }, '@' + nameOf(v, part.pubkey)))
     else if (part.type === 'note' && v.plainLinks) frag.append(h('span', { class: 'meta' }, `[${t(v.lang, 'quotedNote')}]`))
     else if (part.type === 'note') {
       const href = `#/note/${part.id}${fromId && fromId !== part.id ? `?from=${fromId}` : ''}`, q = v.quoted?.(part.id)
       if (q === undefined) v.wantQuote?.(part.id)
-      frag.append(q ? quoteCard(q, v, href) : threadChip(href, v, 'quotedNote')) // the quoted note itself, inside; until it is known (or if no relay has it), the button to it
+      frag.append(q ? quoteCard(q, v, href, vouch) : threadChip(href, v, 'quotedNote')) // the quoted note itself, inside; until it is known (or if no relay has it), the button to it
     }
     else for (const seg of segments(part.value)) {
-      frag.append(seg.type !== 'link' ? seg.value : v.plainLinks ? plainLink(seg.href, seg.value, v, !!author && !!v.autoImages?.(author)) : isImageUrl(seg.href) ? imageEl(seg.href, v, !!author && !!v.autoImages?.(author)) : isVideoUrl(seg.href) ? videoEl(seg.href, v) : h('a', { class: 'ext', href: seg.href, rel: 'noopener noreferrer nofollow', target: '_blank' }, seg.value))
+      frag.append(seg.type !== 'link' ? seg.value : v.plainLinks ? plainLink(seg.href, seg.value, v, auto) : isImageUrl(seg.href) ? imageEl(seg.href, v, auto) : isVideoUrl(seg.href) ? videoEl(seg.href, v) : h('a', { class: 'ext', href: seg.href, rel: 'noopener noreferrer nofollow', target: '_blank' }, seg.value))
     }
   }
   return frag
@@ -181,7 +184,7 @@ function card(j: Judged, v: View, extra: Child[] = []): HTMLElement {
           h('time', { datetime: new Date(event.created_at * 1000).toISOString() }, ago(v.lang, event.created_at, v.nowMs))),
         h('span', { class: 'head-end' }, threadChip(`#/note/${event.id}`, v), moreMenu(event, v)),
       ),
-      h('div', { class: 'body tappable', onclick: (e: Event) => openThread(e, event.id) }, renderContent(event.content, v, event.id, event.pubkey)),
+      h('div', { class: 'body tappable', onclick: (e: Event) => openThread(e, event.id) }, renderContent(event.content, v, event.id, [event.pubkey, ...(j.repostedBy ?? [])])),
       reachLine(v.reach?.(event.id), v, event.id),
       ...extra, ...(v.actions?.(j) ?? []),
     ),

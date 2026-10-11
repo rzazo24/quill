@@ -1080,3 +1080,14 @@ describe('a picture inside a quoted note', () => {
     const q = a.root.querySelector('a.quote')!; expect(q.querySelector('img')!.getAttribute('src')).toBe('https://image.nostr.build/q.png'); expect(q.querySelectorAll('a, button')).toHaveLength(0)
   })
 })
+
+describe('pictures brought by someone the reader follows', () => {
+  it('load by themselves (setting on) in a note a followed account reposted, and inside a note a followed account quotes, though the author is not followed', async () => {
+    const shared = ev(far, 'stranger pic https://image.nostr.build/s.png', { created_at: 8000 })
+    const quotedFar = ev(far, 'quoted stranger pic https://image.nostr.build/q2.png', { created_at: 7000 })
+    const a = boot({ events: [...world, shared, quotedFar, ev(friend, JSON.stringify(shared), { kind: 6, created_at: 9000, tags: [['e', shared.id], ['p', far]] }), ev(friend, `see nostr:${nip19.noteEncode(quotedFar.id)}`, { created_at: 8500 })], stored: { me, autoImages: '1', settings: JSON.stringify({ rules: { repeatedText: true, burst: true, linkOnly: true, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 }) } }); await tick(800) // the quoted stranger is outside the network: that rule off, or the filter hides the quote (and then shows no picture)
+    const card = (text: string) => [...a.root.querySelectorAll('article.note')].find((n) => n.querySelector('.body')!.textContent!.startsWith(text))!
+    expect(card('stranger pic').querySelector('.pic img')!.getAttribute('src')).toBe('https://image.nostr.build/s.png')
+    expect(card('see').querySelector('a.quote img')!.getAttribute('src')).toBe('https://image.nostr.build/q2.png')
+  })
+})
