@@ -76,14 +76,44 @@ export async function acceptMany(filter: Filter, events: Event[], verifyMany: Ve
   return candidates.filter((_, i) => ok[i])
 }
 
+/**
+ * Relays that keep failing are left alone for a while: after 2 failures in a row a relay is skipped for 2 minutes, then 4, 8… up to 15. One answer puts it
+ * back to normal. If every relay is resting, they are all asked anyway (a list with nobody in it would show nothing at all).
+ */
+export class RelayHealth {
+  private readonly state = new Map<string, { fails: number; until: number }>()
+  constructor(private readonly now: () => number = Date.now) {}
+  ok(url: string): void { this.state.delete(url) }
+  fail(url: string): void {
+    const s = this.state.get(url) ?? { fails: 0, until: 0 }
+    s.fails++
+    if (s.fails >= 2) s.until = this.now() + Math.min(15, 2 ** (s.fails - 1)) * 60_000
+    this.state.set(url, s)
+  }
+  resting(url: string): boolean { return (this.state.get(url)?.until ?? 0) > this.now() }
+  usable(list: string[]): string[] { const up = list.filter((u) => !this.resting(u)); return up.length ? up : list }
+}
+
 /** With `verifyMany`, the relay layer does not check signatures as they arrive (that froze the page): they are checked in one go, off the page, before anything is returned. */
-export function poolFetcher(relays: string[] | (() => string[]) = DEFAULT_RELAYS, maxWait = 6000, verifyMany?: VerifyMany): Fetcher {
+export function poolFetcher(relays: string[] | (() => string[]) = DEFAULT_RELAYS, maxWait = 6000, verifyMany?: VerifyMany, health = new RelayHealth()): Fetcher {
   const pool: SimplePool = verifyMany ? (new AbstractSimplePool({ verifyEvent: () => true, maxWaitForConnection: 3000 }) as unknown as SimplePool) : new SimplePool()
   const check = (filter: Filter, events: Event[]) => (verifyMany ? acceptMany(filter, events, verifyMany) : Promise.resolve(accept(filter, events)))
-  const subscribe: Subscribe = (url, filter, on) => pool.subscribeMany([url], filter, { maxWait, onevent: on.onevent, oneose: on.oneose, onclose: on.oneose, alreadyHaveEvent: on.alreadyHaveEvent })
+  const subscribe: Subscribe = (url, filter, on) => {
+    let answered = false
+    const sub = pool.subscribeMany([url], filter, {
+      maxWait, onevent: on.onevent, alreadyHaveEvent: on.alreadyHaveEvent,
+      oneose: () => { answered = true; on.oneose() }, // (the pool also calls this when a relay cannot be reached: the close reason tells them apart)
+      onclose: (reasons: { reason: string }[] | string) => {
+        const why = typeof reasons === 'string' ? reasons : reasons?.[0]?.reason ?? ''
+        if (/closed by caller|closed automatically/i.test(why)) { if (answered) health.ok(url) } else health.fail(url) // closed by us after an answer: fine; any other reason: it failed
+        on.oneose()
+      },
+    } as Parameters<SimplePool['subscribeMany']>[2])
+    return { close: () => sub.close() }
+  }
   return {
     query: async (filter, options) => {
-      const list = typeof relays === 'function' ? relays() : relays
+      const list = health.usable(typeof relays === 'function' ? relays() : relays)
       return check(filter, options?.quick ?? isQuick(filter) ? await collectQuick(subscribe, list, filter, { maxWait, ...(options?.grace !== undefined ? { grace: options.grace } : {}) }) : await pool.querySync(list, filter, { maxWait }))
     },
   }

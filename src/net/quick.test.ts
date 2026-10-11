@@ -46,3 +46,17 @@ describe('which queries are quick', () => {
     expect([{ kinds: [3] }, { kinds: [3, 10000] }, { kinds: [10002] }, { kinds: [0, 3] }, {}].map(isQuick)).toEqual([false, false, false, false, false])
   })
 })
+
+import { RelayHealth } from './fetcher.js'
+describe('relays that keep failing are left alone for a while', () => {
+  it('two failures in a row rest it 2 minutes, then longer (up to 15); one answer brings it back; never all of them at once', () => {
+    let now = 0; const h = new RelayHealth(() => now)
+    h.fail('a'); expect(h.usable(['a', 'b'])).toEqual(['a', 'b']) // one failure is nothing
+    h.fail('a'); expect(h.usable(['a', 'b'])).toEqual(['b'])
+    now = 2 * 60_000 + 1; expect(h.usable(['a', 'b'])).toEqual(['a', 'b']) // rested
+    h.fail('a'); expect(h.resting('a')).toBe(true); now += 4 * 60_000 - 10; expect(h.resting('a')).toBe(true); now += 20; expect(h.resting('a')).toBe(false)
+    for (let i = 0; i < 10; i++) h.fail('a'); expect(h.resting('a')).toBe(true); now += 15 * 60_000 + 1; expect(h.resting('a')).toBe(false) // never more than 15 minutes
+    h.ok('a'); h.fail('a'); expect(h.resting('a')).toBe(false) // an answer resets the count
+    h.fail('a'); h.fail('b'); h.fail('b'); expect(h.usable(['a', 'b'])).toEqual(['a', 'b']) // everyone resting: ask them all
+  })
+})
