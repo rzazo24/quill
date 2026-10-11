@@ -265,9 +265,9 @@ button.icon.spinning svg { animation: spin .9s linear infinite }
 
 /* reading down gives the bottom bar and the write button back to the text, sliding down; scrolling up (or going near the top) slides them back. The slide is kept even
    with "reduce motion" on, because it is how the reader asked to see it (a short, one-axis slide, no spinning or zooming). */
-.tabbar { transition: transform .35s ease } .fab { transition: transform .35s ease, opacity .35s ease }
+.tabbar { transition: transform .35s ease } .fab, .fab-search { transition: transform .35s ease, opacity .35s ease }
 #app.bars-hidden .tabbar { transform: translateY(100%) }
-#app.bars-hidden .fab { transform: translateY(calc(100% + 40px)); opacity: 0; pointer-events: none }
+#app.bars-hidden .fab, #app.bars-hidden .fab-search { transform: translateY(calc(100% + 40px)); opacity: 0; pointer-events: none }
 
 /* wide screens (1100 px and up): Following, Mentions and Me side by side, each scrolling on its own, and a panel on the right for what you open */
 #app.wide { --col: 1760px }
@@ -332,7 +332,7 @@ a.quote { display: grid; gap: 4px; margin: 8px 0 4px; padding: 10px 12px; border
 
 /* a picture linked in a note: a button naming its site, or the picture itself once asked for */
 .pic { display: block; margin: 8px 0 4px; white-space: normal }
-.pic-btn { font-size: .85rem; padding: 4px 10px; cursor: pointer }
+.pic-btn { font-size: .85rem; padding: 4px 10px; cursor: pointer; max-width: 100%; text-align: left; justify-content: flex-start; overflow-wrap: anywhere } .pic-btn .icon { flex: none }
 .pic-open { display: block }
 .pic video { display: block; width: 100%; max-height: 480px; border-radius: 12px; border: 1px solid var(--border); background: #000 }
 .pic img { display: block; max-width: 100%; max-height: 480px; object-fit: cover; border-radius: 12px; border: 1px solid var(--border); background: var(--btn) }
@@ -340,3 +340,14 @@ a.quote { display: grid; gap: 4px; margin: 8px 0 4px; padding: 10px 12px; border
 /* the repost and reply icons as big as the emojis beside them, in the line of numbers and in the list of who */
 .reach-item .icon, .reach-mark .icon { width: 1.25em; height: 1.25em; vertical-align: -0.25em }
 .reach-who p { align-items: center }
+
+/* search: a round button bottom left, the mirror of the write button (outlined: writing stays the main action), and its page */
+.fab-search { position: fixed; z-index: 6; left: max(16px, calc((100% - var(--col)) / 2 + 16px)); bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) * .5 + 16px); width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: var(--panel); border: 2px solid var(--accent); color: var(--accent); box-shadow: 0 4px 16px rgba(0,0,0,.5) }
+.search-form { display: grid; gap: 8px } .search-form .meta { margin: 0 }
+.search-row { display: flex; align-items: center; gap: 10px; color: var(--muted) }
+.search-box { flex: 1; min-width: 0; font: inherit; font-size: 1rem; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text) }
+.search-box:focus { outline: 2px solid var(--accent); outline-offset: 1px }
+.search-people h2 { margin: 0 0 6px; font-size: 1rem } .search-people ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
+.search-people li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap } .search-people li a { display: inline-flex; align-items: center; gap: 8px; color: var(--text); text-decoration: none }
+.search-people .avatar { width: 30px; height: 30px; font-size: .7rem }
+.search-net { display: grid; gap: 6px; justify-items: start } .search-net > button { display: inline-flex; align-items: center; gap: 6px } .search-net .meta { margin: 0 }

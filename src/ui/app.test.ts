@@ -16,12 +16,13 @@ const relays = (events: Event[], delayMs = 0, slowFor?: (f: Filter) => number): 
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms))
 const roots: HTMLElement[] = []
 
-function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; slowFor?: (f: Filter) => number; light?: { value: boolean } } = {}) {
+function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; searchable?: Event[]; slowFor?: (f: Filter) => number; light?: { value: boolean } } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
   const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], schemeChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs, opts.slowFor), calls = { n: 0 }, filters: Filter[] = []
   startApp(root, {
     fetcher: { query: (f) => { calls.n++; filters.push(f); return base.query(f) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', prefersLight: () => !!opts.light?.value, onSchemeChange: (cb) => schemeChanged.push(cb), onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
+    searchFetcher: opts.searchable ? { query: async (f: Filter) => opts.searchable!.filter((e) => answers(f, e) && (!(f as { search?: string }).search || e.content.toLowerCase().includes((f as { search: string }).search.toLowerCase()))) } : undefined,
     checkVersion: opts.newer ? async () => { asked.n++; return opts.newer!.value } : undefined, languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
     storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
   })
@@ -330,13 +331,13 @@ describe('the help page', () => {
   const sections = (a: ReturnType<typeof boot>) => [...a.root.querySelectorAll('details.help-section')] as HTMLDetailsElement[]
   it('is the rightmost button of the header, also before signing in, and the same button closes it', async () => {
     const out = boot(); expect(help(out)).not.toBeNull(); help(out).click(); await tick(60)
-    expect(sections(out)).toHaveLength(9); expect(out.text()).toContain('What Quill is'); expect(help(out).getAttribute('aria-pressed')).toBe('true')
+    expect(sections(out)).toHaveLength(10); expect(out.text()).toContain('What Quill is'); expect(help(out).getAttribute('aria-pressed')).toBe('true')
     help(out).click(); await tick(60); expect(sections(out)).toHaveLength(0); expect(out.text()).toContain('Read as…')
     const a = boot({ stored: { me } }); await tick(80); expect([...a.root.querySelectorAll('header.top button')].map((b) => b.getAttribute('aria-label') ?? b.textContent).slice(-3)).toEqual(['ES', 'Settings', 'Help'])
   })
   it('opens with the first section unfolded; what you unfold stays unfolded when the page redraws', async () => {
     const a = boot({ stored: { me } }); await tick(80); help(a).click(); await tick(60)
-    expect(sections(a).map((s) => s.open)).toEqual([true, false, false, false, false, false, false, false, false])
+    expect(sections(a).map((s) => s.open)).toEqual([true, false, false, false, false, false, false, false, false, false])
     const filter = sections(a).find((s) => s.dataset.id === 'filter')!; filter.open = true; filter.dispatchEvent(new Event('toggle')); await tick(10)
     ;(a.root.querySelector('.lang button[aria-pressed=false]') as HTMLElement).click(); await tick(80) // language change redraws the whole page
     expect(sections(a).filter((s) => s.open).map((s) => s.dataset.id)).toEqual(['about', 'filter']); expect(a.text()).toContain('Cómo decide el filtro')
@@ -1089,5 +1090,31 @@ describe('pictures brought by someone the reader follows', () => {
     const card = (text: string) => [...a.root.querySelectorAll('article.note')].find((n) => n.querySelector('.body')!.textContent!.startsWith(text))!
     expect(card('stranger pic').querySelector('.pic img')!.getAttribute('src')).toBe('https://image.nostr.build/s.png')
     expect(card('see').querySelector('a.quote img')!.getAttribute('src')).toBe('https://image.nostr.build/q2.png')
+  })
+})
+
+describe('search', () => {
+  const fab = (a: ReturnType<typeof boot>) => a.root.querySelector('button.fab-search') as HTMLButtonElement | null
+  const type = async (a: ReturnType<typeof boot>, text: string) => { const i = a.root.querySelector('input.search-box') as HTMLInputElement; i.value = text; i.dispatchEvent(new Event('input')); await tick(30) }
+  it('a round button bottom left opens it; it searches the notes Quill has shown and the names it knows, without asking any relay', async () => {
+    const a = boot({ events: [...world, ev(friend, 'Café and nostr talk', { created_at: 8000 }), ev(friend, JSON.stringify({ name: 'Ana' }), { kind: 0 })], stored: { me } }); await tick(300)
+    expect(fab(a)).not.toBeNull(); fab(a)!.click(); await tick(100)
+    expect(a.root.querySelector('input.search-box')).not.toBeNull(); expect(fab(a)).toBeNull() // not on the search page itself
+    const before = a.calls.n
+    await type(a, 'cafe')
+    expect(a.root.querySelector('.search-results article.note')!.textContent).toContain('Café and nostr talk')
+    await type(a, 'an')
+    expect(a.root.querySelector('.search-people')!.textContent).toContain('Ana'); expect(a.root.querySelector('.search-people')!.textContent).toContain('you follow')
+    expect(a.calls.n).toBe(before)
+    await type(a, 'zzzz'); expect(a.text()).toContain('Nothing like that in what Quill has loaded.')
+    await type(a, nip19.npubEncode(friend)); expect(a.root.querySelector('.search-results a.button')!.getAttribute('href')).toBe(`#/user/${friend}`)
+  })
+  it('"Search the network too" asks the search relays only when tapped, and shows what they found that was not already there', async () => {
+    const far1 = ev(far, 'a far note about quill clients', { created_at: 7000 })
+    const a = boot({ events: world, stored: { me }, searchable: [far1, ev(far, JSON.stringify({ name: 'Quill fan' }), { kind: 0 })] }); await tick(300)
+    await a.go('#/search'); await tick(50); await type(a, 'quill')
+    expect(a.text()).toContain('search.nos.today'); expect(a.text()).not.toContain('a far note about quill')
+    ;([...a.root.querySelectorAll('.search-net button')].find((b) => b.textContent!.includes('Search the network too')) as HTMLButtonElement).click(); await tick(200)
+    expect(a.text()).toContain('From the network'); expect(a.text()).toContain('a far note about quill clients'); expect(a.root.querySelector('.search-people')!.textContent).toContain('Quill fan') // its name is known now, so it is listed with the people
   })
 })

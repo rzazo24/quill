@@ -9,6 +9,7 @@ import { isReply } from '../core/thread.js'
 import { judgeAll, tally, type Context, type Judged, type Settings } from '../core/verdict.js'
 import { loadNetwork } from '../data/network.js'
 import { loadPopular } from '../data/popular.js'
+import { matchNotes, matchPeople, MIN_QUERY, parseTarget, searchNetwork, SEARCH_RELAYS, type Found } from '../data/search.js'
 import { loadProfile, type ProfileInfo } from '../data/profile.js'
 import { followPubkeys, followTemplate, type FollowAction } from '../core/follow.js'
 import { addBackup, checkBase, loadFollowList, nextKnown, parseBackups } from '../data/followlist.js'
@@ -32,7 +33,7 @@ import { addRelay, parseRelays, removeRelay } from '../net/relays.js'
 import { listState, loadPublishedRelays, relayListTemplate } from '../data/relaylist.js'
 
 export interface Deps {
-  fetcher: Fetcher; storage?: KV; languages?: readonly string[]; location: Pick<Location, 'hash'>; onHash: (cb: () => void) => void; setHash: (h: string) => void
+  fetcher: Fetcher; /** Relays that can search text (NIP-50), asked only when the reader taps 'search the network too'. */ searchFetcher?: Fetcher; storage?: KV; languages?: readonly string[]; location: Pick<Location, 'hash'>; onHash: (cb: () => void) => void; setHash: (h: string) => void
   /** Without these the app is read-only. */
   signer?: SignerApi; publisher?: Publisher; relays?: string[]; copy?: (text: string) => void; nowMs?: () => number
   /** Reads the clipboard (needs a tap; may be refused). */
@@ -59,7 +60,7 @@ export interface Deps {
   verify?: (e: NostrEvent) => boolean
 }
 
-type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'help' } | { name: 'user'; pubkey: string } | { name: 'people'; list: 'following' | 'followers' } | { name: 'note'; id: string; from?: string }
+type Route = { name: 'following' } | { name: 'search' } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'help' } | { name: 'user'; pubkey: string } | { name: 'people'; list: 'following' | 'followers' } | { name: 'note'; id: string; from?: string }
 /** Someone with no account who opens a link to a note: they read that one public note and its replies, exactly as they are. No follows, no mutes, no rule that hides anything. */
 const GUEST_CONTEXT: Context = { me: '', follows: new Set(), muted: new Set(), mutedWords: [], graph: { loaded: false, distance: () => null } }
 const GUEST_SETTINGS: Settings = { rules: { repeatedText: false, burst: false, linkOnly: false, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 }
@@ -79,7 +80,7 @@ export function parseRoute(hash: string): Route {
   if (hash === '#/me/following' || hash === '#/me/followers') return { name: 'people', list: hash === '#/me/following' ? 'following' : 'followers' }
   const u = /^#\/user\/(.+)$/.exec(hash)
   if (u) { const r = parseIdentity(decodeURIComponent(u[1]!)); if (r.ok) return { name: 'user', pubkey: r.pubkey } } // an account: its key in hex, npub or nprofile
-  return hash === '#/mentions' ? { name: 'mentions' } : hash === '#/me' ? { name: 'me' } : hash === '#/help' ? { name: 'help' } : hash === '#/settings' ? { name: 'settings' } : hash === '#/settings/filter' ? { name: 'settings', focus: 'filter' } : { name: 'following' }
+  return hash === '#/search' ? { name: 'search' } : hash === '#/mentions' ? { name: 'mentions' } : hash === '#/me' ? { name: 'me' } : hash === '#/help' ? { name: 'help' } : hash === '#/settings' ? { name: 'settings' } : hash === '#/settings/filter' ? { name: 'settings', focus: 'filter' } : { name: 'following' }
 }
 
 export function startApp(root: HTMLElement, deps: Deps): void {
@@ -235,7 +236,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
   /** The lists are built once and reused between redraws, so a bar already on screen keeps what it showed: redo the bar(s) of this note in place. */
   const rebar = (e: NostrEvent) => { for (const old of root.querySelectorAll(`article.note[data-id="${e.id}"] .actions`)) old.replaceWith(barFor(e)) }
-  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), quoted: (id: string) => quotedMap.get(id), wantQuote, autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
+  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), quoted: (id: string) => quotedMap.get(id), wantQuote, seen: rememberNotes, autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
   const ctx = () => contextOf(session!, { mutedWords: words, mutedKeys: [] })
   const who = () => (signer?.pubkey ? nameOf(view(), signer.pubkey) : '')
 
@@ -321,8 +322,80 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     draw()
   }
 
+  // Search. Every note Quill draws or lists is kept here (newest wins, up to a few thousand) so it can be found again without asking anyone.
+  const knownNotes = new Map<string, Judged>()
+  function rememberNotes(list: Judged[]): void {
+    for (const j of list) { knownNotes.delete(j.event.id); knownNotes.set(j.event.id, j) }
+    while (knownNotes.size > 5000) knownNotes.delete(knownNotes.keys().next().value!)
+  }
+  let searchQuery = ''
+  let searchNet: { query: string; state: 'loading' } | { query: string; state: 'failed' } | { query: string; state: 'done'; notes: Judged[]; people: Found[] } | null = null
+  let searchInput: HTMLInputElement | null = null
+  let searchResults: HTMLElement | null = null
+  let searchPageEl: HTMLElement | null = null
+  /** The search page is built once and kept: typing only redraws the results under the box, so the box keeps its focus and what was typed. */
+  function searchPage(): HTMLElement {
+    if (searchPageEl) { drawSearch(); return searchPageEl }
+    searchInput = h('input', { type: 'search', class: 'search-box', placeholder: t(lang, 'searchPlaceholder'), 'aria-label': t(lang, 'search'), autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false', enterkeyhint: 'search' }) as HTMLInputElement
+    searchInput.value = searchQuery
+    searchInput.addEventListener('input', () => { searchQuery = searchInput!.value; drawSearch() })
+    searchResults = h('div', { class: 'stack search-results' })
+    const form = h('form', { class: 'card search-form', role: 'search', onSubmit: (e: Event) => { e.preventDefault(); const target = parseTarget(searchQuery); if (target) deps.setHash(target.kind === 'user' ? `#/user/${target.pubkey}` : `#/note/${target.id}`); else searchInput?.blur() } },
+      h('label', { class: 'search-row' }, icon('search', 20), searchInput), h('p', { class: 'meta' }, t(lang, 'searchHint')))
+    searchPageEl = h('div', { class: 'stack search' }, form, searchResults)
+    drawSearch()
+    setTimeout(() => { if (searchInput?.isConnected && !searchQuery) searchInput.focus() }, 0) // opened to type: the box is ready
+    return searchPageEl
+  }
+  function drawSearch(): void {
+    if (!searchResults || !session) return
+    const q = searchQuery.trim(), v = view(), parts: (HTMLElement | null)[] = []
+    const target = parseTarget(q)
+    if (target) parts.push(h('p', {}, h('a', { class: 'button primary', href: target.kind === 'user' ? `#/user/${target.pubkey}` : `#/note/${target.id}` }, t(lang, target.kind === 'user' ? 'searchOpenAccount' : 'searchOpenNote'))))
+    else if (q.length < MIN_QUERY) parts.push(h('p', { class: 'meta search-empty' }, t(lang, 'searchType')))
+    else {
+      const people = matchPeople(names, q, ctx()), notes = matchNotes(knownNotes.values(), q)
+      if (people.length) parts.push(peopleCard(t(lang, 'searchPeople'), people, v))
+      if (notes.length) parts.push(h('h2', { class: 'section' }, `${t(lang, 'searchNotes')} · ${notes.length}`), renderList(notes, { ...v, seen: undefined }))
+      if (!people.length && !notes.length) parts.push(h('p', { class: 'empty' }, t(lang, 'searchNone')))
+      parts.push(netSection(q, v, new Set(people.map((p) => p.pubkey)), new Set(notes.map((n) => n.event.id))))
+    }
+    searchResults.replaceChildren(...parts.filter((x): x is HTMLElement => x !== null))
+  }
+  function peopleCard(title: string, people: Found[], v: View): HTMLElement {
+    return h('section', { class: 'card search-people' }, h('h2', {}, `${title} · ${people.length}`),
+      h('ul', {}, ...people.map((p) => h('li', {}, h('a', { href: `#/user/${p.pubkey}` }, avatarEl(p.pubkey, v), h('strong', {}, p.name)), p.relation === 'none' ? null : h('span', { class: 'meta' }, t(lang, p.relation === 'follow' ? 'relFollow' : 'relNetwork'))))))
+  }
+  function netSection(q: string, v: View, havePeople: Set<string>, haveNotes: Set<string>): HTMLElement | null {
+    if (!deps.searchFetcher) return null
+    const net = searchNet?.query === q ? searchNet : null
+    if (!net) return h('div', { class: 'search-net' }, h('button', { type: 'button', onClick: () => void runNetSearch(q) }, icon('search', 16), t(lang, 'searchNet')), h('p', { class: 'meta' }, t(lang, 'searchNetHint', { relays: SEARCH_RELAYS.map((r) => r.replace(/^wss:\/\//, '')).join(' · ') })))
+    if (net.state === 'loading') return h('p', { class: 'status loading', role: 'status' }, h('span', {}, t(lang, 'searchNetLoading')))
+    if (net.state === 'failed') return h('div', { class: 'search-net' }, h('p', { class: 'error' }, t(lang, 'searchNetFailed')), h('button', { type: 'button', onClick: () => void runNetSearch(q) }, t(lang, 'searchRetry')))
+    const people = net.people.filter((p) => !havePeople.has(p.pubkey)), notes = net.notes.filter((n) => !haveNotes.has(n.event.id))
+    return h('div', { class: 'stack search-net' }, h('h2', { class: 'section' }, t(lang, 'searchNetFrom')),
+      people.length ? peopleCard(t(lang, 'searchPeople'), people, v) : null,
+      notes.length ? h('h2', { class: 'section' }, `${t(lang, 'searchNotes')} · ${notes.length}`) : null, notes.length ? renderList(notes, v) : null,
+      !people.length && !notes.length ? h('p', { class: 'empty' }, t(lang, 'searchNetNone')) : null)
+  }
+  async function runNetSearch(q: string): Promise<void> {
+    if (!deps.searchFetcher || !session) return
+    const who = me
+    searchNet = { query: q, state: 'loading' }; drawSearch()
+    try {
+      const found = await searchNetwork(deps.searchFetcher, q, ctx(), settings)
+      if (me !== who) return
+      for (const p of found.people) if (!names.has(p.pubkey)) names.set(p.pubkey, p.name)
+      await nameThem(found.notes.slice(0, PAGE)).catch(() => {})
+      if (me !== who || searchNet?.query !== q) return
+      searchNet = { query: q, state: 'done', notes: found.notes, people: found.people }
+    } catch { if (searchNet?.query === q) searchNet = { query: q, state: 'failed' } }
+    drawSearch()
+  }
+
   /** The content of one view (a feed, a thread, an account, a list…). `alive` says whether the answer is still wanted: when it is not, null comes back. */
   async function buildContent(route: Route, alive: () => boolean): Promise<HTMLElement | null> {
+    if (route.name === 'search') return searchPage()
     if (route.name === 'mentions' || route.name === 'note' || (route.name === 'following' && feedMode === 'network')) await background() // they judge by the graph; the Following feed and Me do not
     let content: HTMLElement
     try {
@@ -402,10 +475,10 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const route = parseRoute(deps.location.hash)
     const jobs: Promise<void>[] = [] // Settings and Help too: a change made there (avatars, filter, relays) must already be in the columns when you go back
     if (scope === 'all') for (const id of ['following', 'mentions', 'me'] as const) jobs.push(loadPane(panes[id], { name: id }))
-    if (route.name === 'note' || route.name === 'user' || route.name === 'people') {
+    if (route.name === 'note' || route.name === 'user' || route.name === 'people' || route.name === 'search') {
       const key = JSON.stringify(route)
       if (scope === 'all' || key !== detailKey) {
-        if (key !== detailKey) { panes.detail.body = null; panes.detail.resetScroll = true; profileMode = 'notes' }
+        if (key !== detailKey) { panes.detail.body = route.name === 'search' ? searchPage() : null; panes.detail.resetScroll = true; profileMode = 'notes' } // the search page is there at once: its box must not blink out under the cursor
         detailKey = key; jobs.push(loadPane(panes.detail, route))
       }
     } else { detailKey = ''; panes.detail.body = null; panes.detail.run++ }
@@ -797,8 +870,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       h('section', { class: 'col', 'data-col': id }, h('h2', { class: 'col-title' }, h('span', {}, title), ...extra), ...nodes)
     const write = signer?.state === 'connected' ? h('button', { type: 'button', class: 'primary write', onClick: startNote }, icon('feather', 16), t(lang, 'newNote').replace(/…$/, '')) : null
     const count = badge > 0 ? h('span', { class: 'badge', 'aria-label': `${badge}` }, badge > 9 ? '9+' : String(badge)) : null
-    const detailOpen = route.name === 'note' || route.name === 'user' || route.name === 'people'
-    const detailTitle = route.name === 'note' ? t(lang, 'thread') : route.name === 'people' ? t(lang, route.list === 'following' ? 'peopleFollowing' : 'peopleFollowers') : t(lang, 'account')
+    const detailOpen = route.name === 'note' || route.name === 'user' || route.name === 'people' || route.name === 'search'
+    const detailTitle = route.name === 'search' ? t(lang, 'search') : route.name === 'note' ? t(lang, 'thread') : route.name === 'people' ? t(lang, route.list === 'following' ? 'peopleFollowing' : 'peopleFollowers') : t(lang, 'account')
     return h('div', { class: detailOpen ? 'cols with-detail' : 'cols' },
       column('following', t(lang, 'following'), [panes.following.body], [write]),
       column('mentions', t(lang, 'mentions'), [panes.mentions.body], [count]),
@@ -810,6 +883,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     // <main> is the only thing that scrolls and it is rebuilt on every draw. Read where the reader was FIRST: building the new one moves the list out of
     // the old one, which then collapses to zero.
     const kept = root.querySelector('main.view')?.scrollTop ?? 0
+    const searching = !!searchInput && root.ownerDocument.activeElement === searchInput // read before building: moving the search page into the new view takes the cursor away
     const keptCols = new Map<string, number>([...root.querySelectorAll<HTMLElement>('.col[data-col]')].map((c) => [c.dataset.col!, c.scrollTop]))
     const route = parseRoute(deps.location.hash)
     const isWide = wide() && !!me && route.name !== 'settings' && route.name !== 'help'
@@ -849,13 +923,15 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), body, h('div', { class: 'foot' }, signOut)]
       : [signArea, body]
     const page: (HTMLElement | null)[] = [
-      h('header', { class: 'top' }, halloween() ? h('span', { class: 'cobweb', 'aria-hidden': 'true' }, cobweb()) : null, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('div', { class: 'brand' }, h('h1', {}, h('a', { href: '#/', class: 'wordmark' }, logo(26, halloween()), 'Quill', halloween() ? pumpkin(22) : null)), h('span', { class: 'tag' }, t(lang, 'tagline'))), me ? h('button', { type: 'button', class: status ? 'icon spinning' : 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), ...(status ? { 'aria-busy': 'true' } : {}), onClick: refresh }, icon('refresh', 18)) : null, pills, me ? h('button', { type: 'button', class: route.name === 'settings' ? 'icon on' : 'icon', 'aria-label': t(lang, 'prefsTitle'), title: t(lang, 'prefsTitle'), 'aria-pressed': String(route.name === 'settings'), onClick: () => deps.setHash(route.name === 'settings' ? '' : '#/settings') }, icon('gear', 18)) : null, h('button', { type: 'button', class: route.name === 'help' ? 'icon on' : 'icon', 'aria-label': t(lang, 'helpTitle'), title: t(lang, 'helpTitle'), 'aria-pressed': String(route.name === 'help'), onClick: () => deps.setHash(route.name === 'help' ? '' : '#/help') }, icon('help', 18)), statusEl),
+      h('header', { class: 'top' }, halloween() ? h('span', { class: 'cobweb', 'aria-hidden': 'true' }, cobweb()) : null, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('div', { class: 'brand' }, h('h1', {}, h('a', { href: '#/', class: 'wordmark' }, logo(26, halloween()), 'Quill', halloween() ? pumpkin(22) : null)), h('span', { class: 'tag' }, t(lang, 'tagline'))), me && wide() ? h('button', { type: 'button', class: route.name === 'search' ? 'icon on' : 'icon', 'aria-label': t(lang, 'search'), title: t(lang, 'search'), 'aria-pressed': String(route.name === 'search'), onClick: () => deps.setHash(route.name === 'search' ? '' : '#/search') }, icon('search', 18)) : null, me ? h('button', { type: 'button', class: status ? 'icon spinning' : 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), ...(status ? { 'aria-busy': 'true' } : {}), onClick: refresh }, icon('refresh', 18)) : null, pills, me ? h('button', { type: 'button', class: route.name === 'settings' ? 'icon on' : 'icon', 'aria-label': t(lang, 'prefsTitle'), title: t(lang, 'prefsTitle'), 'aria-pressed': String(route.name === 'settings'), onClick: () => deps.setHash(route.name === 'settings' ? '' : '#/settings') }, icon('gear', 18)) : null, h('button', { type: 'button', class: route.name === 'help' ? 'icon on' : 'icon', 'aria-label': t(lang, 'helpTitle'), title: t(lang, 'helpTitle'), 'aria-pressed': String(route.name === 'help'), onClick: () => deps.setHash(route.name === 'help' ? '' : '#/help') }, icon('help', 18)), statusEl),
       h('main', { class: isWide ? 'view wide' : 'view' }, ...content),
+      me && !isWide && route.name !== 'search' && route.name !== 'settings' && route.name !== 'help' ? h('button', { type: 'button', class: 'fab-search', 'aria-label': t(lang, 'search'), title: t(lang, 'search'), onClick: () => deps.setHash('#/search') }, icon('search', 26)) : null,
       me && !isWide ? h('nav', { class: 'tabbar' }, tab('following', '#/'), tab('mentions', '#/mentions'), tab('me', '#/me')) : null,
     ]
     // put the reader back where they were (unless this is a new view)
     if (scrollToTop || flash || composer || review || result || followFlow || shareConfirm || connectOpen) barsHidden = false // a new view, or something that talks to you: the bars stay
     root.replaceChildren(...page.filter((x): x is HTMLElement => x !== null))
+    if (searching && searchInput!.isConnected) searchInput!.focus({ preventScroll: true })
     root.classList.toggle('bars-hidden', barsHidden && !isWide)
     root.classList.toggle('wide', isWide)
     root.classList.toggle('has-tabs', !!me && !isWide)
