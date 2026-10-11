@@ -1,6 +1,6 @@
 // The app: a login, two lists (following, mentions), a thread view, and — when a signer is configured — writing, replying and reacting through the
 // user's remote signer. State lives here; everything else is a function of it.
-import { nip19, type Event as NostrEvent } from 'nostr-tools'
+import { nip19, verifyEvent, type Event as NostrEvent } from 'nostr-tools'
 import { canRepost, repostTemplate } from '../core/repost.js'
 import { hashtagTags, mentionTags, mergeTags, quoteContent, quoteTags, reactionTags, replyTags } from '../core/compose.js'
 import { parseIdentity } from '../core/identity.js'
@@ -52,6 +52,8 @@ export interface Deps {
   onPoll?: (cb: () => void) => void
   /** Is the screen wide enough for three columns? And a hook for "it just changed" (a window resized). */
   isWide?: () => boolean; onWide?: (cb: () => void) => void
+  /** Checks a signature (tests use events without real ones). */
+  verify?: (e: NostrEvent) => boolean
 }
 
 type Route = { name: 'following' } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'help' } | { name: 'user'; pubkey: string } | { name: 'people'; list: 'following' | 'followers' } | { name: 'note'; id: string; from?: string }
@@ -336,6 +338,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
           // Following: the people you follow, or the network; in the network an empty list says why (no follow lists arrived, or just nothing new)
           const network = route.name === 'following' && feedMode === 'network'
           const empty = network && !items.length ? h('p', { class: 'empty' }, t(lang, session!.graphInfo.answered === 0 ? 'networkNotLoaded' : 'networkEmpty')) : null
+          if (route.name === 'following' && !network && items.length) saveFeedCache(items)
           content = h('div', { class: 'stack' }, route.name === 'following' ? renderFeedMode(feedMode, changeFeedMode, view()) : null, renderSummary(tally(items), view(), toggleSettings), empty ?? renderList(items, view()))
         }
       }
@@ -362,6 +365,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       if (r.name === 'note') return void loadGuestNote(r.id, mine)
       guestBody = null; return draw()
     }
+    if (!panes.following.body && feedMode === 'follows') { const cached = cachedFeed(); if (cached) { panes.following.body = cached; draw() } }
     if (!(await ensureSession()) || !session) return
     if (paneJobs === 0) status = null // reading the account is done; what turns the button now is the columns loading
     const route = parseRoute(deps.location.hash)
@@ -378,6 +382,26 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     await Promise.all(jobs)
   }
 
+  // The Following feed as it was last time, kept on this device: shown at once when the app opens, replaced by the fresh one when it arrives.
+  // Only the first notes and the names they need; every signature is checked again when it is read back.
+  const FEED_CACHE_ITEMS = 40
+  const feedCacheKey = () => `feedcache:${me}`
+  function saveFeedCache(items: Judged[]): void {
+    const kept = items.slice(0, FEED_CACHE_ITEMS)
+    const keys = new Set(kept.flatMap((j) => [j.event.pubkey, ...(j.repostedBy ?? [])]))
+    safeSet(kv, feedCacheKey(), JSON.stringify({ items: kept, names: [...keys].filter((k) => names.has(k)).map((k) => [k, names.get(k)]) }))
+  }
+  function cachedFeed(): HTMLElement | null {
+    try {
+      const raw = JSON.parse(safeGet(kv, feedCacheKey()) ?? 'null') as { items?: Judged[]; names?: [string, string][] } | null
+      if (!raw || !Array.isArray(raw.items) || !raw.items.length) return null
+      const items = raw.items.filter((j) => j && j.event && j.verdict && typeof j.verdict.hidden === 'boolean' && (deps.verify ?? verifyEvent)({ ...j.event }))
+      if (!items.length) return null
+      for (const [k, n] of raw.names ?? []) if (typeof k === 'string' && typeof n === 'string' && !names.has(k)) names.set(k, n)
+      return h('div', { class: 'stack' }, renderFeedMode(feedMode, changeFeedMode, view()), renderSummary(tally(items), view(), toggleSettings), renderList(items, view()))
+    } catch { return null }
+  }
+
   async function load(scope: 'all' | 'route' = 'all'): Promise<void> {
     if (wide()) return loadWide(scope)
     const mine = ++run
@@ -386,6 +410,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       if (r.name === 'note') return void loadGuestNote(r.id, mine)
       guestBody = null; return draw()
     }
+    const first = parseRoute(deps.location.hash)
+    if (!body && first.name === 'following' && feedMode === 'follows') { const cached = cachedFeed(); if (cached) { body = cached; shownRoute = JSON.stringify(first); draw() } }
     if (!(await ensureSession()) || mine !== run || !session) return
     const route = parseRoute(deps.location.hash)
     const key = JSON.stringify(route)
@@ -773,7 +799,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const pills = h('div', { class: 'lang', role: 'group', 'aria-label': 'Language' }, ...(['en', 'es'] as const).map((l) =>
       h('button', { type: 'button', 'aria-pressed': String(lang === l), onClick: () => { if (lang !== l) { lang = l; safeSet(kv, 'lang', lang); void load() } } }, l.toUpperCase())))
     const statusEl = me && status ? h('p', { class: 'status loading', role: 'status' }, h('span', {}, status)) : null
-    const doSignOut = () => { confirmingSignOut = false; me = null; session = null; body = null; shownRoute = ''; forgetAccount(); safeSet(kv, 'me', null); void signer?.disconnect(); composer = review = result = null; flash = null; deps.setHash(''); draw() }
+    const doSignOut = () => { confirmingSignOut = false; safeSet(kv, feedCacheKey(), null); me = null; session = null; body = null; shownRoute = ''; forgetAccount(); safeSet(kv, 'me', null); void signer?.disconnect(); composer = review = result = null; flash = null; deps.setHash(''); draw() }
     const signOut = confirmingSignOut
       ? h('div', { class: 'confirm-signout', role: 'alertdialog', 'aria-label': t(lang, 'signOut') }, h('p', {}, t(lang, 'confirmSignOut')),
         h('p', { class: 'buttons' }, h('button', { type: 'button', class: 'danger', onClick: doSignOut }, t(lang, 'signOut')), ' ', h('button', { type: 'button', onClick: () => { confirmingSignOut = false; draw() } }, t(lang, 'cancel'))))

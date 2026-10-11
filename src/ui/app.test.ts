@@ -21,7 +21,7 @@ function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string
   const location = { hash: '' }, listeners: (() => void)[] = []
   const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs, opts.slowFor), calls = { n: 0 }
   startApp(root, {
-    fetcher: { query: (f) => { calls.n++; return base.query(f) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
+    fetcher: { query: (f) => { calls.n++; return base.query(f) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
     checkVersion: opts.newer ? async () => { asked.n++; return opts.newer!.value } : undefined, languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
     storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
   })
@@ -916,5 +916,23 @@ describe('what each of my notes got, shown in Me', () => {
     const a = boot({ events: events(), stored: { me }, wide: { value: true } }); await tick(700)
     expect(a.root.querySelector('.col[data-col="me"] .reach')).not.toBeNull()
     const calls = a.calls.n; await tick(600); expect(a.calls.n).toBe(calls) // nothing is asked again while you look
+  })
+})
+
+describe('the feed from last time is shown at once', () => {
+  it('opening again shows the last Following feed before the relays answer, then the fresh one replaces it', async () => {
+    const first = boot({ stored: { me } }); await tick(300)
+    const saved = Object.fromEntries(first.mem); expect(saved[`feedcache:${me}`]).toBeTruthy()
+    const again = boot({ stored: saved, delayMs: 1500 }); await tick(100)
+    expect(again.text()).toContain('a post from my friend') // the relays have not answered yet
+    await tick(2500); expect(again.text()).toContain('a post from my friend')
+  })
+  it('a note whose signature does not check out is not shown from the saved copy, and signing out deletes it', async () => {
+    const first = boot({ stored: { me } }); await tick(300)
+    const saved = Object.fromEntries(first.mem); const c = JSON.parse(saved[`feedcache:${me}`]!); c.items[0].event.content = 'tampered'; saved[`feedcache:${me}`] = JSON.stringify(c)
+    const again = boot({ stored: saved, delayMs: 1500 }); await tick(100); expect(again.text()).not.toContain('tampered')
+    await tick(2500); await again.go('#/me'); await tick(150)
+    ;[...again.root.querySelectorAll('button')].find((b) => b.textContent === 'Sign out')!.click(); await tick(20); ;(again.root.querySelector('.confirm-signout button.danger') as HTMLElement).click(); await tick(20)
+    expect(again.mem.has(`feedcache:${me}`)).toBe(false)
   })
 })
