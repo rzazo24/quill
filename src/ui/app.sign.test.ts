@@ -662,3 +662,50 @@ describe('after following, the relays get time to show the new list', () => {
     expect(a.text()).toContain('Now following Quinn'); expect(a.text()).not.toContain('do not show it yet')
   })
 })
+
+describe('muting and unmuting (the mute list, kind 10000, with the same care as the follow list)', () => {
+  const target = ('b' + '123').repeat(16), other = ('c' + '456').repeat(16)
+  const prof = ev(target, JSON.stringify({ name: 'Quinn' }), { kind: 0, created_at: 5 })
+  const muteList = (tags: string[][], content = 'ENCRYPTED-PRIVATE-PART', at = 1000) => ev(me, content, { kind: 10000, created_at: at, tags })
+  const learn = (events: Event[]) => { const pub = publisherFake(); const real = pub.p.publish; pub.p.publish = async (e, o) => { if (e.kind === 10000) { const i = events.findIndex((x) => x.kind === 10000 && x.pubkey === e.pubkey); if (i >= 0) events.splice(i, 1); events.push(e) } return real(e, o) }; return pub }
+  const open = async (events: Event[], at = `#/user/${target}`) => {
+    const sg = fakeSigner(); const a = boot({ events, signer: sg, pub: learn(events) }); await tick(100); await connectClave(a, sg); await a.go(at); await tick(250); return { a, sg, events }
+  }
+  const button = (a: ReturnType<typeof boot>, label: string) => [...a.root.querySelectorAll('.profile button')].find((b) => b.textContent === label) as HTMLButtonElement | undefined
+  const base = () => [list(me, 3, [['p', friend]]), list(friend, 3, []), prof]
+
+  it('muting from the account page keeps the whole list (other accounts, muted words, the private part) and adds ONE account; it says the list is public', async () => {
+    const { a } = await open([...base(), muteList([['p', other], ['word', 'giveaway']])])
+    button(a, 'Mute')!.click(); await tick(200)
+    const box = a.root.querySelector('.sheet .review')!; expect(box.querySelector('h2')!.textContent).toBe('Mute Quinn?'); expect(box.textContent).toContain('goes from 1 to 2 accounts'); expect(box.textContent).toContain('anyone can see whom you muted')
+    expect(a.pub.sent).toEqual([])
+    await click(a.root.querySelector('.sheet')! as HTMLElement, 'Mute'); await tick(500)
+    const e = a.pub.sent[0]!.event; expect(e.kind).toBe(10000); expect(e.tags).toEqual([['p', other], ['word', 'giveaway'], ['p', target]]); expect(e.content).toBe('ENCRYPTED-PRIVATE-PART')
+    expect(a.text()).toContain('Muted Quinn'); expect(button(a, 'Unmute')).toBeDefined()
+  })
+  it('unmuting removes only that account', async () => {
+    const { a } = await open([...base(), muteList([['p', other], ['p', target]])])
+    button(a, 'Unmute')!.click(); await tick(200); expect(a.root.querySelector('.sheet h2')!.textContent).toBe('Unmute Quinn?')
+    await click(a.root.querySelector('.sheet')! as HTMLElement, 'Unmute'); await tick(500); expect(a.pub.sent[0]!.event.tags).toEqual([['p', other]]); expect(a.text()).toContain('Quinn is no longer muted')
+  })
+  it('with no mute list at all, the first one holds just that account and nothing private', async () => {
+    const { a } = await open(base())
+    button(a, 'Mute')!.click(); await tick(200); expect(a.root.querySelector('.sheet')!.textContent).toContain('goes from 0 to 1 accounts')
+    await click(a.root.querySelector('.sheet')! as HTMLElement, 'Mute'); await tick(500)
+    const e = a.pub.sent[0]!.event; expect(e.kind).toBe(10000); expect(e.tags).toEqual([['p', target]]); expect(e.content).toBe('')
+  })
+  it('refuses when the list was seen at login but is not found now (a new one could erase the real one)', async () => {
+    const events = [...base(), muteList([['p', other]])]
+    const { a } = await open(events)
+    events.splice(events.findIndex((x) => x.kind === 10000), 1) // the relays do not give it back now
+    button(a, 'Mute')!.click(); await tick(250)
+    expect(a.root.querySelector('.sheet h2')!.textContent).toBe('Quill will not change your mute list'); expect(a.pub.sent).toEqual([])
+  })
+  it('the "…" of a note offers to mute its author, and the same confirmation follows', async () => {
+    const { a } = await open([...base(), muteList([['p', other]]), ev(target, 'a note by Quinn', { created_at: 9000 }), list(friend, 3, [['p', target]])], `#/user/${target}`)
+    const note = [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('a note by Quinn'))!
+    ;(note.querySelector('.more-btn') as HTMLButtonElement).click(); await tick(20)
+    const item = [...note.querySelectorAll('.more-list button')].find((b) => b.textContent === 'Mute Quinn') as HTMLButtonElement; expect(item).toBeDefined()
+    item.click(); await tick(250); expect(a.root.querySelector('.sheet h2')!.textContent).toBe('Mute Quinn?')
+  })
+})

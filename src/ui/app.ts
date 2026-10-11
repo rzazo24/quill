@@ -11,7 +11,7 @@ import { loadNetwork } from '../data/network.js'
 import { loadPopular } from '../data/popular.js'
 import { matchNotes, matchPeople, MIN_QUERY, parseTarget, searchNetwork, searchTag, SEARCH_RELAYS, tagOf, type Found } from '../data/search.js'
 import { loadProfile, type ProfileInfo } from '../data/profile.js'
-import { followPubkeys, followTemplate, type FollowAction } from '../core/follow.js'
+import { followPubkeys, followTemplate, listKindOf, MUTE_LIST_KIND, type FollowAction } from '../core/follow.js'
 import { addBackup, checkBase, loadFollowList, nextKnown, parseBackups } from '../data/followlist.js'
 import { loadFollowing, loadMentions, loadMine, loadNames, loadNote, loadThread, type Thread, type ThreadNode } from '../data/feed.js'
 import { Engagement, loadEngagement, normReaction } from '../data/engaged.js'
@@ -109,7 +109,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let knownFollowing: Set<string> | null = null
   const loadKnownFollowing = () => { knownFollowing ??= parseKnown(safeGet(kv, followingKey())); return knownFollowing }
   const saveKnownFollowing = (s: Set<string>) => { knownFollowing = s; safeSet(kv, followingKey(), JSON.stringify([...s])) }
-  type FollowFlow = { stage: 'checking'; pubkey: string; action: FollowAction } | { stage: 'confirm'; pubkey: string; action: FollowAction; base: NostrEvent; changed: boolean } | { stage: 'refuse'; pubkey: string; action: FollowAction; why: 'none' | 'shrunk'; known: number; found: number; base: NostrEvent | null }
+  type FollowFlow = { stage: 'checking'; pubkey: string; action: FollowAction } | { stage: 'confirm'; pubkey: string; action: FollowAction; base: NostrEvent | null; changed: boolean } | { stage: 'refuse'; pubkey: string; action: FollowAction; why: 'none' | 'shrunk'; known: number; found: number; base: NostrEvent | null }
   let followFlow: FollowFlow | null = null
   let shareConfirm: NostrEvent | null = null // the note about to be shared (sharing asks first: it is public)
   const shareable = new Set<string>() // ids of the notes whose bar offers Share (visible to the filter, shareable)
@@ -236,7 +236,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
   /** The lists are built once and reused between redraws, so a bar already on screen keeps what it showed: redo the bar(s) of this note in place. */
   const rebar = (e: NostrEvent) => { for (const old of root.querySelectorAll(`article.note[data-id="${e.id}"] .actions`)) old.replaceWith(barFor(e)) }
-  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), quoted: (id: string) => quotedMap.get(id), wantQuote, seen: rememberNotes, autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
+  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), quoted: (id: string) => quotedMap.get(id), wantQuote, seen: rememberNotes, ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk) } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
   const ctx = () => contextOf(session!, { mutedWords: words, mutedKeys: [] })
   const who = () => (signer?.pubkey ? nameOf(view(), signer.pubkey) : '')
 
@@ -590,10 +590,10 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   function followPanel(): FollowPanel | null {
     const f = followFlow
     if (!f) return null
-    if (f.stage === 'checking') return { stage: 'checking' }
-    if (f.stage === 'refuse') return { stage: 'refuse', why: f.why, known: f.known, found: f.found }
-    const before = followPubkeys(f.base).length
-    return { stage: 'confirm', who: nameOf(view(), f.pubkey), action: f.action, before, after: before + (f.action === 'follow' ? 1 : -1), changed: f.changed }
+    if (f.stage === 'checking') return { stage: 'checking', action: f.action }
+    if (f.stage === 'refuse') return { stage: 'refuse', action: f.action, why: f.why, known: f.known, found: f.found }
+    const before = f.base ? followPubkeys(f.base).length : 0
+    return { stage: 'confirm', who: nameOf(view(), f.pubkey), action: f.action, before, after: before + (f.action === 'follow' || f.action === 'mute' ? 1 : -1), changed: f.changed }
   }
 
   /** "Back": to where you came from (the browser's history), or to the start when there is none. */
@@ -604,7 +604,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const relation = info.pubkey === me ? 'you' : session!.muted.has(info.pubkey) ? 'muted' : session!.follows.has(info.pubkey) ? 'follow' : 'none'
     const shown = notes.filter((n) => isReply(n.event) === (profileMode === 'replies'))
     const canFollow = signer?.state === 'connected' && info.pubkey !== me
-    return h('div', { class: 'stack' }, backLink(), renderProfileHead(info, relation, view(), canFollow ? { following: relation === 'follow', busy: !!followFlow || busy, onToggle: () => void startFollow(info.pubkey, relation === 'follow' ? 'unfollow' : 'follow') } : undefined), renderProfileMode(profileMode, (m) => { profileMode = m; void load() }, view()),
+    return h('div', { class: 'stack' }, backLink(), renderProfileHead(info, relation, view(), canFollow ? { following: session!.follows.has(info.pubkey), muted: session!.muted.has(info.pubkey), busy: !!followFlow || busy, onToggle: () => void startFollow(info.pubkey, session!.follows.has(info.pubkey) ? 'unfollow' : 'follow'), onMute: () => void startFollow(info.pubkey, session!.muted.has(info.pubkey) ? 'unmute' : 'mute') } : undefined), renderProfileMode(profileMode, (m) => { profileMode = m; void load() }, view()),
       shown.length ? renderSummary(tally(shown), view(), toggleSettings) : null, shown.length ? renderList(shown, view()) : h('p', { class: 'empty' }, t(lang, 'profileEmpty')))
   }
 
@@ -721,7 +721,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     else say('error', t(lang, 'e_not_signed', { why: (e instanceof Error ? e.message : String(e)).trim() || t(lang, 'noReason') }))
   }
 
-  async function send(template: Template, opts: { followBase?: NostrEvent } = {}): Promise<boolean> {
+  async function send(template: Template, opts: { followBase?: NostrEvent | null; me?: string } = {}): Promise<boolean> {
     if (!signer || !publisher) return false
     // Still waiting for the signer to answer an earlier tap (e.g. Clave was closed): a new tap replaces it, so opening Clave and tapping again works.
     // Once the signature is made and the event is being sent, a second tap is ignored (no double posts).
@@ -779,53 +779,59 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     draw()
   }
   const sameFollows = (a: ReadonlySet<string>, b: ReadonlySet<string>) => a.size === b.size && [...a].every((k) => b.has(k))
-  /** Following or unfollowing: read the newest list NOW, check it looks like the list the reader has been seen to have, and show exactly what will change. */
+  /** What the reader was seen to have in a list: their follows (kept on the device), or their mutes (as read when the account was loaded). */
+  const knownOf = (kind: number): ReadonlySet<string> | null => (kind === MUTE_LIST_KIND ? session?.muted ?? null : loadKnownFollowing())
+  /** Following or unfollowing (and muting or unmuting: the same care, another list): read the newest list NOW, check it looks like the list the reader has been seen to have, and show exactly what will change. */
   async function startFollow(pubkey: string, action: FollowAction): Promise<void> {
     if (!signer || signer.state !== 'connected' || busy || !me || pubkey === me) return
     followFlow = { stage: 'checking', pubkey, action }; draw()
     fetcher.clear()
+    const kind = listKindOf(action), muting = kind === MUTE_LIST_KIND
     let base: NostrEvent | null = null
-    try { base = await loadFollowList(fetcher, me) } catch { base = null }
+    try { base = await loadFollowList(fetcher, me, kind) } catch { base = null }
     if (!followFlow || followFlow.stage !== 'checking') return // cancelled meanwhile
-    const verdict = checkBase(base, loadKnownFollowing())
+    const verdict = checkBase(base, knownOf(kind), muting)
     if (!verdict.ok) { followFlow = { stage: 'refuse', pubkey, action, why: verdict.why, known: verdict.known, found: verdict.found, base }; return draw() }
-    if (!followTemplate(base!, pubkey, action, nowSec())) { followFlow = null; say('info', t(lang, action === 'follow' ? 'profileFollowed' : 'profileNotFollowed')); return draw() } // already so
-    followFlow = { stage: 'confirm', pubkey, action, base: base!, changed: false }; draw()
+    if (!followTemplate(base, pubkey, action, nowSec(), me)) { followFlow = null; say('info', t(lang, muting ? (action === 'mute' ? 'profileMuted' : 'profileNotMuted') : action === 'follow' ? 'profileFollowed' : 'profileNotFollowed')); return draw() } // already so
+    followFlow = { stage: 'confirm', pubkey, action, base, changed: false }; draw()
   }
   /** The reader says the list they have now is the right one (they removed many accounts on purpose): it becomes the reference, and the change goes on. */
   function acceptList(): void {
     const f = followFlow
     if (!f || f.stage !== 'refuse' || !f.base) return
-    saveKnownFollowing(new Set(followPubkeys(f.base))); void startFollow(f.pubkey, f.action)
+    if (listKindOf(f.action) === MUTE_LIST_KIND) { if (session) session.muted = new Set(followPubkeys(f.base)) } else saveKnownFollowing(new Set(followPubkeys(f.base)))
+    void startFollow(f.pubkey, f.action)
   }
   async function confirmFollow(): Promise<void> {
     const f = followFlow
     if (!f || f.stage !== 'confirm' || !me || !signer || signer.state !== 'connected') return
     // the list is read AGAIN right before signing: if it changed meanwhile (another app), the reader sees the new numbers and confirms again
     fetcher.clear()
+    const kind = listKindOf(f.action), muting = kind === MUTE_LIST_KIND
     let fresh: NostrEvent | null = null
-    try { fresh = await loadFollowList(fetcher, me) } catch { fresh = null }
+    try { fresh = await loadFollowList(fetcher, me, kind) } catch { fresh = null }
     if (!followFlow || followFlow.stage !== 'confirm') return
-    const verdict = checkBase(fresh, loadKnownFollowing())
+    const verdict = checkBase(fresh, knownOf(kind), muting)
     if (!verdict.ok) { followFlow = { stage: 'refuse', pubkey: f.pubkey, action: f.action, why: verdict.why, known: verdict.known, found: verdict.found, base: fresh }; return draw() }
-    if (fresh!.id !== f.base.id) { followFlow = { ...f, base: fresh!, changed: true }; return draw() }
-    const template = followTemplate(fresh!, f.pubkey, f.action, nowSec())
-    const problem = template ? checkTemplate(template, { followBase: fresh! }) : 'follow'
+    if ((fresh?.id ?? null) !== (f.base?.id ?? null)) { followFlow = { ...f, base: fresh, changed: true }; return draw() }
+    const template = followTemplate(fresh, f.pubkey, f.action, nowSec(), me)
+    const problem = template ? checkTemplate(template, { followBase: fresh, me }) : 'follow'
     if (!template || problem) { followFlow = null; say('error', problemText(lang, problem ?? 'follow')); return draw() }
     followFlow = null
-    safeSet(kv, `followbackup:${me}`, JSON.stringify(addBackup(parseBackups(safeGet(kv, `followbackup:${me}`)), fresh!))) // a copy of the list as it was, kept on this device
-    if (await send(template, { followBase: fresh! })) {
-      const next = new Set(followPubkeys({ tags: template.tags })); session!.follows = next; saveKnownFollowing(next)
+    if (!muting) safeSet(kv, `followbackup:${me}`, JSON.stringify(addBackup(parseBackups(safeGet(kv, `followbackup:${me}`)), fresh!))) // a copy of the list as it was, kept on this device
+    if (await send(template, { followBase: fresh, me })) {
+      const next = new Set(followPubkeys({ tags: template.tags }))
+      if (muting) session!.muted = next; else { session!.follows = next; saveKnownFollowing(next) }
       const name = nameOf(view(), f.pubkey)
       // the relays take a moment to show a new list: look again a couple of times before saying they do not
       let confirmed = false
       for (const wait of deps.verifyWaitsMs ?? [1500, 3000]) {
         await new Promise((r) => setTimeout(r, wait))
-        try { fetcher.clear(); const after = await loadFollowList(fetcher, me); confirmed = !!after && sameFollows(new Set(followPubkeys(after)), next) } catch { confirmed = false }
+        try { fetcher.clear(); const after = await loadFollowList(fetcher, me, kind); confirmed = !!after && sameFollows(new Set(followPubkeys(after)), next) } catch { confirmed = false }
         if (confirmed) break
       }
       if (result && !failedRelays(result.outcomes).length) result = null
-      say('info', confirmed ? t(lang, f.action === 'follow' ? 'followDone' : 'unfollowDone', { who: name }) : t(lang, 'followUnconfirmed'), confirmed ? undefined : 7000)
+      say('info', confirmed ? t(lang, `${f.action}Done` as 'followDone', { who: name }) : t(lang, 'followUnconfirmed'), confirmed ? undefined : 7000)
       draw(); void load() // the feed and the counts follow the new list
       return
     }

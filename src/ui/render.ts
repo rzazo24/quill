@@ -19,7 +19,7 @@ import type { ThreadNode } from '../data/feed.js'
 import { hasReach, reactionTotal, type Reach } from '../data/reach.js'
 import { ago, reason, t, tallyLabel, type Lang } from './i18n.js'
 
-export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; /** The Halloween theme is on: extra reactions. */ halloween?: boolean; /** What a note of the reader's got from others (reactions, reposts, replies), once it is known. */ reach?: (id: string) => Reach | undefined; /** A note quoted in a text, once it is known (undefined: not yet asked; null: not found); `wantQuote` asks for it. */ quoted?: (id: string) => Judged | null | undefined; wantQuote?: (id: string) => void; /** Pictures linked in a note by this author load by themselves (the reader's setting); otherwise each waits for a tap. */ autoImages?: (pubkey: string) => boolean; /** Inside a quoted note (itself one link): addresses are plain text, no links or buttons inside the link. */ plainLinks?: boolean; /** Told about every note handed to a list or drawn, so the search can find it later. */ seen?: (notes: Judged[]) => void; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** The relays put in a copied id/link as places to look for the note. */ hints?: readonly string[]; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
+export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; /** The Halloween theme is on: extra reactions. */ halloween?: boolean; /** What a note of the reader's got from others (reactions, reposts, replies), once it is known. */ reach?: (id: string) => Reach | undefined; /** A note quoted in a text, once it is known (undefined: not yet asked; null: not found); `wantQuote` asks for it. */ quoted?: (id: string) => Judged | null | undefined; wantQuote?: (id: string) => void; /** Pictures linked in a note by this author load by themselves (the reader's setting); otherwise each waits for a tap. */ autoImages?: (pubkey: string) => boolean; /** Inside a quoted note (itself one link): addresses are plain text, no links or buttons inside the link. */ plainLinks?: boolean; /** Told about every note handed to a list or drawn, so the search can find it later. */ seen?: (notes: Judged[]) => void; /** With a signer: the "…" menu offers to mute (or unmute) the author. */ mute?: (pubkey: string) => void; isMuted?: (pubkey: string) => boolean; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** The relays put in a copied id/link as places to look for the note. */ hints?: readonly string[]; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
 
 export const nameOf = (v: View, pubkey: string): string => v.names.get(pubkey) ?? shortNpub(pubkey)
 
@@ -139,7 +139,8 @@ function moreMenu(event: Judged['event'], v: View): HTMLElement | null {
   const box = h('span', { class: 'more-menu' })
   // the answer is on the choice itself (the page's message bar only exists with a signer): it says "Copied" for a moment, then the menu closes
   const choice = (label: string, text: () => string) => { const b = h('button', { type: 'button', role: 'menuitem', onClick: () => { copy(text()); b.textContent = t(v.lang, 'copied'); setTimeout(() => { close(); b.textContent = label }, 900) } }, label); return b }
-  const list = h('span', { class: 'more-list', role: 'menu' }, choice(t(v.lang, 'copyNoteId'), () => noteId(event, v.hints)), choice(t(v.lang, 'copyNoteLink'), () => noteLink(event, v.hints)))
+  const muteChoice = v.mute ? h('button', { type: 'button', role: 'menuitem', class: 'danger-text', onClick: () => { close(); v.mute!(event.pubkey) } }, t(v.lang, v.isMuted?.(event.pubkey) ? 'unmuteWho' : 'muteWho', { who: nameOf(v, event.pubkey) })) : null
+  const list = h('span', { class: 'more-list', role: 'menu' }, choice(t(v.lang, 'copyNoteId'), () => noteId(event, v.hints)), choice(t(v.lang, 'copyNoteLink'), () => noteLink(event, v.hints)), muteChoice)
   const toggle = h('button', { type: 'button', class: 'more-btn', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': t(v.lang, 'more'), title: t(v.lang, 'more'), onClick: () => (box.classList.contains('open') ? close() : open()) }, icon('more', 22))
   const away = (e: Event) => { if (!box.contains(e.target as Node)) close() }
   const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
@@ -275,7 +276,7 @@ export function renderRepostGroups(groups: ReactionGroup[], v: View): HTMLElemen
 
 /** The head of an account's page: who it is, as text. */
 /** `follow`: the Follow / Unfollow button (only offered with a signer connected, never for yourself). */
-export function renderProfileHead(info: ProfileInfo, relation: 'you' | 'follow' | 'muted' | 'none', v: View, follow?: { following: boolean; busy: boolean; onToggle: () => void }): HTMLElement {
+export function renderProfileHead(info: ProfileInfo, relation: 'you' | 'follow' | 'muted' | 'none', v: View, follow?: { following: boolean; muted: boolean; busy: boolean; onToggle: () => void; onMute: () => void }): HTMLElement {
   const rel = relation === 'you' ? 'profileYou' : relation === 'follow' ? 'profileFollowed' : relation === 'muted' ? 'profileMuted' : 'profileNotFollowed'
   const via = info.via.length > 1 ? t(v.lang, 'followedByMany', { who: nameOf(v, info.via[0]!), n: info.via.length - 1 }) : info.via.length === 1 ? t(v.lang, 'followedByOne', { who: nameOf(v, info.via[0]!) }) : null
   return h('section', { class: 'profile card' },
@@ -285,7 +286,8 @@ export function renderProfileHead(info: ProfileInfo, relation: 'you' | 'follow' 
     info.website ? h('p', { class: 'meta' }, info.website) : null,
     h('p', { class: 'meta relation' }, [t(v.lang, rel), info.following === null ? null : t(v.lang, 'profileFollowing', { n: info.following })].filter(Boolean).join(' · ')),
     via ? h('p', { class: 'meta' }, via) : null,
-    follow ? h('p', { class: 'buttons' }, h('button', { type: 'button', class: follow.following ? '' : 'primary', ...(follow.busy ? { disabled: true } : {}), onClick: follow.onToggle }, t(v.lang, follow.following ? 'unfollowButton' : 'followButton'))) : null)
+    follow ? h('p', { class: 'buttons' }, h('button', { type: 'button', class: follow.following ? '' : 'primary', ...(follow.busy ? { disabled: true } : {}), onClick: follow.onToggle }, t(v.lang, follow.following ? 'unfollowButton' : 'followButton')), ' ',
+      h('button', { type: 'button', class: follow.muted ? '' : 'danger', ...(follow.busy ? { disabled: true } : {}), onClick: follow.onMute }, t(v.lang, follow.muted ? 'unmuteButton' : 'muteButton'))) : null)
 }
 
 /** Notes | Replies on an account's page. */

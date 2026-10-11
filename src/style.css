@@ -359,3 +359,4 @@ a.quote { display: grid; gap: 4px; margin: 8px 0 4px; padding: 10px 12px; border
 /* the lines under the search box start where the box starts, not under the magnifier (20 px icon + 10 px gap) */
 .search-form .search-note { margin: 0 0 0 30px }
 .search-form .search-note[hidden] { display: none }
+.more-list .danger-text { color: var(--red) }

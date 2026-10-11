@@ -6,8 +6,8 @@ import type { Fetcher } from '../net/fetcher.js'
 import { newestPerAuthor } from './lists.js'
 
 /** The newest follow list of the reader across the relays (what a relay holds may be an older version), or null when none was found. */
-export async function loadFollowList(f: Fetcher, me: string): Promise<Event | null> {
-  const lists = (await f.query({ kinds: [FOLLOW_LIST_KIND], authors: [me], limit: 20 })).filter((e) => e.kind === FOLLOW_LIST_KIND && e.pubkey === me)
+export async function loadFollowList(f: Fetcher, me: string, kind: number = FOLLOW_LIST_KIND): Promise<Event | null> {
+  const lists = (await f.query({ kinds: [kind], authors: [me], limit: 20 })).filter((e) => e.kind === kind && e.pubkey === me)
   return newestPerAuthor(lists).get(me) ?? null
 }
 
@@ -17,9 +17,9 @@ export const shrinkMargin = (known: number): number => Math.max(3, Math.floor(kn
 export type BaseVerdict = { ok: true } | { ok: false; why: 'none' | 'shrunk'; known: number; found: number }
 
 /** Is this a list Quill can build on? Not when none was found, nor when it lacks many of the accounts the reader was seen to follow. */
-export function checkBase(base: Event | null, known: ReadonlySet<string> | null): BaseVerdict {
+export function checkBase(base: Event | null, known: ReadonlySet<string> | null, mayBeNone = false): BaseVerdict {
   const knownCount = known?.size ?? 0
-  if (!base) return { ok: false, why: 'none', known: knownCount, found: 0 }
+  if (!base) return mayBeNone && knownCount === 0 ? { ok: true } : { ok: false, why: 'none', known: knownCount, found: 0 } // a mute list may not exist yet, unless the reader was seen to have one
   const now = new Set(followPubkeys(base))
   if (!known || known.size === 0) return { ok: true }
   const missing = [...known].filter((k) => !now.has(k)).length

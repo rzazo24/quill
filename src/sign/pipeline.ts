@@ -19,7 +19,7 @@ export class PipelineError extends Error {
 }
 
 /** `followBase`: the reader's follow list a follow-list change was built from (the policy checks the change against it). */
-export interface PipelineDeps { signer: SignerApi; publisher: Publisher; kv?: KV; now?: () => number; signTimeoutMs?: number; signal?: AbortSignal; followBase?: Event }
+export interface PipelineDeps { signer: SignerApi; publisher: Publisher; kv?: KV; now?: () => number; signTimeoutMs?: number; signal?: AbortSignal; followBase?: Event | null }
 export interface Published { event: Event; outcomes: Record<string, Outcome> }
 
 const stampsOf = (kv: KV | undefined): number[] => { try { const v = JSON.parse(safeGet(kv, 'signed') ?? '[]') as unknown; return Array.isArray(v) ? v.filter((x): x is number => typeof x === 'number') : [] } catch { return [] } }

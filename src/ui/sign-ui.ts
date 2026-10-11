@@ -1,5 +1,6 @@
 // Everything on screen that has to do with signing: connecting Clave, writing, reviewing what will be signed, progress, and the result per relay.
 // Pure of state: give it the state and the handlers, get elements. The text of strangers (a reply's target) only ever goes in as text.
+import type { FollowAction } from '../core/follow.js'
 import type { Event as NostrEvent } from 'nostr-tools'
 import { cleanText } from '../core/text.js'
 import { EMOJI_GROUPS } from '../core/emojis.js'
@@ -21,9 +22,9 @@ export interface Composer { mode: 'note' | 'reply' | 'quote'; target?: NostrEven
 export interface Review { template: Template; target?: NostrEvent; mentions: number; quote?: boolean }
 /** The panel of a follow / unfollow: reading the list, the confirmation, or why Quill will not go on. */
 export type FollowPanel =
-  | { stage: 'checking' }
-  | { stage: 'confirm'; who: string; action: 'follow' | 'unfollow'; before: number; after: number; changed: boolean }
-  | { stage: 'refuse'; why: 'none' | 'shrunk'; known: number; found: number }
+  | { stage: 'checking'; action: FollowAction }
+  | { stage: 'confirm'; who: string; action: FollowAction; before: number; after: number; changed: boolean }
+  | { stage: 'refuse'; action: FollowAction; why: 'none' | 'shrunk'; known: number; found: number }
 
 export interface Flash { kind: 'error' | 'info'; text: string }
 
@@ -146,15 +147,16 @@ function renderComposer(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElemen
 
 /** Following or unfollowing replaces the whole public list, so it says exactly what changes, and why it refuses when the list does not look right. */
 function renderFollowPanel(f: FollowPanel, hd: SignUiHandlers, v: View): HTMLElement {
-  if (f.stage === 'checking') return h('div', { class: 'review', role: 'status' }, h('p', {}, t(v.lang, 'followChecking')), h('p', { class: 'buttons' }, h('button', { type: 'button', class: 'link', onClick: hd.cancelFollow }, t(v.lang, 'cancel'))))
-  if (f.stage === 'refuse') return h('div', { class: 'review', role: 'alertdialog', 'aria-label': t(v.lang, 'followRefuseTitle') },
-    h('h2', {}, t(v.lang, 'followRefuseTitle')), h('p', {}, t(v.lang, f.why === 'none' ? 'followRefuseNone' : 'followRefuseShrunk', { known: f.known, found: f.found })),
+  const mute = f.action === 'mute' || f.action === 'unmute', k = (follow: Parameters<typeof t>[1], muteKey: Parameters<typeof t>[1]) => (mute ? muteKey : follow) // the same panel, the mute list's words
+  if (f.stage === 'checking') return h('div', { class: 'review', role: 'status' }, h('p', {}, t(v.lang, k('followChecking', 'muteChecking'))), h('p', { class: 'buttons' }, h('button', { type: 'button', class: 'link', onClick: hd.cancelFollow }, t(v.lang, 'cancel'))))
+  if (f.stage === 'refuse') return h('div', { class: 'review', role: 'alertdialog', 'aria-label': t(v.lang, k('followRefuseTitle', 'muteRefuseTitle')) },
+    h('h2', {}, t(v.lang, k('followRefuseTitle', 'muteRefuseTitle'))), h('p', {}, t(v.lang, f.why === 'none' ? k('followRefuseNone', 'muteRefuseNone') : k('followRefuseShrunk', 'muteRefuseShrunk'), { known: f.known, found: f.found })),
     h('p', { class: 'buttons' }, ...(f.why === 'shrunk' ? [h('button', { type: 'button', onClick: hd.acceptList }, t(v.lang, 'followAccept')), ' '] : []), h('button', { type: 'button', class: 'primary', onClick: hd.cancelFollow }, t(v.lang, 'cancel'))))
-  const title = t(v.lang, f.action === 'follow' ? 'followTitle' : 'unfollowTitle', { who: f.who })
+  const title = t(v.lang, `${f.action}Title` as 'followTitle', { who: f.who })
   return h('div', { class: 'review', role: 'alertdialog', 'aria-label': title },
     h('h2', {}, title), f.changed ? h('p', { class: 'error' }, t(v.lang, 'followChanged')) : null,
-    h('p', {}, t(v.lang, 'followCount', { a: f.before, b: f.after })), h('p', { class: 'meta' }, t(v.lang, 'followPublic')),
-    h('p', { class: 'buttons' }, h('button', { type: 'button', class: 'primary', onClick: hd.confirmFollow }, t(v.lang, f.action === 'follow' ? 'followButton' : 'unfollowButton')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.cancelFollow }, t(v.lang, 'cancel'))))
+    h('p', {}, t(v.lang, k('followCount', 'muteCount'), { a: f.before, b: f.after })), h('p', { class: 'meta' }, t(v.lang, k('followPublic', 'mutePublic'))),
+    h('p', { class: 'buttons' }, h('button', { type: 'button', class: 'primary', onClick: hd.confirmFollow }, t(v.lang, `${f.action}Button` as 'followButton')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.cancelFollow }, t(v.lang, 'cancel'))))
 }
 
 /** Sharing a note is public and cannot be undone from here: the note is shown, and nothing is signed until the second tap. */

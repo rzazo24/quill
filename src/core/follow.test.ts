@@ -66,3 +66,26 @@ describe('the policy for kind 3', () => {
     expect(checkTemplate(t, { followBase: list([['p', key(1)]]) })).toBe('follow') // built from another list: no
   })
 })
+
+describe('the mute list (kind 10000) goes through the same checks', async () => {
+  const { MUTE_LIST_KIND } = await import('./follow.js')
+  const { checkTemplate } = await import('../sign/policy.js')
+  const me = '1'.repeat(64), x = 'a'.repeat(64), y = 'b'.repeat(64)
+  const base = { id: 'f'.repeat(64), pubkey: me, kind: MUTE_LIST_KIND, created_at: 100, content: 'private', tags: [['p', x], ['word', 'spam']], sig: '' }
+  it('adding or removing ONE account, everything else kept, passes; anything more is refused', () => {
+    const add = followTemplate(base, y, 'mute', 200)!
+    expect(add.tags).toEqual([['p', x], ['word', 'spam'], ['p', y]]); expect(add.content).toBe('private')
+    expect(checkTemplate(add, { followBase: base })).toBeNull()
+    expect(checkTemplate({ ...add, content: '' }, { followBase: base })).toBe('follow') // the private part must stay
+    expect(checkTemplate({ ...add, tags: [['p', y]] }, { followBase: base })).toBe('follow') // the rest of the list must stay
+    expect(checkTemplate(followTemplate(base, x, 'unmute', 200)!, { followBase: base })).toBeNull()
+    expect(checkTemplate(add)).toBe('follow') // never without the list it was built from
+  })
+  it('a first list: one account, nothing private, never the reader themself', () => {
+    const first = followTemplate(null, y, 'mute', 200, me)!
+    expect(first).toEqual({ kind: MUTE_LIST_KIND, content: '', tags: [['p', y]], created_at: 200 })
+    expect(checkTemplate(first, { followBase: null, me })).toBeNull()
+    expect(checkTemplate({ ...first, tags: [['p', y], ['p', x]] }, { followBase: null, me })).toBe('follow')
+    expect(followTemplate(null, me, 'mute', 200, me)).toBeNull(); expect(followTemplate(null, y, 'follow', 200, me)).toBeNull() // a follow list is never made from nothing
+  })
+})
