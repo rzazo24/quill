@@ -5,7 +5,7 @@ import { refs, shortNpub } from '../core/refs.js'
 import { avatarOf } from '../core/avatar.js'
 import { showReaction, type ReactionGroup } from '../data/activity.js'
 import type { ProfileInfo } from '../data/profile.js'
-import { AVATAR_STYLES, FONT_SIZES, type AvatarStyle, type FeedMode, type FontSize } from './store.js'
+import { AVATAR_STYLES, FONT_SIZES, SCHEMES, type Scheme, type AvatarStyle, type FeedMode, type FontSize } from './store.js'
 import { robotEl } from './robot-el.js'
 import { pixelEl } from './pixel-el.js'
 import { spookyEl } from './spooky-el.js'
@@ -273,7 +273,7 @@ export function renderHelp(v: View, open: ReadonlySet<string>, onToggle: (id: st
 export const SOURCE_URL = 'https://github.com/rzazo24/quill'
 
 export interface PrefsProps {
-  font: FontSize; avatars: AvatarStyle; sampleKey: string; onAvatars: (s: AvatarStyle) => void; reposts: boolean; onReposts: (on: boolean) => void; halloween: boolean; onHalloween: (on: boolean) => void; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
+  font: FontSize; avatars: AvatarStyle; sampleKey: string; onAvatars: (s: AvatarStyle) => void; reposts: boolean; onReposts: (on: boolean) => void; scheme: Scheme; onScheme: (s: Scheme) => void; halloween: boolean; onHalloween: (on: boolean) => void; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
   /** The list published on Nostr compared with this one, and what can be done about it. */
   list: { state: ListState; publishedCount: number; canSign: boolean; confirming: boolean }
   onAskPublish: () => void; onCancelPublish: () => void; onPublish: () => void; onUsePublished: () => void
@@ -288,6 +288,10 @@ export function renderPrefs(p: PrefsProps, v: View): HTMLElement {
     h('h3', {}, t(v.lang, 'fontTitle')),
     h('div', { class: 'seg', role: 'group', 'aria-label': t(v.lang, 'fontTitle') }, ...FONT_SIZES.map((f) =>
       h('button', { type: 'button', class: `size-${f}`, 'aria-pressed': String(p.font === f), onClick: () => { if (p.font !== f) p.onFont(f) } }, t(v.lang, `font_${f}` as Parameters<typeof t>[1])))),
+    h('h3', {}, t(v.lang, 'schemeTitle')),
+    h('div', { class: 'seg scheme', role: 'group', 'aria-label': t(v.lang, 'schemeTitle') }, ...SCHEMES.map((x) =>
+      h('button', { type: 'button', 'aria-pressed': String(p.scheme === x), onClick: () => { if (p.scheme !== x) p.onScheme(x) } }, t(v.lang, `scheme_${x}` as Parameters<typeof t>[1])))),
+    p.halloween ? h('p', { class: 'meta' }, t(v.lang, 'schemeHalloween')) : null,
     h('h3', {}, t(v.lang, 'avatarsTitle')),
     h('div', { class: 'seg avatars', role: 'group', 'aria-label': t(v.lang, 'avatarsTitle') }, ...AVATAR_STYLES.map((a) =>
       h('button', { type: 'button', class: `avatar-${a}`, 'aria-pressed': String(p.avatars === a), onClick: () => { if (p.avatars !== a) p.onAvatars(a) } }, avatarEl(p.sampleKey, v, 'md', a), t(v.lang, `avatar_${a}` as Parameters<typeof t>[1])))),

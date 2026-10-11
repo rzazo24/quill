@@ -1,7 +1,7 @@
 /* Same family as the ephemeral chat and the relay's landing page: dark navy, teal accent, rounded cards. Mobile first: the base rules are for a phone,
    the media query at the end only widens things. Nothing here loads anything: no fonts, no images. */
-:root { --col: 820px; --btn:#162030; --bg:#0b0f16; --panel:#111823; --border:#1f2a3a; --text:#e6edf3; --muted:#93a1b1; --accent:#2dd4bf; --accent-rgb:45,212,191; --on-accent:#04211d; --bg-rgb:11,15,22; --amber:#fbbf24; --red:#ff9aa5; --tab-h:44px; --ctl-h:36px /* the height of every button in the header */ }
-* { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: #2b3a50 transparent }
+:root { --col: 820px; --btn:#162030; --bg:#0b0f16; --panel:#111823; --border:#1f2a3a; --text:#e6edf3; --muted:#93a1b1; --accent:#2dd4bf; --accent-rgb:45,212,191; --on-accent:#04211d; --bg-rgb:11,15,22; --amber:#fbbf24; --dash:#2b3a50; --danger-border:#5a2230; --switch-off:#2a3547; --switch-border:#3a475b; --knob:#c9d4e0; --knob-on:#f4fbfa; --scrim:rgba(5,8,12,.72); --red:#ff9aa5; --tab-h:44px; --ctl-h:36px /* the height of every button in the header */ }
+* { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--dash) transparent }
 html { color-scheme: dark; -webkit-text-size-adjust: 100%; height: 100%; background: var(--panel) } /* whatever the system leaves below the page is the colour of the tab bar, not black */
 body { margin: 0; background: var(--bg); color: var(--text); font: 1rem/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   /* An app shell: the PAGE never scrolls, only <main> does. A page that scrolls makes iPhone Safari show and hide its toolbar, which pushes fixed bars
@@ -22,7 +22,7 @@ h2, h3 { margin: 0 }
 .lang { display: flex; gap: 0 } /* EN | ES are one control: halves with a shared edge, rounded only on the outside */
 .lang button { min-height: var(--ctl-h); padding: 0 12px; font-size: .85rem; color: var(--muted) }
 .lang button { border-radius: 0 } .lang button:first-child { border-radius: 8px 0 0 8px } .lang button:last-child { border-radius: 0 8px 8px 0 } .lang button + button { margin-left: -1px }
-.lang button[aria-pressed=true] { position: relative; z-index: 1; color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 700 }
+.lang button[aria-pressed=true] { position: relative; z-index: 1; color: var(--on-accent); background: var(--accent); border-color: var(--accent); font-weight: 700 }
 main.view { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 12px 14px 24px; display: grid; gap: 12px; align-content: start;
   /* the column is centred inside the scrolling area, and the scrollbar's width is reserved on BOTH sides: with a classic desktop scrollbar the feed would
      otherwise sit off-centre against the header and tab bar by the width of the bar */
@@ -38,10 +38,10 @@ main.view { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior
 /* ONE button look for everything you can press, the one of the language switch: soft rectangle, thin outline, hover outline in the accent colour */
 button { font: inherit; cursor: pointer; color: var(--text); background: var(--btn); border: 1px solid var(--border); border-radius: 8px; padding: 0 14px; min-height: 44px }
 @media (hover: hover) { button:hover { border-color: var(--accent) } } /* no sticky hover after a tap on a touch screen */
-button.primary, button[type=submit] { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 700 }
+button.primary, button[type=submit] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 700 }
 /* secondary actions: a quiet outlined pill, not an underlined hyperlink */
 button.link { min-height: 36px; padding: 0 12px; font-size: .9rem }
-button.danger { color: var(--red); border-color: #5a2230 }
+button.danger { color: var(--red); border-color: var(--danger-border) }
 a.button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; background: var(--btn); border: 1px solid var(--accent); border-radius: 8px; color: var(--accent); text-decoration: none; font-weight: 600 }
 input[type=text], textarea, select { font: inherit; font-size: 16px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; min-height: 44px; width: 100% }
 input[type=text]:focus, textarea:focus, select:focus { border-color: var(--accent); outline: none }
@@ -51,10 +51,10 @@ input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent); v
 .settings h2, .sign h2, .login h2 { font-size: 1.05rem } .login p, .settings p, .sign p { margin: 0 } .settings p, .login p { color: var(--muted) }
 .check { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 44px } .check > span { flex: 1; min-width: 0 }
 /* a switch: on = turquoise, knob to the right; off = grey, knob to the left (still a checkbox underneath, announced as on/off) */
-.check input[type=checkbox] { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 48px; height: 28px; margin: 0; border-radius: 14px; background: #2a3547; border: 1px solid #3a475b; cursor: pointer; transition: background .15s, border-color .15s }
-.check input[type=checkbox]::before { content: ''; position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%; background: #c9d4e0; transition: transform .15s, background .15s }
+.check input[type=checkbox] { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 48px; height: 28px; margin: 0; border-radius: 14px; background: var(--switch-off); border: 1px solid var(--switch-border); cursor: pointer; transition: background .15s, border-color .15s }
+.check input[type=checkbox]::before { content: ''; position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%; background: var(--knob); transition: transform .15s, background .15s }
 .check input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent) }
-.check input[type=checkbox]:checked::before { transform: translateX(20px); background: #f4fbfa }
+.check input[type=checkbox]:checked::before { transform: translateX(20px); background: var(--knob-on) }
 .check input[type=checkbox]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 @media (prefers-reduced-motion: reduce) { .check input[type=checkbox], .check input[type=checkbox]::before { transition: none } }
 .meta, small { color: var(--muted); font-size: .85rem }
@@ -90,10 +90,10 @@ h2.section { font-size: 1.05rem; margin-top: 8px } .foot { margin: 8px 0 0 }
 .summary button.link { min-height: 32px; padding: 0 12px; font-size: .85rem }
 .stack { display: grid; gap: 12px }
 .actions button.react { min-height: 34px; min-width: 34px; padding: 0; border-radius: 8px; font-size: 1rem }
-.folded { border: 1px dashed #2b3a50; border-radius: 12px }
+.folded { border: 1px dashed var(--dash); border-radius: 12px }
 .folded > summary { padding: 11px 14px; min-height: 44px; color: var(--muted); cursor: pointer; font-size: .9rem }
 .folded .why { color: var(--amber); font-weight: 700 } .folded .who { opacity: .75 }
-.folded[open] > summary { border-bottom: 1px dashed #2b3a50 } .folded .note { border: 0; background: none; border-radius: 0 0 12px 12px }
+.folded[open] > summary { border-bottom: 1px dashed var(--dash) } .folded .note { border: 0; background: none; border-radius: 0 0 12px 12px }
 .summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 10px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; color: var(--muted); font-size: .85rem }
 .summary .counts strong { color: var(--text); font-weight: 600 }
 .more { width: 100%; margin-top: 4px }
@@ -206,7 +206,7 @@ button.icon.on { color: var(--accent); border-color: var(--accent); background: 
 
 /* write: a round button over the page, and the panel it opens */
 .fab { position: fixed; z-index: 6; right: max(16px, calc((100% - var(--col)) / 2 + 16px)); bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) * .5 + 16px); width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: var(--accent); border-color: var(--accent); color: var(--on-accent); box-shadow: 0 4px 16px rgba(0,0,0,.5) }
-.sheet { position: fixed; inset: 0; z-index: 9; display: flex; align-items: flex-start; justify-content: center; padding: calc(env(safe-area-inset-top) + 56px) 16px 16px; background: rgba(5,8,12,.72); overflow: auto }
+.sheet { position: fixed; inset: 0; z-index: 9; display: flex; align-items: flex-start; justify-content: center; padding: calc(env(safe-area-inset-top) + 56px) 16px 16px; background: var(--scrim); overflow: auto }
 .sheet > * { width: min(100%, var(--col)); box-sizing: border-box; padding: 14px; border-radius: 14px; background: var(--panel); border: 1px solid var(--border); max-height: 100%; overflow: auto }
 
 /* a sign area whose parts all float (button, popup, panel, bar) has no card of its own */
@@ -293,6 +293,10 @@ main.view.wide { display: block; overflow: hidden; padding: 12px 14px 0; scrollb
 @media (hover: hover) { .emoji-panel button:hover { background: var(--btn) } }
 #app.wide-screen { --top-col: 1760px } /* the header keeps its place on a wide screen even on the pages that are one narrow column (Settings, Help) */
 
+
+/* light scheme (Settings › Theme: Light, or Automatic when the system is light). The Halloween theme, when on, stays dark and wins (it is set after this). */
+html[data-scheme=light] { color-scheme: light; --bg:#f5f7f9; --bg-rgb:245,247,249; --panel:#ffffff; --btn:#edf1f5; --border:#d4dce5; --text:#17212b; --muted:#566473; --accent:#0b7a6d; --accent-rgb:11,122,109; --on-accent:#ffffff; --amber:#a86400; --red:#b42333; --dash:#c3cdd8; --danger-border:#efb7bf; --switch-off:#d4dce5; --switch-border:#c3cdd8; --knob:#ffffff; --knob-on:#ffffff; --scrim:rgba(23,33,43,.35) }
+html[data-scheme=light] .avatar:not(.art) { background: hsl(var(--h, 200) 60% 88%); border-color: hsl(var(--h, 200) 45% 72%); color: hsl(var(--h, 200) 50% 24%) }
 /* Halloween theme (Settings, or by itself from 24 October to 1 November unless the reader chose): the same layout in purple and pumpkin orange */
 html[data-theme=halloween] { --accent:#ff8a1f; --accent-rgb:255,138,31; --on-accent:#231203; --bg:#0f0a16; --bg-rgb:15,10,22; --panel:#181022; --btn:#21162f; --border:#33244a; --muted:#a898bd; --text:#efe7f7 }
 html[data-theme=halloween] ::selection { background: rgba(var(--accent-rgb), .35) }

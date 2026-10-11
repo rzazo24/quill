@@ -26,7 +26,7 @@ import { detectLang, problemText, setSpooky, t, type Key, type Lang } from './i1
 import { PAGE, renderPeople, renderProfileHead, renderProfileMode, renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type FollowPanel, type Review } from './sign-ui.js'
 import { installHint, type Env } from './install.js'
-import { halloweenOn, parseTheme, type ThemeChoice, parseAvatars, parseFeedMode, parseFont, parseLang, parseReposts, parseSettings, parseWords, safeGet, safeSet, type AvatarStyle, type FeedMode, type FontSize, type KV } from './store.js'
+import { halloweenOn, parseScheme, parseTheme, type Scheme, type ThemeChoice, parseAvatars, parseFeedMode, parseFont, parseLang, parseReposts, parseSettings, parseWords, safeGet, safeSet, type AvatarStyle, type FeedMode, type FontSize, type KV } from './store.js'
 import { addRelay, parseRelays, removeRelay } from '../net/relays.js'
 import { listState, loadPublishedRelays, relayListTemplate } from '../data/relaylist.js'
 
@@ -52,6 +52,8 @@ export interface Deps {
   onPoll?: (cb: () => void) => void
   /** Is the screen wide enough for three columns? And a hook for "it just changed" (a window resized). */
   isWide?: () => boolean; onWide?: (cb: () => void) => void
+  /** Is the system in light mode, and a hook for when it changes (for the Automatic theme). */
+  prefersLight?: () => boolean; onSchemeChange?: (cb: () => void) => void
   /** Checks a signature (tests use events without real ones). */
   verify?: (e: NostrEvent) => boolean
 }
@@ -90,6 +92,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let profileMode: 'notes' | 'replies' = 'notes' // what an account's page shows
   let avatarStyle: AvatarStyle = parseAvatars(safeGet(kv, 'avatars'))
   let feedMode: FeedMode = parseFeedMode(safeGet(kv, 'feed'))
+  let scheme: Scheme = parseScheme(safeGet(kv, 'scheme'))
   let themeChoice: ThemeChoice = parseTheme(safeGet(kv, 'theme')) // null: never chosen, so the season decides
   const halloween = () => halloweenOn(themeChoice, new Date(deps.nowMs?.() ?? Date.now()))
   let relayError: string | null = null
@@ -113,7 +116,9 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const applyTheme = () => {
     const on = halloween(), doc = root.ownerDocument
     if (on) doc.documentElement.setAttribute('data-theme', 'halloween'); else doc.documentElement.removeAttribute('data-theme')
-    doc.querySelector('meta[name=theme-color]')?.setAttribute('content', on ? '#0f0a16' : '#0b0f16')
+    const light = !on && (scheme === 'light' || (scheme === 'auto' && !!deps.prefersLight?.())) // Halloween is dark, whatever the scheme
+    if (light) doc.documentElement.setAttribute('data-scheme', 'light'); else doc.documentElement.removeAttribute('data-scheme')
+    doc.querySelector('meta[name=theme-color]')?.setAttribute('content', on ? '#0f0a16' : light ? '#f5f7f9' : '#0b0f16')
     setSpooky(on)
   }
   const applyFont = () => root.ownerDocument.documentElement.setAttribute('data-font', font)
@@ -497,6 +502,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   function changeFeedMode(m: FeedMode): void { feedMode = m; safeSet(kv, 'feed', m === 'follows' ? null : m); void load() }
   function changeAvatars(a: AvatarStyle): void { avatarStyle = a; safeSet(kv, 'avatars', a === 'initials' ? null : a); void load() } // the cards are built once and kept: they are rebuilt with the new pictures
   function changeReposts(on: boolean): void { showReposts = on; safeSet(kv, 'reposts', on ? null : '0'); void load() }
+  function changeScheme(x: Scheme): void { scheme = x; safeSet(kv, 'scheme', x === 'dark' ? null : x); applyTheme(); draw() }
   function changeTheme(on: boolean): void { themeChoice = on ? 'halloween' : 'default'; safeSet(kv, 'theme', themeChoice); applyTheme(); draw() } // an explicit choice, kept, wins over the season
   function changeFont(f: FontSize): void { font = f; safeSet(kv, 'font', f); applyFont(); draw() }
   /** A new relay list: stored, handed to the network code, and everything is read again from it. */
@@ -810,7 +816,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const helpPage = renderHelp(view(), helpOpen, (id, isOpen) => { if (isOpen) helpOpen.add(id); else helpOpen.delete(id) })
     const content: (HTMLElement | null)[] = route.name === 'help' ? [signArea, helpPage]
       : !me ? [...(route.name === 'note' && guestBody ? [guestBody] : []), loginForm, signArea]
-      : route.name === 'settings' ? [signArea, renderPrefs({ font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, halloween: halloween(), onHalloween: changeTheme, reposts: showReposts, onReposts: changeReposts, relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
+      : route.name === 'settings' ? [signArea, renderPrefs({ font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, scheme, onScheme: changeScheme, halloween: halloween(), onHalloween: changeTheme, reposts: showReposts, onReposts: changeReposts, relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
         onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
       : isWide ? [wideView(route, signArea, signOut)]
@@ -851,6 +857,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   deps.onHash(() => { void load('route') })
+  deps.onSchemeChange?.(() => { if (scheme === 'auto') { applyTheme(); draw() } })
   deps.onWide?.(() => { shownRoute = ''; barsHidden = false; root.classList.remove('bars-hidden'); void load() })
   // Coming back to the app after a while (an installed app stays alive in the background): show fresh notes, not what was there hours ago.
   deps.onVisible?.(() => { void checkUpdate(); if (me && !busy && (deps.nowMs?.() ?? Date.now()) - lastLoadAt > 120_000) refresh() })

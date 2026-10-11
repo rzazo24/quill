@@ -55,3 +55,8 @@ export const parseTheme = (raw: string | null): ThemeChoice => (raw === 'hallowe
 export const inHalloweenSeason = (d: Date): boolean => (d.getMonth() === 9 && d.getDate() >= 24) || (d.getMonth() === 10 && d.getDate() === 1)
 /** What is shown: an explicit choice always wins; without one, the season decides. */
 export const halloweenOn = (choice: ThemeChoice, now: Date): boolean => (choice === null ? inHalloweenSeason(now) : choice === 'halloween')
+
+/** Light or dark: chosen, or following the system ('auto'). Dark by default, as Quill always was. */
+export type Scheme = 'dark' | 'light' | 'auto'
+export const SCHEMES: readonly Scheme[] = ['dark', 'light', 'auto']
+export const parseScheme = (raw: string | null): Scheme => (raw === 'light' || raw === 'auto' ? raw : 'dark')

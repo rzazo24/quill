@@ -16,17 +16,17 @@ const relays = (events: Event[], delayMs = 0, slowFor?: (f: Filter) => number): 
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms))
 const roots: HTMLElement[] = []
 
-function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; slowFor?: (f: Filter) => number } = {}) {
+function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; slowFor?: (f: Filter) => number; light?: { value: boolean } } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
-  const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs, opts.slowFor), calls = { n: 0 }, filters: Filter[] = []
+  const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], schemeChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs, opts.slowFor), calls = { n: 0 }, filters: Filter[] = []
   startApp(root, {
-    fetcher: { query: (f) => { calls.n++; filters.push(f); return base.query(f) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
+    fetcher: { query: (f) => { calls.n++; filters.push(f); return base.query(f) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', prefersLight: () => !!opts.light?.value, onSchemeChange: (cb) => schemeChanged.push(cb), onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
     checkVersion: opts.newer ? async () => { asked.n++; return opts.newer!.value } : undefined, languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
     storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
   })
   const go = async (hash: string) => { location.hash = hash; listeners.forEach((l) => l()); await tick() }
-  return { root, go, mem, calls, filters, wideChanged, setRelays, reloads, asked, tick: () => ticks.forEach((t) => t()), poll: () => polls.forEach((t) => t()), comeBack: () => visible.forEach((v) => v()), text: () => root.textContent ?? '' }
+  return { root, go, mem, calls, filters, wideChanged, schemeChanged, setRelays, reloads, asked, tick: () => ticks.forEach((t) => t()), poll: () => polls.forEach((t) => t()), comeBack: () => visible.forEach((v) => v()), text: () => root.textContent ?? '' }
 }
 afterEach(() => { roots.forEach((r) => r.remove()); roots.length = 0 })
 
@@ -247,7 +247,7 @@ describe('settings: text size and relays', () => {
 
   it('the Me page has a Settings section with the default relays and the text-size choices', async () => {
     const a = start(); await a.go('#/settings'); await tick(80)
-    expect(urls(a)).toHaveLength(6); expect(urls(a)).toContain('relay.hivescope.xyz'); expect([...prefs(a).querySelectorAll('.seg:not(.avatars) button')].map((b) => b.textContent)).toEqual(['Small', 'Normal', 'Large', 'Very large'])
+    expect(urls(a)).toHaveLength(6); expect(urls(a)).toContain('relay.hivescope.xyz'); expect([...prefs(a).querySelectorAll('.seg:not(.avatars):not(.scheme) button')].map((b) => b.textContent)).toEqual(['Small', 'Normal', 'Large', 'Very large'])
     expect(a.setRelays.at(-1)).toHaveLength(6); expect(prefs(a).textContent).not.toContain('Restore the default relays')
   })
   it('text size is applied at once, remembered, and restored on the next start', async () => {
@@ -962,5 +962,27 @@ describe('the look once a minute asks only for what is new', () => {
     expect(next.length).toBe(4); expect(next.every((f) => f.since === 5000 - 120)).toBe(true)
     events.push(ev(friend, 'hello, a new mention', { created_at: 9000, tags: [['p', me]] })); a.poll(); await tick(200)
     expect(a.root.querySelector('.tabbar .badge')?.textContent).toBe('1')
+  })
+})
+
+
+describe('light and dark', () => {
+  const scheme = () => document.documentElement.getAttribute('data-scheme')
+  const pick = async (a: ReturnType<typeof boot>, label: string) => { await a.go('#/settings'); await tick(80); ([...a.root.querySelectorAll('.seg.scheme button')].find((b) => b.textContent === label) as HTMLElement).click(); await tick(40) }
+  it('is dark by default; Light is chosen in Settings and remembered; Dark goes back', async () => {
+    const a = boot({ stored: { me } }); await tick(100); expect(scheme()).toBeNull()
+    await pick(a, 'Light'); expect(scheme()).toBe('light'); expect(a.mem.get('scheme')).toBe('light')
+    expect([...a.root.querySelectorAll('.seg.scheme button')].map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'true', 'false'])
+    await pick(a, 'Dark'); expect(scheme()).toBeNull(); expect(a.mem.has('scheme')).toBe(false)
+    const again = boot({ stored: { me, scheme: 'light' } }); await tick(100); expect(scheme()).toBe('light')
+  })
+  it('Automatic follows the system, also when the system changes', async () => {
+    const light = { value: false }; const a = boot({ stored: { me, scheme: 'auto' }, light }); await tick(100); expect(scheme()).toBeNull()
+    light.value = true; a.schemeChanged.forEach((cb) => cb()); expect(scheme()).toBe('light')
+    light.value = false; a.schemeChanged.forEach((cb) => cb()); expect(scheme()).toBeNull()
+  })
+  it('the Halloween theme stays dark even with Light chosen, and says so in Settings', async () => {
+    const a = boot({ stored: { me, scheme: 'light', theme: 'halloween' } }); await tick(100); expect(scheme()).toBeNull()
+    await a.go('#/settings'); await tick(80); expect(a.text()).toContain('While the Halloween theme is on, Quill stays dark.')
   })
 })

@@ -29,6 +29,8 @@ startApp(document.getElementById('app')!, {
   onPoll: (cb) => { setInterval(() => { if (document.visibilityState === 'visible') cb() }, 60_000) },
   reload: () => location.reload(),
   goBack: () => { if (history.length > 1) history.back(); else location.hash = '' },
+  prefersLight: () => matchMedia('(prefers-color-scheme: light)').matches,
+  onSchemeChange: (cb) => matchMedia('(prefers-color-scheme: light)').addEventListener('change', cb),
   isWide: () => matchMedia('(min-width: 1100px)').matches,
   onWide: (cb) => matchMedia('(min-width: 1100px)').addEventListener('change', cb),
   env: detectEnv(navigator as Navigator & { standalone?: boolean }, matchMedia('(display-mode: standalone)').matches),
