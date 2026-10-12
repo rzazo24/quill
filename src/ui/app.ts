@@ -111,6 +111,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let nwcError: string | null = null
   type ZapFlow = { target: NostrEvent; sats: number; comment: string; stage: 'choose' | 'working' | 'failed'; step?: 'address' | 'signing' | 'invoice' | 'paying'; error?: string }
   let zapFlow: ZapFlow | null = null
+  // notes from people's own relays that came while the reader was further down the page: a button at the top says how many, and brings them in
+  let lateWaiting: { key: string; paneId: 'following' | 'detail' | null; n: number; show: () => void } | null = null
   let autoImages = safeGet(kv, 'autoImages') === '1' // off unless chosen: a picture tells its site the reader's IP address
   let profileMode: 'notes' | 'replies' = 'notes' // what an account's page shows
   let avatarStyle: AvatarStyle = parseAvatars(safeGet(kv, 'avatars'))
@@ -672,7 +674,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (!(await ensureSession()) || mine !== run || !session) return
     const route = parseRoute(deps.location.hash)
     const key = JSON.stringify(route)
-    if (key !== shownRoute) { body = null; shownRoute = key; scrollToTop = true; profileMode = 'notes'; if (route.name !== 'mentions') { markFrom = null; followersMark = null } }
+    if (key !== shownRoute) { body = null; shownRoute = key; lateWaiting = null; scrollToTop = true; profileMode = 'notes'; if (route.name !== 'mentions') { markFrom = null; followersMark = null } }
     if (route.name === 'settings' || route.name === 'help') { status = null; body = null; draw(); return }
     status = t(lang, 'loadingFeed'); draw()
     const content = await buildContent(route, () => mine === run)
@@ -684,28 +686,54 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   /** Notes from people's own relays arrived after the page was drawn: draw it again with them (the answers are remembered, so it is quick),
    *  but only while the reader is still on that page and near its top: nothing moves under someone who is reading. */
   // what came late from people's own relays, by page: kept so drawing again does not ask again (asking again would come late again)
-  const lateNotes = new Map<string, NostrEvent[]>()
+  const lateNotes = new Map<string, NostrEvent[]>() // taken into the page (any load of it includes them)
+  const latePending = new Map<string, NostrEvent[]>() // arrived while the reader was further down: they wait for the button (or for the top)
   const lateFor = (route: Route) => (readOutbox ? lateNotes.get(JSON.stringify(route)) ?? [] : [])
   function topUp(route: Route, _alive: () => boolean, events: NostrEvent[]): void {
-    const key = JSON.stringify(route), had = lateNotes.get(key) ?? [], known = new Set(had.map((e) => e.id))
+    const key = JSON.stringify(route), had = [...(lateNotes.get(key) ?? []), ...(latePending.get(key) ?? [])], known = new Set(had.map((e) => e.id))
     const fresh = events.filter((e) => !known.has(e.id))
     if (!fresh.length) return // nothing new: no need to draw again
-    lateNotes.set(key, [...had, ...fresh].slice(-500))
+    latePending.set(key, [...(latePending.get(key) ?? []), ...fresh].slice(-500))
+    const accept = () => { const p = latePending.get(key) ?? []; latePending.delete(key); lateNotes.set(key, [...(lateNotes.get(key) ?? []), ...p].slice(-500)) }
     // on a wide screen the page is a column: Following, or the panel on the right (an account)
     const paneId = wide() ? (route.name === 'following' ? 'following' : 'detail') : null
     // the load that asked may be gone (a newer one of the same page started meanwhile, and it picks these up when it ends): what counts is
     // that the page is still the one on screen and nothing newer starts before this draw
     const same = () => (paneId ? paneId === 'following' || detailKey === key : shownRoute === key) && (wide() ? !!paneId : !paneId)
-    const mark = paneId ? panes[paneId].run : run
-    const alive = () => same() && (paneId ? panes[paneId].run === mark : run === mark)
+    const aliveFrom = () => { const mark = paneId ? panes[paneId].run : run; return () => same() && (paneId ? panes[paneId].run === mark : run === mark) }
+    const alive = aliveFrom()
     const scrolled = () => (paneId ? root.querySelector<HTMLElement>(`.col[data-col="${paneId}"]`)?.scrollTop : root.querySelector('main.view')?.scrollTop) ?? 0
-    setTimeout(() => void (async () => {
-      if (!alive() || scrolled() > 200) return
-      const content = await buildContent(route, alive)
-      if (!content || !alive() || scrolled() > 200) return
+    const redraw = async (force: boolean, live = alive) => {
+      if (!live() || (!force && scrolled() > 200)) return false
+      accept()
+      const content = await buildContent(route, live)
+if (!content || !live() || (!force && scrolled() > 200)) return false
       if (paneId) panes[paneId].body = content; else body = content
+      if (lateWaiting?.key === key) lateWaiting = null
+      draw(); return true
+    }
+    setTimeout(() => void (async () => {
+      if (await redraw(false) || !alive()) return
+      // the reader is reading further down: nothing moves; a button at the top says how many of these notes would be added
+      const onScreen = new Set([...root.querySelectorAll<HTMLElement>('article.note[data-id]')].map((a) => a.dataset.id!))
+      const theirs = (e: NostrEvent) => (route.name === 'user' ? e.pubkey === route.pubkey : !!session?.follows.has(e.pubkey))
+      const n = new Set([...(latePending.get(key) ?? [])].filter((e) => e.kind === 1 && !isReply(e) && theirs(e) && !onScreen.has(e.id)).map((e) => e.id)).size
+      if (!n) return
+      lateWaiting = { key, paneId, n, show: () => {
+        const box = paneId ? root.querySelector<HTMLElement>(`.col[data-col="${paneId}"]`) : root.querySelector<HTMLElement>('main.view')
+        if (box) box.scrollTop = 0
+        lateWaiting = null; status = t(lang, 'loadingFeed'); draw()
+        void redraw(true, aliveFrom()).finally(() => { status = null; draw() }) // tapped now: what counts is that the page is still this one
+      } }
       draw()
     })(), 0)
+  }
+  /** The button for notes that came late, where they would go (null when there is none for this page). */
+  function lateButton(paneId: 'following' | 'detail' | null): HTMLElement | null {
+    const w = lateWaiting
+    if (!w || w.paneId !== paneId) return null
+    if (!paneId && w.key !== shownRoute) return null
+    return h('button', { type: 'button', class: 'late-notes', onClick: w.show }, '↑ ', t(lang, w.n === 1 ? 'lateNotesOne' : 'lateNotes', { n: w.n }))
   }
 
 
@@ -786,7 +814,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   /** Reads everything again from the relays (an installed app has no pull-to-refresh). */
-  function refresh(): void { fetcher.clear(); lateNotes.clear(); zapMap.clear(); articleTitles.clear(); reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); session = null; void load() }
+  function refresh(): void { fetcher.clear(); lateNotes.clear(); latePending.clear(); lateWaiting = null; zapMap.clear(); articleTitles.clear(); reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); session = null; void load() }
 
   const flat = (nodes: ThreadNode[]): Judged[] => nodes.flatMap((n) => [n.item, ...flat(n.children)])
 
@@ -1242,7 +1270,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   /** Wide screens: Following, Mentions and Me side by side, each scrolling on its own, and a panel on the right for the thread, account or list you opened. */
   function wideView(route: Route, signArea: HTMLElement | null, signOut: HTMLElement): HTMLElement {
     const column = (id: 'following' | 'mentions' | 'me', title: string, nodes: (Node | null)[], extra: (Node | null)[] = []) =>
-      h('section', { class: 'col', 'data-col': id }, h('h2', { class: 'col-title' }, h('span', {}, title), ...extra), ...nodes)
+      h('section', { class: 'col', 'data-col': id }, h('h2', { class: 'col-title' }, h('span', {}, title), ...extra), id === 'following' ? lateButton('following') : null, ...nodes)
     const write = signer?.state === 'connected' ? h('button', { type: 'button', class: 'primary write', onClick: startNote }, icon('feather', 16), t(lang, 'newNote').replace(/…$/, '')) : null
     const count = badge > 0 ? h('span', { class: 'badge', 'aria-label': `${badge}` }, badge > 9 ? '9+' : String(badge)) : null
     const detailOpen = route.name === 'note' || route.name === 'user' || route.name === 'people' || route.name === 'article' || route.name === 'saved'
@@ -1252,7 +1280,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       column('mentions', t(lang, 'mentions'), [panes.mentions.body], [count]),
       route.name === 'search' ? h('section', { class: 'col search-col' }, h('h2', { class: 'col-title' }, h('span', {}, t(lang, 'search')), h('button', { type: 'button', class: 'icon close', 'aria-label': t(lang, 'dismiss'), title: t(lang, 'dismiss'), onClick: () => deps.setHash('') }, '×')), searchPage()) // the search takes the place of Me: four columns would squeeze the others
       : column('me', t(lang, 'me'), [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), panes.me.body, h('div', { class: 'foot' }, signOut)]),
-      detailOpen ? h('section', { class: 'col detail', 'data-col': 'detail' }, h('h2', { class: 'col-title' }, h('span', {}, detailTitle), h('button', { type: 'button', class: 'icon close', 'aria-label': t(lang, 'dismiss'), title: t(lang, 'dismiss'), onClick: () => deps.setHash('') }, '×')), panes.detail.body) : null)
+      detailOpen ? h('section', { class: 'col detail', 'data-col': 'detail' }, h('h2', { class: 'col-title' }, h('span', {}, detailTitle), h('button', { type: 'button', class: 'icon close', 'aria-label': t(lang, 'dismiss'), title: t(lang, 'dismiss'), onClick: () => deps.setHash('') }, '×')), lateButton('detail'), panes.detail.body) : null)
   }
 
   function draw(): void {
@@ -1308,7 +1336,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const page: (HTMLElement | null)[] = [
       h('header', { class: 'top' }, halloween() ? h('span', { class: 'cobweb', 'aria-hidden': 'true' }, cobweb()) : null, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('div', { class: 'brand' }, h('h1', {}, h('a', { href: '#/', class: 'wordmark' }, logo(26, halloween()), 'Quill', halloween() ? pumpkin(22) : null)), h('span', { class: 'tag' }, t(lang, 'tagline'))), me && wide() ? h('button', { type: 'button', class: route.name === 'search' ? 'icon on' : 'icon', 'aria-label': t(lang, 'search'), title: t(lang, 'search'), 'aria-pressed': String(route.name === 'search'), onClick: () => deps.setHash(route.name === 'search' ? '' : '#/search') }, icon('search', 18)) : null, me ? h('button', { type: 'button', class: status ? 'icon spinning' : 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), ...(status ? { 'aria-busy': 'true' } : {}), onClick: refresh }, icon('refresh', 18)) : null, pills, me ? h('button', { type: 'button', class: route.name === 'settings' ? 'icon on' : 'icon', 'aria-label': t(lang, 'prefsTitle'), title: t(lang, 'prefsTitle'), 'aria-pressed': String(route.name === 'settings'), onClick: () => deps.setHash(route.name === 'settings' ? '' : '#/settings') }, icon('gear', 18)) : null, h('button', { type: 'button', class: route.name === 'help' ? 'icon on' : 'icon', 'aria-label': t(lang, 'helpTitle'), title: t(lang, 'helpTitle'), 'aria-pressed': String(route.name === 'help'), onClick: () => deps.setHash(route.name === 'help' ? '' : '#/help') }, icon('help', 18)), statusEl),
       // the search button lives inside <main>, like the write button: on iOS the scrolling <main> is a layer of its own, and a button outside it would cover the notices shown inside it
-      h('main', { class: isWide ? 'view wide' : 'view' }, ...content, me && !isWide && route.name !== 'search' && route.name !== 'settings' && route.name !== 'help' ? h('button', { type: 'button', class: 'fab-search', 'aria-label': t(lang, 'search'), title: t(lang, 'search'), onClick: () => deps.setHash('#/search') }, icon('search', 26)) : null),
+      h('main', { class: isWide ? 'view wide' : 'view' }, isWide ? null : lateButton(null), ...content, me && !isWide && route.name !== 'search' && route.name !== 'settings' && route.name !== 'help' ? h('button', { type: 'button', class: 'fab-search', 'aria-label': t(lang, 'search'), title: t(lang, 'search'), onClick: () => deps.setHash('#/search') }, icon('search', 26)) : null),
       me && !isWide ? h('nav', { class: 'tabbar' }, tab('following', '#/'), tab('mentions', '#/mentions'), tab('me', '#/me')) : null,
     ]
     // put the reader back where they were (unless this is a new view)

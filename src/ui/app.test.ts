@@ -1331,6 +1331,17 @@ describe('notes from people\'s own relays that arrive late', () => {
       expect(feed()).toContain('written where only I write')
     })
   }
+  it('while the reader is further down, nothing moves: a button at the top says how many came, and brings them in', async () => {
+    const many = Array.from({ length: 40 }, (_, i) => ev(friend, `older note ${i}`, { created_at: 1_000_000 + i }))
+    const a = boot({ events: [...w, ...many], stored: { me }, elsewhere: { relay: 'wss://far.example', events: [late], delayMs: 900 } }); await tick(500)
+    const main = a.root.querySelector('main.view') as HTMLElement
+    Object.defineProperty(main, 'scrollTop', { configurable: true, get: () => 900, set: () => {} }) // reading further down
+    await tick(900)
+    expect(a.text()).not.toContain('written where only I write')
+    const btn = a.root.querySelector('button.late-notes') as HTMLElement; expect(btn.textContent).toBe('↑ 1 more note from someone you follow')
+    btn.click(); await tick(1500)
+    expect(a.text()).toContain('written where only I write'); expect(a.root.querySelector('button.late-notes')).toBeNull()
+  })
   it('with the switch off, nobody else\'s relay is asked', async () => {
     const a = boot({ events: w, stored: { me, outbox: '0' }, elsewhere: { relay: 'wss://far.example', events: [late], delayMs: 10 } }); await tick(600)
     expect(a.text()).not.toContain('written where only I write')
