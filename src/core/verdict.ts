@@ -8,7 +8,7 @@
 import type { Event } from 'nostr-tools'
 import { burstOf, hasLink, isDistinctive, normalizeText } from './text.js'
 
-export type RuleId = 'own' | 'followed' | 'muted-author' | 'muted-word' | 'repeated-text' | 'burst' | 'link-only' | 'mention-flood' | 'outside-network' | 'default'
+export type RuleId = 'own' | 'followed' | 'muted-author' | 'muted-word' | 'repeated-text' | 'burst' | 'link-only' | 'mention-flood' | 'not-text' | 'outside-network' | 'default'
 
 export interface Verdict {
   hidden: boolean
@@ -18,7 +18,7 @@ export interface Verdict {
 }
 
 export interface Settings {
-  rules: { repeatedText: boolean; burst: boolean; linkOnly: boolean; mentionFlood: boolean; outsideNetwork: boolean }
+  rules: { repeatedText: boolean; burst: boolean; linkOnly: boolean; mentionFlood: boolean; notText: boolean; outsideNetwork: boolean }
   /** Hops in the follow graph that still count as inside your network: 1 = people you follow, 2 = and the people they follow. */
   maxDistance: number
   /** Events by one key within 60 s that count as a burst. */
@@ -26,7 +26,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  rules: { repeatedText: true, burst: true, linkOnly: true, mentionFlood: true, outsideNetwork: true },
+  rules: { repeatedText: true, burst: true, linkOnly: true, mentionFlood: true, notText: true, outsideNetwork: true },
   maxDistance: 2,
   burstEvents: 5,
 }
@@ -109,6 +109,16 @@ export function mentionFlood(content: string): { mentions: number; same: number 
   return { mentions: refs.length, same: Math.max(...counts.values()) }
 }
 
+/** A note that is an app's data, not text for people: the whole content is a JSON object (or array), or a long run (200+) of characters with no
+ *  space made only of base64's characters (ciphertext), outside web addresses. Seen in real search results: encrypted JSON blobs posted as notes. */
+export function notText(content: string): { kind: 'JSON' | 'base64'; length: number } | null {
+  const c = content.trim()
+  if (c.length >= 40 && /^[[{]/.test(c) && /[\]}]$/.test(c)) { try { const v = JSON.parse(c) as unknown; if (v && typeof v === 'object') return { kind: 'JSON', length: c.length } } catch { /* not JSON */ } }
+  const runs = c.replace(/https?:\/\/\S+|nostr:[a-z0-9]+/gi, ' ').split(/\s+/)
+  if (runs.some((r) => r.length >= 200 && /^[A-Za-z0-9+/=_-]+$/.test(r))) return { kind: 'base64', length: c.length } // only base64's own characters: Japanese or Chinese text has no spaces, a pasted connection string has : ? &
+  return null
+}
+
 const shown = (rule: RuleId, params: Verdict['params'] = {}): Verdict => ({ hidden: false, rule, params })
 const hidden = (rule: RuleId, params: Verdict['params'] = {}): Verdict => ({ hidden: true, rule, params })
 
@@ -131,6 +141,8 @@ export function judge(e: Event, ctx: Context, signals: Signals, settings: Settin
   if (rules.linkOnly && l && l.total >= 3 && l.withLink / l.total >= 0.8) return hidden('link-only', { withLink: l.withLink, total: l.total })
   const flood = rules.mentionFlood ? mentionFlood(e.content) : null
   if (flood) return hidden('mention-flood', flood)
+  const data = rules.notText ? notText(e.content) : null
+  if (data) return hidden('not-text', data)
 
   if (rules.outsideNetwork && ctx.graph.loaded) {
     const d = ctx.graph.distance(e.pubkey)

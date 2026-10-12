@@ -19,7 +19,7 @@ export function parseSettings(raw: string | null): Settings {
     const bool = (v: unknown, dflt: boolean) => (typeof v === 'boolean' ? v : dflt)
     const r = (o.rules ?? {}) as Partial<Settings['rules']>
     return {
-      rules: { repeatedText: bool(r.repeatedText, d.rules.repeatedText), burst: bool(r.burst, d.rules.burst), linkOnly: bool(r.linkOnly, d.rules.linkOnly), mentionFlood: bool(r.mentionFlood, d.rules.mentionFlood), outsideNetwork: bool(r.outsideNetwork, d.rules.outsideNetwork) },
+      rules: { repeatedText: bool(r.repeatedText, d.rules.repeatedText), burst: bool(r.burst, d.rules.burst), linkOnly: bool(r.linkOnly, d.rules.linkOnly), mentionFlood: bool(r.mentionFlood, d.rules.mentionFlood), notText: bool(r.notText, d.rules.notText), outsideNetwork: bool(r.outsideNetwork, d.rules.outsideNetwork) },
       maxDistance: o.maxDistance === 1 || o.maxDistance === 2 ? o.maxDistance : d.maxDistance,
       burstEvents: d.burstEvents,
     }

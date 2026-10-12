@@ -67,7 +67,7 @@ export interface Deps {
 type Route = { name: 'following' } | { name: 'search' } | { name: 'saved' } | { name: 'article'; naddr: string; pubkey: string; identifier: string; relays: string[] } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'help' } | { name: 'user'; pubkey: string } | { name: 'people'; list: 'following' | 'followers' } | { name: 'note'; id: string; from?: string }
 /** Someone with no account who opens a link to a note: they read that one public note and its replies, exactly as they are. No follows, no mutes, no rule that hides anything. */
 const GUEST_CONTEXT: Context = { me: '', follows: new Set(), muted: new Set(), mutedWords: [], graph: { loaded: false, distance: () => null } }
-const GUEST_SETTINGS: Settings = { rules: { repeatedText: false, burst: false, linkOnly: false, mentionFlood: false, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 }
+const GUEST_SETTINGS: Settings = { rules: { repeatedText: false, burst: false, linkOnly: false, mentionFlood: false, notText: false, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 }
 
 export function parseRoute(hash: string): Route {
   const m = /^#\/note\/([^?]+)(?:\?from=([^&]*))?$/i.exec(hash)

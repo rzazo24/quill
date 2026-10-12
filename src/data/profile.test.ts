@@ -41,7 +41,7 @@ describe('loadProfile', () => {
     const r = await loadProfile(hostile, eva, s, ctxOf(s)); expect(r.notes.map((j) => j.event.content)).toEqual(['mine']); expect(r.info.name).toBeUndefined()
   })
   it('judges the notes like the rest, except "outside your network" (you opened it on purpose): muted accounts and bursts still fold', async () => {
-    const s = session({ [ana]: [], [bob]: [] }); const strict = { rules: { repeatedText: true, burst: true, linkOnly: true, mentionFlood: true, outsideNetwork: true }, maxDistance: 1, burstEvents: 5 }
+    const s = session({ [ana]: [], [bob]: [] }); const strict = { rules: { repeatedText: true, burst: true, linkOnly: true, mentionFlood: true, notText: true, outsideNetwork: true }, maxDistance: 1, burstEvents: 5 }
     const out = await loadProfile(world([ev(eva, 'a normal note', { created_at: 1000 })]), eva, s, ctxOf(s), strict); expect(out.notes[0]!.verdict.hidden).toBe(false)
     const m = session({}, [eva]); expect((await loadProfile(world([ev(eva, 'x y z', { created_at: 5 })]), eva, m, ctxOf(m))).notes[0]!.verdict).toMatchObject({ hidden: true, rule: 'muted-author' })
     const burst = Array.from({ length: 6 }, (_, i) => ev(eva, `burst note number ${i}`, { created_at: 2000 + i })); expect((await loadProfile(world(burst), eva, s, ctxOf(s))).notes.some((j) => j.verdict.hidden && j.verdict.rule === 'burst')).toBe(true)

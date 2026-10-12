@@ -121,3 +121,15 @@ describe('notes made only of mentions', () => {
     expect(f!.verdict.hidden).toBe(false) // people you follow are never hidden by behaviour rules
   })
 })
+
+describe('notes that are not text', () => {
+  it('an app\'s JSON or a long base64 block is caught; Japanese text, a pasted connection string or a long link are not', async () => {
+    const { notText } = await import('./verdict.js')
+    expect(notText('{"v":3,"encHdr":"VRDfPQFGqSbs/jT9RL58melJnU0pvgFkodqLwAG/d+qZNLjkNu9nL/uoB0n5iPMjq"}')).toMatchObject({ kind: 'JSON' })
+    expect(notText(`look: ${'A'.repeat(250)}==`)).toMatchObject({ kind: 'base64' })
+    expect(notText('父なるダゴン'.repeat(60))).toBeNull()
+    expect(notText(`my wallet string was nostr+walletconnect://${'b'.repeat(64)}?relay=wss://r.example&secret=${'c'.repeat(64)} and it failed`)).toBeNull()
+    expect(notText(`https://example.com/${'x'.repeat(300)}`)).toBeNull()
+    expect(notText('{not json at all, just braces}')).toBeNull(); expect(notText('{}')).toBeNull() // too short to be an app's data
+  })
+})
