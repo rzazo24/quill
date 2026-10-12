@@ -788,7 +788,7 @@ describe('deleting your own note', () => {
 
 describe('mentioning someone while writing', () => {
   it('"@an" offers the accounts named like that (people you follow first); a tap puts nostr:npub… in its place, and the note tags them', async () => {
-    const sg = fakeSigner(); const a = boot({ events: [...world, ev(friend, JSON.stringify({ name: 'Ana' }), { kind: 0 }), ev(other, JSON.stringify({ name: 'Andrés' }), { kind: 0 }), ev(friend, 'hi', { created_at: 8000 }), ev(other, 'yo', { created_at: 8100 })], signer: sg, stored: { me, settings: JSON.stringify({ rules: { repeatedText: true, burst: true, linkOnly: true, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 }) } }); await tick(100); await connectClave(a, sg); await tick(400)
+    const sg = fakeSigner(); const a = boot({ events: [...world, ev(friend, JSON.stringify({ name: 'Ana' }), { kind: 0 }), ev(other, JSON.stringify({ name: 'Andrés' }), { kind: 0 }), ev(friend, 'hi', { created_at: 8000 }), ev(other, 'yo', { created_at: 8100 })], signer: sg, stored: { me, settings: JSON.stringify({ rules: { repeatedText: true, burst: true, linkOnly: true, mentionFlood: true, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 }) } }); await tick(100); await connectClave(a, sg); await tick(400)
     a.root.querySelector<HTMLElement>('button.fab')!.click(); await tick(60)
     const area = a.root.querySelector('.composer textarea') as HTMLTextAreaElement
     area.value = 'hello @an'; area.selectionStart = area.selectionEnd = area.value.length; area.dispatchEvent(new Event('input'))

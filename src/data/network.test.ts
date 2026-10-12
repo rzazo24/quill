@@ -45,7 +45,7 @@ describe('loadNetwork', () => {
   })
   it('does not apply "outside your network" here (it would hide the whole view) but applies the other rules, and muted words', async () => {
     const s = session(lists, { mutedWords: ['spamword'] }), ctx = contextOf(s)
-    const strict = { rules: { repeatedText: true, burst: true, linkOnly: true, outsideNetwork: true }, maxDistance: 1, burstEvents: 5 }
+    const strict = { rules: { repeatedText: true, burst: true, linkOnly: true, mentionFlood: true, outsideNetwork: true }, maxDistance: 1, burstEvents: 5 }
     const f = world([ev(x, 'a note from far away', { created_at: 1_800_000_010 }), ev(y, 'has spamword inside', { created_at: 1_800_000_020 })])
     const out = await loadNetwork(f, s, ctx, strict)
     expect(out.find((j) => j.event.content.startsWith('a note'))!.verdict.hidden).toBe(false); expect(out.find((j) => j.event.content.includes('spamword'))!.verdict).toMatchObject({ hidden: true, rule: 'muted-word' })

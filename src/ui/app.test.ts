@@ -422,11 +422,11 @@ describe('reposts of the people you follow', () => {
 describe('the switches in Settings', () => {
   it('every rule, the reposts and the pictures options is a switch (a checkbox announced as on/off), with the words first and the switch at the end, and one line that says what on and off mean', async () => {
     const a = boot({ stored: { me } }); await tick(80); await a.go('#/settings'); await tick(100)
-    const rows = [...a.root.querySelectorAll('label.check')]; expect(rows).toHaveLength(7) // four rules + reposts + pictures + the Halloween theme
+    const rows = [...a.root.querySelectorAll('label.check')]; expect(rows).toHaveLength(8) // five rules + reposts + pictures + the Halloween theme
     for (const r of rows) { const input = r.querySelector('input')!; expect(input.type).toBe('checkbox'); expect(input.getAttribute('role')).toBe('switch'); expect(r.firstElementChild!.tagName).toBe('SPAN'); expect(r.lastElementChild).toBe(input) }
     expect(a.root.querySelector('.settings .meta')!.textContent).toBe('On = the rule hides what meets its condition. Off = it hides nothing.')
-    const rules = rows.filter((r) => !/Halloween|repost|pictures/.test(r.textContent!)); expect(rules).toHaveLength(4)
-    expect(rules.map((r) => (r.querySelector('input') as HTMLInputElement).checked)).toEqual([true, true, true, true]) // all on by default
+    const rules = rows.filter((r) => !/Halloween|repost|pictures/.test(r.textContent!)); expect(rules).toHaveLength(5)
+    expect(rules.map((r) => (r.querySelector('input') as HTMLInputElement).checked)).toEqual([true, true, true, true, true]) // all on by default
   })
 })
 
@@ -480,7 +480,7 @@ describe('the Network view in Following', () => {
     const bad = boot({ events: net, stored: { me, feed: 'everything' } }); await tick(150); expect(btn(bad, 'Follows').getAttribute('aria-pressed')).toBe('true')
   })
   it('the network does not hide everything because of the "outside your network" rule, even with the reach set to follows only', async () => {
-    const strict = JSON.stringify({ rules: { repeatedText: true, burst: true, linkOnly: true, outsideNetwork: true }, maxDistance: 1, burstEvents: 5 })
+    const strict = JSON.stringify({ rules: { repeatedText: true, burst: true, linkOnly: true, mentionFlood: true, outsideNetwork: true }, maxDistance: 1, burstEvents: 5 })
     const a = boot({ events: net, stored: { me, feed: 'network', settings: strict } }); await tick(200)
     expect(a.root.querySelector('details.folded')).toBeNull(); expect(a.text()).toContain('a note from far')
   })
@@ -1087,7 +1087,7 @@ describe('pictures brought by someone the reader follows', () => {
   it('load by themselves (setting on) in a note a followed account reposted, and inside a note a followed account quotes, though the author is not followed', async () => {
     const shared = ev(far, 'stranger pic https://image.nostr.build/s.png', { created_at: 8000 })
     const quotedFar = ev(far, 'quoted stranger pic https://image.nostr.build/q2.png', { created_at: 7000 })
-    const a = boot({ events: [...world, shared, quotedFar, ev(friend, JSON.stringify(shared), { kind: 6, created_at: 9000, tags: [['e', shared.id], ['p', far]] }), ev(friend, `see nostr:${nip19.noteEncode(quotedFar.id)}`, { created_at: 8500 })], stored: { me, autoImages: '1', settings: JSON.stringify({ rules: { repeatedText: true, burst: true, linkOnly: true, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 }) } }); await tick(800) // the quoted stranger is outside the network: that rule off, or the filter hides the quote (and then shows no picture)
+    const a = boot({ events: [...world, shared, quotedFar, ev(friend, JSON.stringify(shared), { kind: 6, created_at: 9000, tags: [['e', shared.id], ['p', far]] }), ev(friend, `see nostr:${nip19.noteEncode(quotedFar.id)}`, { created_at: 8500 })], stored: { me, autoImages: '1', settings: JSON.stringify({ rules: { repeatedText: true, burst: true, linkOnly: true, mentionFlood: true, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 }) } }); await tick(800) // the quoted stranger is outside the network: that rule off, or the filter hides the quote (and then shows no picture)
     const card = (text: string) => [...a.root.querySelectorAll('article.note')].find((n) => n.querySelector('.body')!.textContent!.startsWith(text))!
     expect(card('stranger pic').querySelector('.pic img')!.getAttribute('src')).toBe('https://image.nostr.build/s.png')
     expect(card('see').querySelector('a.quote img')!.getAttribute('src')).toBe('https://image.nostr.build/q2.png')
@@ -1146,7 +1146,7 @@ describe('the trust score on an account page', () => {
 describe('a quoted note held by few relays', () => {
   it('is asked for again, waiting for every relay, when the quick question did not find it; then it is shown inside', async () => {
     const quoted = ev(far, 'held by only one relay', { created_at: 7000 })
-    const a = boot({ events: [...world, quoted, ev(friend, `look nostr:${nip19.neventEncode({ id: quoted.id, relays: ['wss://relay.example.com/'] })}`, { created_at: 8000 })], stored: { me, settings: JSON.stringify({ rules: { repeatedText: true, burst: true, linkOnly: true, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 }) }, onlyWhenAll: (e) => e.id === quoted.id })
+    const a = boot({ events: [...world, quoted, ev(friend, `look nostr:${nip19.neventEncode({ id: quoted.id, relays: ['wss://relay.example.com/'] })}`, { created_at: 8000 })], stored: { me, settings: JSON.stringify({ rules: { repeatedText: true, burst: true, linkOnly: true, mentionFlood: true, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 }) }, onlyWhenAll: (e) => e.id === quoted.id })
     await tick(1000)
     expect(a.root.querySelector('a.quote')!.textContent).toContain('held by only one relay')
   })
@@ -1209,7 +1209,7 @@ describe('NIP-22 comments in threads, Mentions and the numbers under your notes'
     const reply1 = ev(far, 'a classic reply', { created_at: 7100, tags: [['e', rootNote.id, '', 'root'], ['p', friend]] })
     const c1 = ev(far, 'a comment', { kind: 1111, created_at: 7200, tags: [['E', rootNote.id], ['K', '1'], ['P', friend], ['e', rootNote.id], ['k', '1'], ['p', friend]] })
     const c2 = ev(friend, 'a comment on the comment', { kind: 1111, created_at: 7300, tags: [['E', rootNote.id], ['K', '1'], ['P', friend], ['e', c1.id], ['k', '1111'], ['p', far]] })
-    const settings = JSON.stringify({ rules: { repeatedText: true, burst: true, linkOnly: true, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 })
+    const settings = JSON.stringify({ rules: { repeatedText: true, burst: true, linkOnly: true, mentionFlood: true, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 })
     const a = boot({ events: [...world, rootNote, reply1, c1, c2], stored: { me, settings } }); await tick(200)
     await a.go(`#/note/${rootNote.id}`); await tick(400)
     expect(a.text()).toContain('a classic reply'); expect(a.text()).toContain('a comment'); expect(a.text()).toContain('a comment on the comment')

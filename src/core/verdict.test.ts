@@ -102,3 +102,22 @@ describe('tally', () => {
     expect(t).toEqual({ shown: 1, hidden: 2, byRule: { 'outside-network': 2 } })
   })
 })
+
+describe('notes made only of mentions', () => {
+  it('5+ mentions and under 3 words besides them is a flood, hidden with the numbers; a sentence that names several people is not', async () => {
+    const { mentionFlood, judgeAll } = await import('./verdict.js')
+    const { nip19 } = await import('nostr-tools')
+    const a = `nostr:${nip19.npubEncode('a'.repeat(64))}`, b = `nostr:${nip19.npubEncode('b'.repeat(64))}`
+    expect(mentionFlood(Array(24).fill(a).join('\n'))).toEqual({ mentions: 24, same: 24 })
+    expect(mentionFlood(`${a} ${a} ${b} ${b} ${a} lol`)).toEqual({ mentions: 5, same: 3 })
+    expect(mentionFlood(`thanks ${a} ${b} ${a} ${b} ${a} for the great talk yesterday`)).toBeNull()
+    expect(mentionFlood(`${a} ${b} ${a} ${b}`)).toBeNull() // four
+    expect(mentionFlood(`${Array(25).fill(a).join(' ')} not everyone is an american nerd, what is this`)).toEqual({ mentions: 25, same: 25 }) // 20+ whatever the text
+    const me = '1'.repeat(64), stranger = 'c'.repeat(64), friend = 'd'.repeat(64)
+    const ctx = { me, follows: new Set([friend]), muted: new Set<string>(), mutedWords: [], graph: { loaded: false, distance: () => null } }
+    const flood = Array(10).fill(a).join(' ')
+    const [s, f] = judgeAll([{ id: 'e1', pubkey: stranger, kind: 1, created_at: 1, tags: [], content: flood, sig: '' }, { id: 'e2', pubkey: friend, kind: 1, created_at: 2, tags: [], content: flood, sig: '' }] as never, ctx as never)
+    expect(s!.verdict).toEqual({ hidden: true, rule: 'mention-flood', params: { mentions: 10, same: 10 } })
+    expect(f!.verdict.hidden).toBe(false) // people you follow are never hidden by behaviour rules
+  })
+})

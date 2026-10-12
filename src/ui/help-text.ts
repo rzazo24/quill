@@ -28,9 +28,10 @@ Tap a name, an avatar or an @mention to open that account: its profile as text (
 • Repeated text: most of an account's notes are a text that other accounts also post (3 or more words, or a link).
 • Burst: 5 or more notes in one minute.
 • Link only: 3 or more notes, almost all with links.
+• Made of mentions: a note with 5 or more mentions and almost no text, or 20 or more mentions whatever the text (used to flood someone's notifications).
 • Outside your network: the account is further than N hops in the follow graph (2 by default: people you follow and the people they follow).
 
-The last four never apply to you or to the people you follow. Missing data is never a reason: an account without a profile, or a follow graph that has not loaded yet, never hides anything by itself. A short greeting repeated by many accounts is a greeting, not spam.
+The last five never apply to you or to the people you follow. Missing data is never a reason: an account without a profile, or a follow graph that has not loaded yet, never hides anything by itself. A short greeting repeated by many accounts is a greeting, not spam.
 
 The summary at the top says how many notes are hidden and why. Every rule can be switched off in Settings (⚙), where you can also mute words.` },
   { id: 'write', title: 'Writing with a signer', body: `In Me, tap Connect a signer and paste the bunker:// address your signer gives you (any signer that speaks NIP-46: Amber or Primal on Android, Clave on iPhone, nsec.app on the web, or a bunker of your own; or tap Paste and connect after copying it there). The signer keeps your key and signs; Quill only keeps an app key in this browser. Each new connection starts with a fresh app key, so you can connect again after deleting the connection in the signer.
@@ -104,9 +105,10 @@ Toca un nombre, un avatar o una @mención para abrir esa cuenta: su perfil como 
 • Texto repetido: la mayoría de las notas de una cuenta son un texto que también publican otras cuentas (3 o más palabras, o un enlace).
 • Ráfaga: 5 o más notas en un minuto.
 • Solo enlaces: 3 o más notas, casi todas con enlaces.
+• Hecha de menciones: una nota con 5 o más menciones y casi nada de texto, o con 20 o más menciones tenga el texto que tenga (sirve para inundar las notificaciones de alguien).
 • Fuera de tu red: la cuenta está a más de N saltos en el grafo de seguimiento (2 por defecto: la gente que sigues y la que ellos siguen).
 
-Las cuatro últimas nunca se aplican a ti ni a la gente que sigues. La falta de datos nunca es un motivo: una cuenta sin perfil, o un grafo de seguimiento que aún no ha cargado, nunca ocultan nada por sí solos. Un saludo corto repetido por muchas cuentas es un saludo, no spam.
+Las cinco últimas nunca se aplican a ti ni a la gente que sigues. La falta de datos nunca es un motivo: una cuenta sin perfil, o un grafo de seguimiento que aún no ha cargado, nunca ocultan nada por sí solos. Un saludo corto repetido por muchas cuentas es un saludo, no spam.
 
 El resumen de arriba dice cuántas notas se ocultan y por qué. Cada regla se puede apagar en Ajustes (⚙), donde también puedes silenciar palabras.` },
   { id: 'write', title: 'Escribir con un firmador', body: `En Yo, toca Conectar firmador y pega la dirección bunker:// que te da tu firmador (cualquiera que hable NIP-46: Amber o Primal en Android, Clave en iPhone, nsec.app en el navegador, o un bunker propio; o toca Pegar y conectar después de copiarla allí). El firmador guarda tu clave y firma; Quill solo guarda una clave de aplicación en este navegador. Cada conexión nueva empieza con una clave de aplicación nueva, así que puedes volver a conectar después de borrar la conexión en el firmador.

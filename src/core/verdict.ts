@@ -8,7 +8,7 @@
 import type { Event } from 'nostr-tools'
 import { burstOf, hasLink, isDistinctive, normalizeText } from './text.js'
 
-export type RuleId = 'own' | 'followed' | 'muted-author' | 'muted-word' | 'repeated-text' | 'burst' | 'link-only' | 'outside-network' | 'default'
+export type RuleId = 'own' | 'followed' | 'muted-author' | 'muted-word' | 'repeated-text' | 'burst' | 'link-only' | 'mention-flood' | 'outside-network' | 'default'
 
 export interface Verdict {
   hidden: boolean
@@ -18,7 +18,7 @@ export interface Verdict {
 }
 
 export interface Settings {
-  rules: { repeatedText: boolean; burst: boolean; linkOnly: boolean; outsideNetwork: boolean }
+  rules: { repeatedText: boolean; burst: boolean; linkOnly: boolean; mentionFlood: boolean; outsideNetwork: boolean }
   /** Hops in the follow graph that still count as inside your network: 1 = people you follow, 2 = and the people they follow. */
   maxDistance: number
   /** Events by one key within 60 s that count as a burst. */
@@ -26,7 +26,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  rules: { repeatedText: true, burst: true, linkOnly: true, outsideNetwork: true },
+  rules: { repeatedText: true, burst: true, linkOnly: true, mentionFlood: true, outsideNetwork: true },
   maxDistance: 2,
   burstEvents: 5,
 }
@@ -95,6 +95,20 @@ export function mentionsWord(text: string, word: string): boolean {
   return new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRe(w)}($|[^\\p{L}\\p{N}])`, 'iu').test(text)
 }
 
+/** A note made of mentions ("@x @x @x …" to flood someone's notifications): 5+ mentions and under 3 words besides them, or 20+ mentions whatever
+ *  the text (seen on real search results: posts bridged from elsewhere dragging 700 to 1800 mentions behind one short sentence). A note that thanks
+ *  a few people in a sentence is not one. */
+export const MENTION_FLOOD = 5
+export const MENTION_FLOOD_ANY = 20
+export function mentionFlood(content: string): { mentions: number; same: number } | null {
+  const refs = [...content.matchAll(/nostr:(?:npub1|nprofile1)[a-z0-9]+/g)].map((m) => m[0])
+  if (refs.length < MENTION_FLOOD) return null
+  const rest = normalizeText(content.replace(/nostr:(?:npub1|nprofile1)[a-z0-9]+/g, ' ')).split(' ').filter(Boolean)
+  if (rest.length >= 3 && refs.length < MENTION_FLOOD_ANY) return null
+  const counts = new Map<string, number>(); for (const r of refs) counts.set(r, (counts.get(r) ?? 0) + 1)
+  return { mentions: refs.length, same: Math.max(...counts.values()) }
+}
+
 const shown = (rule: RuleId, params: Verdict['params'] = {}): Verdict => ({ hidden: false, rule, params })
 const hidden = (rule: RuleId, params: Verdict['params'] = {}): Verdict => ({ hidden: true, rule, params })
 
@@ -115,6 +129,8 @@ export function judge(e: Event, ctx: Context, signals: Signals, settings: Settin
   if (rules.burst && b && b.events >= settings.burstEvents) return hidden('burst', { events: b.events, seconds: b.seconds })
   const l = signals.links.get(e.pubkey)
   if (rules.linkOnly && l && l.total >= 3 && l.withLink / l.total >= 0.8) return hidden('link-only', { withLink: l.withLink, total: l.total })
+  const flood = rules.mentionFlood ? mentionFlood(e.content) : null
+  if (flood) return hidden('mention-flood', flood)
 
   if (rules.outsideNetwork && ctx.graph.loaded) {
     const d = ctx.graph.distance(e.pubkey)

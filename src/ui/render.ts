@@ -475,7 +475,7 @@ export function renderSettings(p: SettingsPanelProps, v: View): HTMLElement {
   area.value = p.words.join('\n')
   return h('section', { class: 'settings' },
     h('h2', {}, t(v.lang, 'settingsTitle')), h('p', {}, t(v.lang, 'settingsHelp')), h('p', { class: 'meta' }, t(v.lang, 'switchHelp')),
-    rule('repeatedText', 'ruleRepeated'), rule('burst', 'ruleBurst'), rule('linkOnly', 'ruleLinks'), rule('outsideNetwork', 'ruleNetwork'),
+    rule('repeatedText', 'ruleRepeated'), rule('burst', 'ruleBurst'), rule('linkOnly', 'ruleLinks'), rule('mentionFlood', 'ruleMentions'), rule('outsideNetwork', 'ruleNetwork'),
     h('label', {}, t(v.lang, 'distance'), ' ', select),
     h('label', {}, t(v.lang, 'mutedWords'), h('br'), area), h('small', {}, t(v.lang, 'mutedWordsHelp')),
     p.graph ? h('p', { class: 'graph' }, p.graph.loaded ? t(v.lang, 'graphInfo', { answered: p.graph.answered, total: p.graph.total }) : t(v.lang, 'graphOff')) : null,
