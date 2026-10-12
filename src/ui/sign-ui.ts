@@ -9,6 +9,7 @@ import { quoteReserve } from '../core/compose.js'
 import { failedRelays } from '../net/publisher.js'
 import type { Published, Step } from '../sign/pipeline.js'
 import { MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
+import { MAX_ZAP_COMMENT, MAX_ZAP_SATS, ZAP_AMOUNTS } from '../core/zapsend.js'
 import { h } from './dom.js'
 import { t } from './i18n.js'
 import { icon } from './icons.js'
@@ -48,6 +49,8 @@ export interface SignUiState {
   followPanel: FollowPanel | null
   /** The note the reader is about to share: sharing is public, so it asks first. */
   shareConfirm: NostrEvent | null
+  /** A zap being chosen, paid or that failed (paid by the reader's wallet through NWC). */
+  zapFlow?: { target: NostrEvent; sats: number; comment: string; stage: 'choose' | 'working' | 'failed'; step?: 'address' | 'signing' | 'invoice' | 'paying'; error?: string } | null
   /** One of the reader's notes about to be deleted: it asks first. */
   deleteConfirm?: NostrEvent | null
   /** Disconnecting asks first: connecting again means pasting the bunker:// address again. */
@@ -58,6 +61,7 @@ export interface SignUiHandlers {
   openConnect(): void; cancelConnect(): void; bunker(text: string): void; dismissFlash(): void; confirmFollow(): void; acceptList(): void; cancelFollow(): void; confirmShare(): void; confirmDelete(): void; cancelDelete(): void; startQuote(): void; cancelShare(): void; askDisconnect(): void; cancelDisconnect(): void; disconnect(): void; copy(text: string): void
   edit(text: string): void; discardDraft(): void; review(): void; publish(): void; back(): void; cancelComposer(): void; retry(): void; dismissResult(): void
   startNote(): void; cancelSigning(): void; startLink(): void; pasteBunker(): void; editBunker(text: string): void; setLinkOpen(open: boolean): void
+  zapPick?(sats: number): void; zapCustom?(sats: number): void; zapComment?(text: string): void; confirmZap?(): void; cancelZap?(): void
 }
 
 const excerpt = (e: NostrEvent) => cleanText(e.content, 140).replace(/\s+/g, ' ')
@@ -85,6 +89,7 @@ export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, sign
     if (s.step) parts.push(h('div', { class: 'popup stay', role: 'status' }, h('span', {}, t(v.lang, `step_${s.step}` as Parameters<typeof t>[1])), s.step === 'waiting' ? h('button', { type: 'button', class: 'link', onClick: hd.cancelSigning }, t(v.lang, 'cancel')) : null))
     else if (s.result) toast.push(renderResult(s.result, s.relays, hd, v))
     else if (s.followPanel) parts.push(sheet(renderFollowPanel(s.followPanel, hd, v)))
+    else if (s.zapFlow) parts.push(sheet(renderZap(s.zapFlow, hd, v)))
     else if (s.deleteConfirm) parts.push(sheet(renderDeleteConfirm(s.deleteConfirm, hd, v)))
     else if (s.shareConfirm) parts.push(sheet(renderShareConfirm(s.shareConfirm, hd, v)))
     else if (s.review) parts.push(sheet(renderReview(s, hd, v)))
@@ -209,6 +214,27 @@ function renderShareConfirm(target: NostrEvent, hd: SignUiHandlers, v: View): HT
     h('p', { class: 'buttons' }, h('button', { type: 'button', class: 'primary', onClick: hd.confirmShare }, t(v.lang, 'shareConfirm')), ' ', h('button', { type: 'button', onClick: hd.startQuote }, t(v.lang, 'quoteButton')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.cancelShare }, t(v.lang, 'cancel'))))
 }
 
+/** A zap: the amount (a few at hand, or another), an optional public comment, and one button that says exactly how much. While it is being paid it
+ *  only says which step it is on (a payment under way cannot be taken back); if it failed, why, with the chance to try again. */
+function renderZap(z: NonNullable<SignUiState['zapFlow']>, hd: SignUiHandlers, v: View): HTMLElement {
+  const title = t(v.lang, 'zapTitle', { who: nameOf(v, z.target.pubkey) })
+  if (z.stage === 'working') return h('div', { class: 'review zap', role: 'status', 'aria-label': title }, h('h2', {}, icon('zap', 18), ' ', title), h('p', { class: 'status loading' }, h('span', {}, t(v.lang, `zapStep_${z.step ?? 'address'}` as Parameters<typeof t>[1]))))
+  const custom = h('input', { type: 'number', inputmode: 'numeric', min: '1', max: String(MAX_ZAP_SATS), step: '1', class: 'zap-custom', 'aria-label': t(v.lang, 'zapCustom'), placeholder: t(v.lang, 'zapCustom'),
+    onInput: (e: Event) => { const n = Number((e.target as HTMLInputElement).value); hd.zapCustom?.(n); confirm.textContent = t(v.lang, 'zapConfirm', { sats: Number.isFinite(n) && n > 0 ? n.toLocaleString(v.lang === 'es' ? 'es-ES' : 'en-GB') : '…' }) } }) as HTMLInputElement
+  if (!ZAP_AMOUNTS.includes(z.sats as (typeof ZAP_AMOUNTS)[number])) custom.value = String(z.sats)
+  const comment = h('input', { type: 'text', class: 'zap-comment', maxlength: String(MAX_ZAP_COMMENT), 'aria-label': t(v.lang, 'zapCommentLabel'), placeholder: t(v.lang, 'zapCommentLabel'), onInput: (e: Event) => hd.zapComment?.((e.target as HTMLInputElement).value) }) as HTMLInputElement
+  comment.value = z.comment
+  const confirm = h('button', { type: 'button', class: 'primary', onClick: () => hd.confirmZap?.() }, t(v.lang, 'zapConfirm', { sats: z.sats.toLocaleString(v.lang === 'es' ? 'es-ES' : 'en-GB') }))
+  return h('div', { class: 'review zap', role: 'alertdialog', 'aria-label': title },
+    h('h2', {}, icon('zap', 18), ' ', title),
+    h('pre', { class: 'preview' }, excerpt(z.target)),
+    h('div', { class: 'seg zap-amounts', role: 'group', 'aria-label': t(v.lang, 'zapAmount') }, ...ZAP_AMOUNTS.map((n) => h('button', { type: 'button', 'aria-pressed': String(z.sats === n), onClick: () => hd.zapPick?.(n) }, n.toLocaleString(v.lang === 'es' ? 'es-ES' : 'en-GB'))), custom),
+    comment,
+    z.stage === 'failed' && z.error ? h('p', { class: 'error', role: 'alert' }, z.error) : null,
+    h('p', { class: 'meta' }, t(v.lang, 'zapNote')),
+    h('p', { class: 'buttons' }, confirm, ' ', h('button', { type: 'button', class: 'link', onClick: () => hd.cancelZap?.() }, t(v.lang, 'cancel'))))
+}
+
 /** The exact event that will be signed, in words and in full: nothing is signed that is not on this screen. */
 function renderReview(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement {
   const r = s.review!
@@ -245,7 +271,7 @@ function moreReactions(chips: HTMLElement[], v: View): HTMLElement {
   return box
 }
 
-export function reactionBar(target: NostrEvent, onReact: (emoji: string) => void, onReply: () => void, v: View, mine: Mine = { reactions: new Set(), replied: false, reposted: false }, onShare?: () => void): HTMLElement {
+export function reactionBar(target: NostrEvent, onReact: (emoji: string) => void, onReply: () => void, v: View, mine: Mine = { reactions: new Set(), replied: false, reposted: false }, onShare?: () => void, onZap?: () => void): HTMLElement {
   const base = v.halloween ? [...REACTIONS, ...HALLOWEEN_REACTIONS] : REACTIONS
   const offered = base.map((e) => normReaction(e))
   const extra = [...mine.reactions].filter((c) => !offered.includes(c)) // given from elsewhere, e.g. 🔥: shown too, so the bar tells the truth
@@ -263,5 +289,7 @@ export function reactionBar(target: NostrEvent, onReact: (emoji: string) => void
     onShare ? h('button', { type: 'button', class: mine.reposted ? 'react share on' : 'react share', 'aria-pressed': String(mine.reposted), 'aria-label': t(v.lang, mine.reposted ? 'sharedByYou' : 'share'), title: t(v.lang, mine.reposted ? 'sharedByYou' : 'share'), onClick: onShare }, icon('repost', 16)) : null,
     ...shown.map(([c, label]) => chip(c, label)),
     folded.length ? moreReactions(folded.map(([c, label]) => chip(c, label)), v) : null,
+    // a zap, paid by the reader's wallet: only when one is connected on this device
+    onZap ? h('button', { type: 'button', class: 'react zap-btn', 'aria-label': t(v.lang, 'zap'), title: t(v.lang, 'zap'), onClick: onZap }, icon('zap', 16)) : null,
   )
 }

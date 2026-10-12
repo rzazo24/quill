@@ -40,3 +40,17 @@ export async function signAndPublish(d: PipelineDeps, t: Template, onStep: (s: S
   onStep('sending')
   return { event, outcomes: await d.publisher.publish(event) }
 }
+
+/** Signs without publishing (a zap request goes to the recipient's Lightning server, not to relays). Same checks and count as `signAndPublish`. */
+export async function signOnly(d: Pick<PipelineDeps, 'signer' | 'kv' | 'now' | 'signTimeoutMs' | 'signal'>, t: Template): Promise<Event> {
+  const nowSec = () => Math.floor((d.now ?? Date.now)() / 1000)
+  if (d.signer.state !== 'connected') throw new PipelineError('no-signer', 'no signer is connected')
+  if (!canSign(stampsOf(d.kv), nowSec())) throw new PipelineError('rate', 'too many signatures in the last hour')
+  let event: Event
+  try { ({ event } = await d.signer.sign(t, d.signTimeoutMs ?? SIGN_WAIT_MS, d.signal)) } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    throw new PipelineError(d.signal?.aborted || msg === 'cancelled' ? 'cancelled' : 'not-signed', msg)
+  }
+  safeSet(d.kv, 'signed', JSON.stringify([...recentSignatures(stampsOf(d.kv), nowSec()), nowSec()]))
+  return event
+}

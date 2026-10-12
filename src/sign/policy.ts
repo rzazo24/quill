@@ -8,16 +8,17 @@ import { DELETION_KIND, isDeletionOf } from '../core/deletion.js'
 import { checkRepost, REPOST_KIND, type RepostProblem } from '../core/repost.js'
 import type { Event } from 'nostr-tools'
 import { MAX_RELAYS, normalizeRelay } from '../net/relays.js'
+import { checkZapRequest, ZAP_REQUEST_KIND } from '../core/zapsend.js'
 
 /** NIP-65: the list of relays a person writes to and reads from. */
 export const RELAY_LIST_KIND = 10002
-export const ALLOWED_KINDS = [PROFILE_KIND, 1, FOLLOW_LIST_KIND, DELETION_KIND, REPOST_KIND, 7, MUTE_LIST_KIND, RELAY_LIST_KIND] as const
+export const ALLOWED_KINDS = [PROFILE_KIND, 1, FOLLOW_LIST_KIND, DELETION_KIND, REPOST_KIND, 7, MUTE_LIST_KIND, RELAY_LIST_KIND, ZAP_REQUEST_KIND] as const
 export const MAX_NOTE_CHARS = 1000
 export const MAX_SIGNATURES_PER_HOUR = 20
 
 export interface Template { kind: number; content: string; tags: string[][]; created_at: number }
 
-export type Problem = 'kind' | 'empty' | 'too-long' | 'reaction' | 'tags' | 'reaction-target' | 'relay-list' | 'quote' | 'follow' | 'profile' | 'delete' | RepostProblem
+export type Problem = 'zap' | 'kind' | 'empty' | 'too-long' | 'reaction' | 'tags' | 'reaction-target' | 'relay-list' | 'quote' | 'follow' | 'profile' | 'delete' | RepostProblem
 
 const TAG_NAMES = new Set(['e', 'p', 't', 'k', 'a', 'q'])
 const HEX64 = /^[0-9a-f]{64}$/
@@ -41,6 +42,7 @@ export interface CheckContext { followBase?: Event | null; /** the reader, for a
 /** Null when the template is fine, otherwise why not. */
 export function checkTemplate(t: Template, ctx: CheckContext = {}): Problem | null {
   if (!(ALLOWED_KINDS as readonly number[]).includes(t.kind)) return 'kind'
+  if (t.kind === ZAP_REQUEST_KIND) return checkZapRequest(t) ? null : 'zap' // signed to pay a zap, never published by Quill
   if (t.kind === DELETION_KIND) return ctx.deleteTarget && isDeletionOf(ctx.deleteTarget, t) ? null : 'delete' // exactly one note, named by id
   if (t.kind === PROFILE_KIND) return ctx.profileBase && isAboutChange(ctx.profileBase, t) ? null : 'profile' // only the description changes, everything else as it was
   if (t.kind === FOLLOW_LIST_KIND || t.kind === MUTE_LIST_KIND) return ctx.followBase !== undefined && followChange(ctx.followBase, t, ctx.me) ? null : 'follow' // only ONE account more or less than the list it was built from

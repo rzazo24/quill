@@ -41,6 +41,7 @@ Principios: la conducta es una prueba, **la falta de datos no lo es** (una clave
 - **Borradores**: lo que escribes se guarda en el dispositivo mientras escribes y vuelve al abrir el mismo cuadro.
 - **Zaps** que reciben tus notas (⚡ sats, y quién los mandó) en los números bajo cada nota en Yo.
 - **Zaps en las notas de los demás** también (solo los zaps, nunca su número de reacciones o reposts).
+- **Mandar zaps** con tu propio monedero mediante Nostr Wallet Connect (NIP-47): la cadena de conexión se guarda solo en ese dispositivo, con un aviso claro de que puede gastar; se comprueba que la factura pide exactamente la cantidad elegida antes de que el monedero la pague.
 - **Guardar notas para luego** desde sus …, enteras en el dispositivo (Yo › «N guardadas»).
 - **Menciones al escribir**: escribe @ y el principio de un nombre para elegir la cuenta (primero la gente que sigues).
 - **Comentarios** (NIP-22, kind 1111): se ven en los hilos, en Menciones y en los números de tus notas, junto a las respuestas clásicas.

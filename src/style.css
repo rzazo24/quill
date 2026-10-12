@@ -415,3 +415,10 @@ textarea.interests { width: 100%; box-sizing: border-box; font: inherit; padding
 .search-filters { display: grid; gap: 8px } .search-filters[hidden] { display: none }
 .search-filter-group { display: grid; gap: 4px; justify-items: start } .search-filter-group > .meta { font-size: .85rem }
 .search-filters .search-kind { margin-left: 0 }
+/* zaps: the amount buttons and the other amount in one row that wraps; the wallet warning stands out */
+.zap-amounts { flex-wrap: wrap; gap: 6px } .zap-amounts button { flex: none; min-height: 0; padding: 4px 12px; font-size: .9rem }
+.zap-custom { width: 8.5em; min-height: 0; padding: 4px 8px; font: inherit; font-size: 16px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px } .zap-comment { width: 100%; margin-top: 10px; font-size: 16px }
+.review.zap h2 { display: flex; align-items: center; gap: 6px }
+.wallet-risk.warning { border-left: 3px solid #f59e0b; padding: 8px 10px; background: rgba(245, 158, 11, .08); border-radius: 6px; font-size: .9rem }
+.nwc-form { display: grid; gap: 8px; justify-items: start } .nwc-input { width: 100%; box-sizing: border-box; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border, #2a3445); background: var(--input-bg, #0b0f16); color: inherit }
+.actions .zap-btn { color: #f59e0b }

@@ -406,7 +406,7 @@ export function renderHelp(v: View, open: ReadonlySet<string>, onToggle: (id: st
 export const SOURCE_URL = 'https://github.com/rzazo24/quill'
 
 export interface PrefsProps {
-  font: FontSize; avatars: AvatarStyle; sampleKey: string; onAvatars: (s: AvatarStyle) => void; reposts: boolean; onReposts: (on: boolean) => void; outbox: boolean; onOutbox: (on: boolean) => void; interests: string[]; onInterests: (text: string) => void; autoImages: boolean; onAutoImages: (on: boolean) => void; scheme: Scheme; onScheme: (s: Scheme) => void; halloween: boolean; onHalloween: (on: boolean) => void; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
+  font: FontSize; avatars: AvatarStyle; sampleKey: string; onAvatars: (s: AvatarStyle) => void; reposts: boolean; onReposts: (on: boolean) => void; outbox: boolean; onOutbox: (on: boolean) => void; nwc?: { relay: string | null; state: { testing: true } | { balance: number | null } | { error: string } | null; error: string | null; canSign: boolean }; onNwcSave?: (text: string) => void; onNwcRemove?: () => void; onNwcTest?: () => void; interests: string[]; onInterests: (text: string) => void; autoImages: boolean; onAutoImages: (on: boolean) => void; scheme: Scheme; onScheme: (s: Scheme) => void; halloween: boolean; onHalloween: (on: boolean) => void; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
   /** The list published on Nostr compared with this one, and what can be done about it. */
   list: { state: ListState; publishedCount: number; canSign: boolean; confirming: boolean }
   onAskPublish: () => void; onCancelPublish: () => void; onPublish: () => void; onUsePublished: () => void
@@ -442,7 +442,25 @@ export function renderPrefs(p: PrefsProps, v: View): HTMLElement {
     p.error ? h('p', { class: 'error', role: 'alert' }, p.error) : null,
     p.isDefault ? null : h('p', {}, h('button', { type: 'button', class: 'link', onClick: p.onReset }, t(v.lang, 'relayReset'))),
     renderRelayListSync(p, v),
-    h('label', { class: 'check' }, h('span', {}, t(v.lang, 'outbox')), h('input', { type: 'checkbox', role: 'switch', ...(p.outbox ? { checked: true } : {}), onChange: (e: Event) => p.onOutbox((e.target as HTMLInputElement).checked) })), h('p', { class: 'meta' }, t(v.lang, 'outboxHelp')))
+    h('label', { class: 'check' }, h('span', {}, t(v.lang, 'outbox')), h('input', { type: 'checkbox', role: 'switch', ...(p.outbox ? { checked: true } : {}), onChange: (e: Event) => p.onOutbox((e.target as HTMLInputElement).checked) })), h('p', { class: 'meta' }, t(v.lang, 'outboxHelp')),
+    p.nwc ? walletArea(p, v) : null)
+}
+
+/** The wallet for zaps: the risk is said before anything can be pasted, and again how it is kept once it is. */
+function walletArea(p: PrefsProps, v: View): HTMLElement {
+  const w = p.nwc!
+  const said = !w.state ? null : 'testing' in w.state ? h('p', { class: 'status loading', role: 'status' }, h('span', {}, t(v.lang, 'nwcTesting'))) : 'error' in w.state ? h('p', { class: 'error', role: 'alert' }, t(v.lang, 'nwcFailed', { error: w.state.error })) : h('p', { class: 'meta', role: 'status' }, w.state.balance === null ? t(v.lang, 'nwcAnswered') : t(v.lang, 'nwcBalance', { sats: w.state.balance.toLocaleString(v.lang === 'es' ? 'es-ES' : 'en-GB') }))
+  if (w.relay) return h('div', { class: 'wallet' }, h('h3', {}, t(v.lang, 'nwcTitle')),
+    h('p', { class: 'meta' }, t(v.lang, 'nwcSaved', { relay: w.relay.replace(/^wss:\/\//, '') })), said,
+    w.canSign ? null : h('p', { class: 'meta' }, t(v.lang, 'nwcNeedSigner')),
+    h('p', { class: 'buttons' }, h('button', { type: 'button', onClick: () => p.onNwcTest?.() }, t(v.lang, 'nwcTest')), ' ', h('button', { type: 'button', class: 'danger', onClick: () => p.onNwcRemove?.() }, t(v.lang, 'nwcRemove'))),
+    h('p', { class: 'meta wallet-risk' }, t(v.lang, 'nwcRisk')))
+  const input = h('input', { type: 'password', class: 'nwc-input', autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false', placeholder: t(v.lang, 'nwcPlaceholder'), 'aria-label': t(v.lang, 'nwcTitle') }) as HTMLInputElement
+  return h('div', { class: 'wallet' }, h('h3', {}, t(v.lang, 'nwcTitle')),
+    h('p', { class: 'meta' }, t(v.lang, 'nwcHelp')),
+    h('p', { class: 'warning wallet-risk', role: 'note' }, t(v.lang, 'nwcRisk')),
+    h('form', { class: 'nwc-form', onSubmit: (e: Event) => { e.preventDefault(); p.onNwcSave?.(input.value) } }, input, h('button', { type: 'submit' }, t(v.lang, 'nwcSave'))),
+    w.error ? h('p', { class: 'error', role: 'alert' }, w.error) : null)
 }
 
 function interestsArea(p: PrefsProps): HTMLElement {

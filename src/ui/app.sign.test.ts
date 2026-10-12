@@ -54,7 +54,7 @@ const publisherFake = (outcomes: Record<string, string> = { 'wss://r1.example': 
   return { p, sent }
 }
 
-function boot(o: { events?: Event[]; signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; stored?: Record<string, string>; clipboard?: string | Error; copied?: string[]; wide?: boolean; errorMs?: number; verifyWaits?: number[] } = {}) {
+function boot(o: { events?: Event[]; signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; stored?: Record<string, string>; clipboard?: string | Error; copied?: string[]; wide?: boolean; errorMs?: number; verifyWaits?: number[]; zapNet?: Parameters<typeof startApp>[1]['zapNet'] } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = [], mem = new Map(Object.entries(o.stored ?? { me }))
   const pub = o.pub ?? publisherFake()
@@ -64,6 +64,7 @@ function boot(o: { events?: Event[]; signer?: ReturnType<typeof fakeSigner>; pub
     copy: (x) => { o.copied?.push(x) },
     readClipboard: async () => { if (o.clipboard instanceof Error) throw o.clipboard; return o.clipboard ?? '' },
     ...(o.signer ? { signer: o.signer.s, publisher: pub.p } : {}),
+    ...(o.zapNet ? { zapNet: o.zapNet } : {}),
   })
   const go = async (hash: string) => { location.hash = hash; listeners.forEach((l) => l()); await tick(60) }
   return { root, mem, pub, go, text: () => root.textContent ?? '' }
@@ -862,5 +863,65 @@ describe('typing while the page fills in', () => {
     expect(a.root.querySelector('.composer textarea')).not.toBe(before) // the box was rebuilt
     const after = a.root.querySelector('.composer textarea') as HTMLTextAreaElement
     expect(document.activeElement).toBe(after); expect(after.value).toBe('hello world'); expect(after.selectionStart).toBe(5)
+  })
+})
+
+describe('zaps paid with the reader\'s wallet (NWC)', () => {
+  const walletPk = 'c'.repeat(64), secret = 'd'.repeat(64)
+  const nwc = `nostr+walletconnect://${walletPk}?relay=wss%3A%2F%2Frelay.wallet.example&secret=${secret}`
+  const profile = ev(friend, JSON.stringify({ name: 'Ana', lud16: 'ana@pay.example' }), { kind: 0 })
+  const lnServer = (invoice: string) => {
+    const asked: string[] = []
+    return { asked, getJson: async (u: string) => { asked.push(u); return u.startsWith('https://pay.example/.well-known/lnurlp/ana') ? { tag: 'payRequest', callback: 'https://pay.example/cb', minSendable: 1000, maxSendable: 1e9, allowsNostr: true, nostrPubkey: 'e'.repeat(64) } : { pr: invoice } } }
+  }
+  const wallet = () => { const calls: { method: string; params?: Record<string, unknown> }[] = []; return { calls, nwc: async (_c: unknown, method: string, params?: Record<string, unknown>) => { calls.push({ method, ...(params ? { params } : {}) }); return method === 'get_balance' ? { balance: 50_000_000 } : { preimage: 'ff' } } } }
+
+  it('Settings: the risk is said before pasting; the string is kept on this device; Test asks the wallet; Remove forgets it', async () => {
+    const sg = fakeSigner(), w = wallet(), ln = lnServer('lnbc1u1p')
+    const a = boot({ signer: sg, events: [...world, profile], zapNet: { getJson: ln.getJson, nwc: w.nwc as never } }); await tick(100); await connectClave(a, sg)
+    await a.go('#/settings'); await tick(50)
+    expect(a.text()).toContain('lets whoever has it SPEND from your wallet')
+    const input = a.root.querySelector('input.nwc-input') as HTMLInputElement; expect(input.type).toBe('password')
+    input.value = 'nostr+walletconnect://nonsense'; input.closest('form')!.dispatchEvent(new Event('submit')); await tick()
+    expect(a.text()).toContain('That is not a Nostr Wallet Connect string'); expect(a.mem.has(`nwc:${me}`)).toBe(false)
+    ;(a.root.querySelector('input.nwc-input') as HTMLInputElement).value = nwc; a.root.querySelector('input.nwc-input')!.closest('form')!.dispatchEvent(new Event('submit')); await tick(80)
+    expect(a.mem.get(`nwc:${me}`)).toBe(nwc); expect(w.calls[0]!.method).toBe('get_balance'); expect(a.text()).toContain('50,000 sats available'); expect(a.text()).toContain('relay.wallet.example')
+    await click(a.root, 'Remove from this device'); expect(a.mem.has(`nwc:${me}`)).toBe(false)
+  })
+
+  it('a zap: pick an amount, sign the request (never published), get the invoice for exactly that amount, the wallet pays it', async () => {
+    const sg = fakeSigner(), w = wallet(), ln = lnServer('lnbc1u1pexample') // 1u = 100 sats
+    const a = boot({ signer: sg, events: [...world, profile], stored: { me, [`nwc:${me}`]: nwc }, zapNet: { getJson: ln.getJson, nwc: w.nwc as never } }); await tick(100); await connectClave(a, sg); await tick(100)
+    const card = [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('my friend'))!
+    ;(card.querySelector('button.zap-btn') as HTMLElement).click(); await tick()
+    expect(a.text()).toContain('Zap Ana'); await click(a.root, '100')
+    ;(a.root.querySelector('input.zap-comment') as HTMLInputElement).value = 'great'; a.root.querySelector('input.zap-comment')!.dispatchEvent(new Event('input'))
+    await click(a.root, 'Zap 100 sats'); await tick(150)
+    expect(sg.log).toContain('sign 9734'); expect(a.pub.sent.some((x) => x.event.kind === 9734)).toBe(false) // signed, not published
+    const cb = new URL(ln.asked[1]!); expect(cb.searchParams.get('amount')).toBe('100000')
+    const req = JSON.parse(cb.searchParams.get('nostr')!); expect(req.kind).toBe(9734); expect(req.content).toBe('great'); expect(req.tags).toContainEqual(['e', post.id]); expect(req.tags).toContainEqual(['p', friend]); expect(req.tags).toContainEqual(['amount', '100000'])
+    expect(w.calls).toEqual([{ method: 'pay_invoice', params: { invoice: 'lnbc1u1pexample' } }])
+    expect(a.text()).toContain('100 sats sent to Ana')
+  })
+
+  it('an invoice for another amount is not paid; an account with no Lightning address is said; my own notes offer no zap', async () => {
+    const sg = fakeSigner(), w = wallet(), ln = lnServer('lnbc5u1pexample') // 500, not 21
+    const mine = ev(me, 'my own words', { created_at: 1_699_999_500 })
+    const a = boot({ signer: sg, events: [...world, profile, mine], stored: { me, [`nwc:${me}`]: nwc }, zapNet: { getJson: ln.getJson, nwc: w.nwc as never } }); await tick(100); await connectClave(a, sg); await tick(100)
+    const card = (t: string) => [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes(t))!
+    expect(card('my own words').querySelector('button.zap-btn')).toBeNull()
+    ;(card('my friend').querySelector('button.zap-btn') as HTMLElement).click(); await tick(); await click(a.root, 'Zap 21 sats'); await tick(150)
+    expect(a.text()).toContain('The invoice did not ask for the amount you chose: nothing was paid.'); expect(w.calls).toEqual([])
+    await click(a.root, 'Cancel')
+    const noAddress = ev(friend, JSON.stringify({ name: 'Ana' }), { kind: 0, created_at: 1_700_000_100 }) // a newer profile, without an address
+    const b = boot({ signer: sg, // the same signer, already connected
+      events: [...world, profile, noAddress], stored: { me, [`nwc:${me}`]: nwc }, zapNet: { getJson: ln.getJson, nwc: w.nwc as never } }); await tick(100); await b.go('#/'); await tick(150)
+    ;([...b.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('my friend'))!.querySelector('button.zap-btn') as HTMLElement).click(); await tick(); await click(b.root, 'Zap 21 sats'); await tick(150)
+    expect(b.text()).toContain('no Lightning address in its profile'); expect(w.calls).toEqual([])
+  })
+
+  it('without a wallet on this device there is no zap button', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg, events: [...world, profile] }); await tick(100); await connectClave(a, sg); await tick(100)
+    expect(a.root.querySelector('button.zap-btn')).toBeNull(); expect(a.root.querySelector('.actions')).not.toBeNull()
   })
 })

@@ -18,6 +18,7 @@
     "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
+    "@scure/base": "^2.0.0",
     "nostr-tools": "^2.25.2"
   },
   "devDependencies": {

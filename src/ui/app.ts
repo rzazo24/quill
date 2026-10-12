@@ -20,11 +20,16 @@ import { addBackup, checkBase, loadFollowList, nextKnown, parseBackups } from '.
 import { loadFollowing, loadMentions, loadMine, loadNames, loadNote, loadThread, type Thread, type ThreadNode } from '../data/feed.js'
 import { Engagement, loadEngagement, normReaction } from '../data/engaged.js'
 import { loadReach, loadZaps, type Reach } from '../data/reach.js'
+import { invoiceMatches, lnurlOf, MAX_ZAP_COMMENT, MAX_ZAP_SATS, parseNwc, payUrlOf, zapRequestTemplate, type NwcConnection } from '../core/zapsend.js'
+import { getJson, payInfo, zapInvoice, ZapError, type GetJson } from '../net/lnurl.js'
+import { nwcCall, type NwcMethod } from '../net/nwc.js'
 import { countNew, groupReactions, groupReposts, loadActivity, mergeKnown, newFollowers, parseKnown, type Activity } from '../data/activity.js'
 import { contextOf, loadGraphInfo, loadOwnLists, pendingGraph, type Session } from '../data/session.js'
 import { DEFAULT_RELAYS, memo, type Fetcher } from '../net/fetcher.js'
 import { failedRelays, type Publisher } from '../net/publisher.js'
-import { PipelineError, signAndPublish, type Published, type SignerApi, type Step } from '../sign/pipeline.js'
+import { PipelineError, signAndPublish, signOnly, type Published, type SignerApi, type Step } from '../sign/pipeline.js'
+import { newestPerAuthor } from '../data/lists.js'
+import { formatSats } from '../core/zap.js'
 import { checkTemplate, MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
 import { cobweb, icon, logo, pumpkin } from './icons.js'
@@ -40,6 +45,8 @@ export interface Deps {
   fetcher: Fetcher; /** Relays that can search text (NIP-50), asked only when the reader taps 'search the network too'. */ searchFetcher?: Fetcher; storage?: KV; languages?: readonly string[]; location: Pick<Location, 'hash'>; onHash: (cb: () => void) => void; setHash: (h: string) => void
   /** Without these the app is read-only. */
   signer?: SignerApi; publisher?: Publisher; relays?: string[]; copy?: (text: string) => void; nowMs?: () => number
+  /** Zaps: the recipient's Lightning server (https) and the reader's wallet (NWC). Real ones by default; tests pass fakes. */
+  zapNet?: { getJson: GetJson; nwc: (c: NwcConnection, method: NwcMethod, params?: Record<string, unknown>) => Promise<Record<string, unknown>> }
   /** Reads the clipboard (needs a tap; may be refused). */
   readClipboard?: () => Promise<string>
   /** Facts about where the page runs (iPhone? installed?), and a hook for "the page came back to the foreground". */
@@ -99,6 +106,11 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let font: FontSize = parseFont(safeGet(kv, 'font'))
   let showReposts = parseReposts(safeGet(kv, 'reposts'))
   let readOutbox = parseReposts(safeGet(kv, 'outbox')) // on unless turned off ('0'), like reposts
+  // the reader's wallet for zaps (NWC): its connection string is kept ONLY on this device, per account; `nwcState` is what Settings shows of a test
+  let nwcState: { testing: true } | { balance: number | null } | { error: string } | null = null
+  let nwcError: string | null = null
+  type ZapFlow = { target: NostrEvent; sats: number; comment: string; stage: 'choose' | 'working' | 'failed'; step?: 'address' | 'signing' | 'invoice' | 'paying'; error?: string }
+  let zapFlow: ZapFlow | null = null
   let autoImages = safeGet(kv, 'autoImages') === '1' // off unless chosen: a picture tells its site the reader's IP address
   let profileMode: 'notes' | 'replies' = 'notes' // what an account's page shows
   let avatarStyle: AvatarStyle = parseAvatars(safeGet(kv, 'avatars'))
@@ -282,12 +294,12 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const followersSeen = new Set<string>() // everybody seen following you since this page opened (the known ones are in `knownFollowers`)
   /** How many accounts have been seen following the reader: only a lower bound (each relay knows part of them), and it only grows. Null while nothing has been looked at yet. */
   const followerCount = (): number | null => { const k = loadKnown(); return k === null && followersSeen.size === 0 ? null : new Set([...(k ?? []), ...followersSeen]).size }
-  const forgetAccount = () => { myProfile = undefined; zapMap.clear(); aboutEdit = null; reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
+  const forgetAccount = () => { myProfile = undefined; zapMap.clear(); zapFlow = null; nwcState = null; nwcError = null; aboutEdit = null; reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
   const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
 
-  const barFor = (e: NostrEvent) => reactionBar(e, (emoji) => void react(e, emoji), () => startReply(e), view(), engagement.of(e.id), shareable.has(e.id) ? () => startShare(e) : undefined)
+  const barFor = (e: NostrEvent) => reactionBar(e, (emoji) => void react(e, emoji), () => startReply(e), view(), engagement.of(e.id), shareable.has(e.id) ? () => startShare(e) : undefined, e.pubkey !== me && e.kind === 1 && nwcOf() ? () => startZap(e) : undefined)
   const actions = (j: Judged) => {
     if (signer?.state !== 'connected') return []
     // a note the filter hides is not amplified from here, and only text notes of a reasonable size can be shared
@@ -719,6 +731,58 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   async function checkUpdate(): Promise<void> {
     if (!deps.checkVersion || updateReady) return
     try { if (await deps.checkVersion()) { updateReady = true; draw() } } catch { /* a failed check says nothing */ }
+  }
+
+  // ---- zaps paid with the reader's wallet (NWC) ----
+  const zapNet = deps.zapNet ?? { getJson, nwc: (c: NwcConnection, m: NwcMethod, params?: Record<string, unknown>) => nwcCall(c, m, params) }
+  const nwcKey = () => `nwc:${me}`
+  const nwcOf = (): NwcConnection | null => (me ? parseNwc(safeGet(kv, nwcKey()) ?? '') : null)
+  function saveNwc(text: string): void {
+    const c = parseNwc(text)
+    if (!c) { nwcError = t(lang, 'nwcInvalid'); draw(); return }
+    safeSet(kv, nwcKey(), text.trim()); nwcError = null; nwcState = null; void testNwc()
+  }
+  function removeNwc(): void { safeSet(kv, nwcKey(), null); nwcState = null; nwcError = null; draw() }
+  async function testNwc(): Promise<void> {
+    const c = nwcOf(); if (!c) return
+    nwcState = { testing: true }; draw()
+    try { const r = await zapNet.nwc(c, 'get_balance'); const msats = Number(r.balance); nwcState = { balance: Number.isFinite(msats) ? Math.floor(msats / 1000) : null } } catch (e) { nwcState = { error: e instanceof Error ? e.message : String(e) } }
+    draw()
+  }
+  function startZap(target: NostrEvent): void { zapFlow = { target, sats: Number(safeGet(kv, 'zapAmount')) || 21, comment: '', stage: 'choose' }; draw() }
+  async function confirmZap(): Promise<void> {
+    const f = zapFlow, c = nwcOf()
+    if (!f || f.stage === 'working' || !c || !signer || !me) return
+    if (!Number.isInteger(f.sats) || f.sats < 1 || f.sats > MAX_ZAP_SATS) { zapFlow = { ...f, stage: 'failed', error: t(lang, 'zapAmountBad', { max: MAX_ZAP_SATS }) }; draw(); return }
+    const step = (st: NonNullable<ZapFlow['step']>) => { if (zapFlow === f || zapFlow?.target === f.target) { zapFlow = { ...f, stage: 'working', step: st }; draw() } }
+    const who = me
+    try {
+      step('address')
+      const meta = newestPerAuthor((await fetcher.query({ kinds: [0], authors: [f.target.pubkey], limit: 5 })).filter((e) => e.pubkey === f.target.pubkey)).get(f.target.pubkey)
+      let profile: Record<string, unknown> = {}
+      try { profile = JSON.parse(meta?.content ?? '{}') as Record<string, unknown> } catch { /* no profile: no address */ }
+      const url = payUrlOf(profile)
+      if (!url) throw new ZapError('no-address')
+      const info = await payInfo(url, zapNet.getJson), lnurl = lnurlOf(url)
+      step('signing')
+      let request: NostrEvent
+      try { request = await signOnly({ signer, kv }, zapRequestTemplate({ recipient: f.target.pubkey, noteId: f.target.id, sats: f.sats, relays, lnurl, comment: f.comment, createdAt: nowSec() })) } catch (e) { throw new ZapError('signer', e instanceof Error ? e.message : String(e)) }
+      step('invoice')
+      const pr = await zapInvoice(info, f.sats, request, lnurl, zapNet.getJson)
+      if (!invoiceMatches(pr, f.sats)) throw new ZapError('invoice')
+      step('paying')
+      try { await zapNet.nwc(c, 'pay_invoice', { invoice: pr }) } catch (e) { throw new ZapError('wallet', e instanceof Error ? e.message : String(e)) }
+      if (me !== who) return
+      safeSet(kv, 'zapAmount', String(f.sats))
+      zapFlow = null; say('info', t(lang, 'zapSent', { sats: formatSats(f.sats, lang), who: nameOf(view(), f.target.pubkey) })); draw()
+      // the receipt is published by the recipient's server a moment later: look again then
+      setTimeout(() => { zapMap.delete(f.target.id); fetcher.clear(); void load('all') }, 4000)
+    } catch (e) {
+      if (me !== who) return
+      const z = e instanceof ZapError ? e : new ZapError('server', e instanceof Error ? e.message : String(e))
+      zapFlow = { ...f, stage: 'failed', error: t(lang, `zapErr_${z.code.replace(/-/g, '_')}` as Key, { detail: z.message === z.code ? '' : z.message }) }
+      draw()
+    }
   }
 
   /** Reads everything again from the relays (an installed app has no pull-to-refresh). */
@@ -1214,13 +1278,15 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       h('p', { class: 'tagline' }, t(lang, 'tagline')), h('h2', {}, t(lang, 'loginTitle')), h('p', {}, t(lang, 'loginHelp')), input, ' ', h('button', { type: 'submit', class: 'primary' }, t(lang, 'loginButton')),
       loginError ? h('p', { class: 'error', role: 'alert' }, loginError) : null)
     const signArea = signer ? renderSignArea({
-      emojiPicker: isWide, signer: signer.state, who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, flash, composer, review, step, result, relays, bunkerText, linkOpen, confirmDisconnect: confirmingDisconnect, shareConfirm, deleteConfirm, followPanel: followPanel(),
+      emojiPicker: isWide, signer: signer.state, who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, zapFlow, flash, composer, review, step, result, relays, bunkerText, linkOpen, confirmDisconnect: confirmingDisconnect, shareConfirm, deleteConfirm, followPanel: followPanel(),
     }, {
       openConnect, startLink, pasteBunker: () => void pasteBunker(), cancelConnect, bunker: (x) => void bunker(x), dismissFlash: () => { flash = null; draw() }, confirmFollow: () => void confirmFollow(), acceptList, cancelFollow: () => { followFlow = null; draw() }, confirmShare: () => void share(), startQuote: () => { if (shareConfirm) startQuote(shareConfirm) }, cancelShare: () => { shareConfirm = null; draw() }, confirmDelete: () => void deleteNote(), cancelDelete: () => { deleteConfirm = null; draw() }, askDisconnect: () => { confirmingDisconnect = true; draw() }, cancelDisconnect: () => { confirmingDisconnect = false; draw() },
       disconnect: () => { confirmingDisconnect = false; void signer.disconnect(); composer = review = result = null; flash = null; draw() }, copy: (x) => { deps.copy?.(x); say('info', t(lang, 'copied')); draw() },
       edit: (x) => { if (composer) { composer.text = x; writeDraft(draftKey(composer), x) } }, discardDraft: () => { if (composer) { writeDraft(draftKey(composer), null); composer = { ...composer, text: '', restored: false }; draw(); root.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus() } }, review: doReview, publish: () => void publish(), back: () => { review = null; draw() }, cancelComposer: () => { if (composer?.text.trim()) say('info', t(lang, 'draftKept')); composer = null; review = null; draw() },
       retry: () => void retry(), dismissResult: () => { result = null; draw() }, startNote, cancelSigning: () => signing?.abort(),
       editBunker: (x) => { bunkerText = x }, setLinkOpen: (o) => { linkOpen = o },
+      zapPick: (n) => { if (zapFlow) { zapFlow = { ...zapFlow, sats: n, stage: 'choose' }; draw() } }, zapCustom: (n) => { if (zapFlow) zapFlow = { ...zapFlow, sats: n } }, zapComment: (x) => { if (zapFlow) zapFlow = { ...zapFlow, comment: x.slice(0, MAX_ZAP_COMMENT) } },
+      confirmZap: () => void confirmZap(), cancelZap: () => { if (zapFlow?.stage !== 'working') { zapFlow = null; draw() } },
     }, view(), true, !me || route.name === 'me' || isWide ? 'me' : 'feed', !!me && !isWide && ['following', 'mentions', 'note', 'user', 'me', 'people'].includes(route.name)) : null
     const pills = h('div', { class: 'lang', role: 'group', 'aria-label': 'Language' }, ...(['en', 'es'] as const).map((l) =>
       h('button', { type: 'button', 'aria-pressed': String(lang === l), onClick: () => { if (lang !== l) { lang = l; safeSet(kv, 'lang', lang); void load() } } }, l.toUpperCase())))
@@ -1233,7 +1299,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const helpPage = renderHelp(view(), helpOpen, (id, isOpen) => { if (isOpen) helpOpen.add(id); else helpOpen.delete(id) })
     const content: (HTMLElement | null)[] = route.name === 'help' ? [signArea, helpPage]
       : !me ? [...(route.name === 'note' && guestBody ? [guestBody] : []), loginForm, signArea]
-      : route.name === 'settings' ? [signArea, renderPrefs({ font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, scheme, onScheme: changeScheme, halloween: halloween(), onHalloween: changeTheme, autoImages, onAutoImages: changeAutoImages, interests, onInterests: changeInterests, reposts: showReposts, onReposts: changeReposts, outbox: readOutbox, onOutbox: changeOutbox, relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
+      : route.name === 'settings' ? [signArea, renderPrefs({ font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, scheme, onScheme: changeScheme, halloween: halloween(), onHalloween: changeTheme, autoImages, onAutoImages: changeAutoImages, interests, onInterests: changeInterests, reposts: showReposts, onReposts: changeReposts, outbox: readOutbox, onOutbox: changeOutbox, nwc: { relay: nwcOf()?.relays[0] ?? null, state: nwcState, error: nwcError, canSign: signer?.state === 'connected' }, onNwcSave: saveNwc, onNwcRemove: removeNwc, onNwcTest: () => void testNwc(), relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
         onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
       : isWide ? [wideView(route, signArea, signOut)]
