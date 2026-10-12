@@ -722,9 +722,13 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     setTimeout(() => void (async () => {
       if (await redraw(false) || !alive()) return
       // the reader is reading further down: nothing moves; a button at the top says how many of these notes would be added
-      const onScreen = new Set([...root.querySelectorAll<HTMLElement>('article.note[data-id]')].map((a) => a.dataset.id!))
+      const notes = [...root.querySelectorAll<HTMLElement>('article.note[data-id]')]
+      const onScreen = new Set(notes.map((a) => a.dataset.id!))
+      // only what would land among what is loaded: notes older than the oldest one on the page would not show up anyway
+      const times = notes.map((a) => Date.parse(a.querySelector('time')?.getAttribute('datetime') ?? '') / 1000).filter((x) => Number.isFinite(x))
+      const oldest = times.length ? Math.min(...times) : 0
       const theirs = (e: NostrEvent) => (route.name === 'user' ? e.pubkey === route.pubkey : !!session?.follows.has(e.pubkey))
-      const n = new Set([...(latePending.get(key) ?? [])].filter((e) => e.kind === 1 && !isReply(e) && theirs(e) && !onScreen.has(e.id)).map((e) => e.id)).size
+      const n = new Set([...(latePending.get(key) ?? [])].filter((e) => e.kind === 1 && !isReply(e) && theirs(e) && !onScreen.has(e.id) && e.created_at >= oldest).map((e) => e.id)).size
       if (!n) return
       lateWaiting = { key, paneId, n, show: () => {
         const box = paneId ? root.querySelector<HTMLElement>(`.col[data-col="${paneId}"]`) : root.querySelector<HTMLElement>('main.view')
@@ -740,7 +744,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     const w = lateWaiting
     if (!w || w.paneId !== paneId) return null
     if (!paneId && w.key !== shownRoute) return null
-    return h('button', { type: 'button', class: 'late-notes', onClick: w.show }, '↑ ', t(lang, w.n === 1 ? 'lateNotesOne' : 'lateNotes', { n: w.n }))
+    return h('div', { class: 'late-wrap' }, h('button', { type: 'button', class: 'late-notes', onClick: w.show }, '↑ ', t(lang, w.n === 1 ? 'lateNotesOne' : 'lateNotes', { n: w.n })))
   }
 
 
@@ -1296,12 +1300,25 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     // <main> is the only thing that scrolls and it is rebuilt on every draw. Read where the reader was FIRST: building the new one moves the list out of
     // the old one, which then collapses to zero.
     const kept = root.querySelector('main.view')?.scrollTop ?? 0
+    // ...and WHICH note is at the top of what they see: a quote or a zap line filled in above it must not push it away (the place is kept by note, not by pixels)
+    const anchorIn = (box: Element | null) => {
+      if (!box || box.scrollTop < 40) return null
+      const top = box.getBoundingClientRect().top, a = [...box.querySelectorAll<HTMLElement>('article.note[data-id]')].find((x) => x.getBoundingClientRect().bottom > top + 8)
+      return a ? { id: a.dataset.id!, off: a.getBoundingClientRect().top - top } : null
+    }
+    const keepAt = (box: Element | null, at: { id: string; off: number } | null) => {
+      if (!box || !at) return
+      const a = box.querySelector<HTMLElement>(`article.note[data-id="${at.id}"]`)
+      if (a) box.scrollTop += a.getBoundingClientRect().top - box.getBoundingClientRect().top - at.off
+    }
+    const mainAnchor = anchorIn(root.querySelector('main.view'))
     const searching = !!searchInput && root.ownerDocument.activeElement === searchInput // read before building: moving the search page into the new view takes the cursor away
     const editingAbout = !!aboutBox && root.ownerDocument.activeElement === aboutBox
     // a box rebuilt by the draw (the composer) gets the cursor back where it was: typing goes on while the page fills in around it
     const typing = root.ownerDocument.activeElement as (HTMLTextAreaElement & { dataset: DOMStringMap }) | null
     const keep = typing?.dataset?.keepFocus ? { key: typing.dataset.keepFocus, start: typing.selectionStart, end: typing.selectionEnd } : null
     const keptCols = new Map<string, number>([...root.querySelectorAll<HTMLElement>('.col[data-col]')].map((c) => [c.dataset.col!, c.scrollTop]))
+    const colAnchors = new Map([...root.querySelectorAll<HTMLElement>('.col[data-col]')].map((c) => [c.dataset.col!, anchorIn(c)]))
     const route = parseRoute(deps.location.hash)
     const isWide = wide() && !!me && route.name !== 'settings' && route.name !== 'help'
     if (confirmingDisconnect && ((route.name !== 'me' && !isWide) || signer?.state !== 'connected')) confirmingDisconnect = false // a question left behind is forgotten
@@ -1361,10 +1378,11 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     for (const c of root.querySelectorAll<HTMLElement>('.col[data-col]')) {
       const id = c.dataset.col as keyof typeof panes
       c.scrollTop = panes[id].resetScroll ? 0 : keptCols.get(id) ?? 0
+      if (!panes[id].resetScroll) keepAt(c, colAnchors.get(id) ?? null)
       if (panes[id].body) panes[id].resetScroll = false // the new view is on screen: from now on the reader's place is kept
     }
     const main = root.querySelector('main.view')
-    if (main && !isWide) main.scrollTop = scrollToTop ? 0 : kept
+    if (main && !isWide) { main.scrollTop = scrollToTop ? 0 : kept; if (!scrollToTop) keepAt(main, mainAnchor) }
     if (main && !isWide) {
       let last = main.scrollTop
       main.addEventListener('scroll', () => {

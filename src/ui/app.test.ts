@@ -1333,7 +1333,8 @@ describe('notes from people\'s own relays that arrive late', () => {
   }
   it('while the reader is further down, nothing moves: a button at the top says how many came, and brings them in', async () => {
     const many = Array.from({ length: 40 }, (_, i) => ev(friend, `older note ${i}`, { created_at: 1_000_000 + i }))
-    const a = boot({ events: [...w, ...many], stored: { me }, elsewhere: { relay: 'wss://far.example', events: [late], delayMs: 900 } }); await tick(500)
+    const ancient = ev(far, 'an old note from where only I write', { created_at: 5 }) // older than anything on the page: it would not show up, so it is not counted
+    const a = boot({ events: [...w, ...many], stored: { me }, elsewhere: { relay: 'wss://far.example', events: [late, ancient], delayMs: 900 } }); await tick(500)
     const main = a.root.querySelector('main.view') as HTMLElement
     Object.defineProperty(main, 'scrollTop', { configurable: true, get: () => 900, set: () => {} }) // reading further down
     await tick(900)
