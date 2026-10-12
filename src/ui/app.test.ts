@@ -1379,3 +1379,26 @@ describe('profile pictures through Quill\'s server', () => {
     expect(src).toBe('https://quill.example/avatar?u=https%3A%2F%2Fimg.example%2Fana.jpg%3Fx%3D1&s=96')
   })
 })
+
+describe('coming back to a list', () => {
+  it('a note opened from Following and then left shows Following again at once, where it was, without asking the relays again', async () => {
+    const a = boot({ events: [...world, ...Array.from({ length: 40 }, (_, i) => ev(friend, `note number ${i}`, { created_at: 5000 + i }))], stored: { me } }); await tick(400)
+    const main = () => a.root.querySelector('main.view') as HTMLElement
+    const list = main().querySelector('article.note')!.parentElement!
+    main().scrollTop = 700
+    const id = (main().querySelector('article.note') as HTMLElement).dataset.id!
+    await a.go(`#/note/${id}`); await tick(200)
+    const calls = a.calls.n
+    await a.go(''); await tick(50)
+    expect(a.calls.n).toBe(calls) // nothing asked again
+    expect(main().contains(list)).toBe(true) // the very same list, with whatever was unfolded
+    expect(main().scrollTop).toBe(700)
+  })
+  it('after Settings, the list is loaded again (a change made there must show)', async () => {
+    const a = boot({ stored: { me } }); await tick(400)
+    await a.go('#/settings'); await tick(80)
+    const calls = a.calls.n
+    await a.go(''); await tick(200)
+    expect(a.calls.n).toBeGreaterThan(calls)
+  })
+})

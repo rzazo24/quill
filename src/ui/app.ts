@@ -276,6 +276,13 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const background = (): Promise<void> => (backgroundRun ??= startBackground ? startBackground() : Promise.resolve())
   const afterFirstPaint = (): void => { if (backgroundRun === null && startBackground) setTimeout(() => { void background() }, 60) }
   let scrollToTop = false // set when a different view is shown
+  // A list you leave (to open a note, an account…) is kept as it was, for a while: coming back shows it at once, where you were, with what you had
+  // unfolded, instead of loading it again from the top. Older than PAGE_KEEP_MS, it is loaded fresh.
+  const PAGE_KEEP_MS = 10 * 60_000
+  const KEPT_PAGES = new Set(['following', 'mentions', 'me', 'user', 'people', 'saved'])
+  const pageCache = new Map<string, { body: HTMLElement; scroll: number; at: number }>()
+  let restoreScroll: number | null = null
+  const pageKey = (key: string) => (key === JSON.stringify({ name: 'following' }) ? `${key}:${feedMode}` : key) // Following is a different list in each mode
   let updateReady = false
   // activity around my notes: what is new since the last time the Mentions tab was open
   const seenKey = () => `seen:${me}`
@@ -304,7 +311,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const followersSeen = new Set<string>() // everybody seen following you since this page opened (the known ones are in `knownFollowers`)
   /** How many accounts have been seen following the reader: only a lower bound (each relay knows part of them), and it only grows. Null while nothing has been looked at yet. */
   const followerCount = (): number | null => { const k = loadKnown(); return k === null && followersSeen.size === 0 ? null : new Set([...(k ?? []), ...followersSeen]).size }
-  const forgetAccount = () => { myProfile = undefined; zapMap.clear(); zapFlow = null; nwcState = null; nwcError = null; aboutEdit = null; reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
+  const forgetAccount = () => { pageCache.clear(); myProfile = undefined; zapMap.clear(); zapFlow = null; nwcState = null; nwcError = null; aboutEdit = null; reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
   const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
@@ -683,8 +690,19 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (!(await ensureSession()) || mine !== run || !session) return
     const route = parseRoute(deps.location.hash)
     const key = JSON.stringify(route)
+    if (key !== shownRoute) {
+      const now = deps.nowMs?.() ?? Date.now()
+      const prev = shownRoute ? (JSON.parse(shownRoute) as Route) : null
+      if (prev && body && KEPT_PAGES.has(prev.name)) {
+        pageCache.set(pageKey(shownRoute), { body, scroll: root.querySelector('main.view')?.scrollTop ?? 0, at: now })
+        while (pageCache.size > 6) pageCache.delete(pageCache.keys().next().value!) // the oldest goes
+      }
+      const back = KEPT_PAGES.has(route.name) ? pageCache.get(pageKey(key)) : undefined
+      if (back) pageCache.delete(pageKey(key))
+      if (back && now - back.at < PAGE_KEEP_MS) { body = back.body; shownRoute = key; lateWaiting = null; restoreScroll = back.scroll; status = null; draw(); return }
+    }
     if (key !== shownRoute) { body = null; shownRoute = key; lateWaiting = null; scrollToTop = true; profileMode = 'notes'; if (route.name !== 'mentions') { markFrom = null; followersMark = null } }
-    if (route.name === 'settings' || route.name === 'help') { status = null; body = null; draw(); return }
+    if (route.name === 'settings' || route.name === 'help') { pageCache.clear(); status = null; body = null; draw(); return } // a change made there must show in every list
     status = t(lang, 'loadingFeed'); draw()
     const content = await buildContent(route, () => mine === run)
     if (content === null) return
@@ -827,7 +845,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
   }
 
   /** Reads everything again from the relays (an installed app has no pull-to-refresh). */
-  function refresh(): void { fetcher.clear(); profileAsked.clear(); lateNotes.clear(); latePending.clear(); lateWaiting = null; zapMap.clear(); articleTitles.clear(); reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); session = null; void load() }
+  function refresh(): void { pageCache.clear(); fetcher.clear(); profileAsked.clear(); lateNotes.clear(); latePending.clear(); lateWaiting = null; zapMap.clear(); articleTitles.clear(); reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); session = null; void load() }
 
   const flat = (nodes: ThreadNode[]): Judged[] => nodes.flatMap((n) => [n.item, ...flat(n.children)])
 
@@ -1385,7 +1403,8 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
       if (panes[id].body) panes[id].resetScroll = false // the new view is on screen: from now on the reader's place is kept
     }
     const main = root.querySelector('main.view')
-    if (main && !isWide) { main.scrollTop = scrollToTop ? 0 : kept; if (!scrollToTop) keepAt(main, mainAnchor) }
+    if (main && !isWide) { if (restoreScroll !== null) main.scrollTop = restoreScroll; else { main.scrollTop = scrollToTop ? 0 : kept; if (!scrollToTop) keepAt(main, mainAnchor) } }
+    restoreScroll = null
     if (main && !isWide) {
       let last = main.scrollTop
       main.addEventListener('scroll', () => {
