@@ -1,5 +1,6 @@
 // Turning judged notes into DOM. Pure of state: give it data, get elements. Nothing here loads anything external.
 import { nip19 } from 'nostr-tools'
+import { interestsIn } from '../core/interests.js'
 import type { Child } from './dom.js'
 import type { TrustReason, TrustScore } from '../data/trust.js'
 import { h } from './dom.js'
@@ -21,7 +22,7 @@ import type { ThreadNode } from '../data/feed.js'
 import { hasReach, reactionTotal, type Reach } from '../data/reach.js'
 import { ago, reason, t, tallyLabel, type Lang } from './i18n.js'
 
-export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; /** The Halloween theme is on: extra reactions. */ halloween?: boolean; /** What a note of the reader's got from others (reactions, reposts, replies), once it is known. */ reach?: (id: string) => Reach | undefined; /** A note quoted in a text, once it is known (undefined: not yet asked; null: not found); `wantQuote` asks for it. */ quoted?: (id: string) => Judged | null | undefined; wantQuote?: (id: string, relays?: string[]) => void; /** Pictures linked in a note by this author load by themselves (the reader's setting); otherwise each waits for a tap. */ autoImages?: (pubkey: string) => boolean; /** Inside a quoted note (itself one link): addresses are plain text, no links or buttons inside the link. */ plainLinks?: boolean; /** Told about every note handed to a list or drawn, so the search can find it later. */ seen?: (notes: Judged[]) => void; /** With a signer: the "…" menu offers to mute (or unmute) the author. */ mute?: (pubkey: string) => void; isMuted?: (pubkey: string) => boolean; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** The relays put in a copied id/link as places to look for the note. */ hints?: readonly string[]; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
+export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; /** The Halloween theme is on: extra reactions. */ halloween?: boolean; /** What a note of the reader's got from others (reactions, reposts, replies), once it is known. */ reach?: (id: string) => Reach | undefined; /** A note quoted in a text, once it is known (undefined: not yet asked; null: not found); `wantQuote` asks for it. */ quoted?: (id: string) => Judged | null | undefined; wantQuote?: (id: string, relays?: string[]) => void; /** Pictures linked in a note by this author load by themselves (the reader's setting); otherwise each waits for a tap. */ autoImages?: (pubkey: string) => boolean; /** Inside a quoted note (itself one link): addresses are plain text, no links or buttons inside the link. */ plainLinks?: boolean; /** Told about every note handed to a list or drawn, so the search can find it later. */ seen?: (notes: Judged[]) => void; /** The topics the reader cares about: a note that talks about one is marked. */ interests?: readonly string[]; /** With a signer: the "…" menu offers to mute (or unmute) the author. */ mute?: (pubkey: string) => void; isMuted?: (pubkey: string) => boolean; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** The relays put in a copied id/link as places to look for the note. */ hints?: readonly string[]; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
 
 export const nameOf = (v: View, pubkey: string): string => v.names.get(pubkey) ?? shortNpub(pubkey)
 
@@ -174,11 +175,13 @@ export function reachLine(r: Reach | undefined, v: View, noteId?: string): HTMLE
 function card(j: Judged, v: View, extra: Child[] = []): HTMLElement {
   v.seen?.([j])
   const { event } = j
-  return h('article', { class: v.isNew?.(event) ? 'note new' : 'note', 'data-id': event.id, ...(v.isNew?.(event) ? { 'data-new': t(v.lang, 'newMark') } : {}) },
+  const hits = v.interests?.length ? interestsIn(event, v.interests) : []
+  return h('article', { class: ['note', v.isNew?.(event) ? 'new' : '', hits.length ? 'interesting' : ''].filter(Boolean).join(' '), 'data-id': event.id, ...(v.isNew?.(event) ? { 'data-new': t(v.lang, 'newMark') } : {}) },
     // the picture and the name both open the account; the picture is skipped by keyboards and screen readers (the name link says the same)
     isKey(event.pubkey) ? h('a', { class: 'avatar-link', href: userHref(event.pubkey), tabindex: '-1', 'aria-hidden': 'true' }, avatarEl(event.pubkey, v)) : avatarEl(event.pubkey, v),
     h('div', { class: 'note-main' },
       j.followedBy?.length ? h('p', { class: 'reposted' }, icon('people', 14), j.followedBy.length > 1 ? t(v.lang, 'followedByMany', { who: nameOf(v, j.followedBy[0]!), n: j.followedBy.length - 1 }) : t(v.lang, 'followedByOne', { who: nameOf(v, j.followedBy[0]!) })) : null,
+      hits.length ? h('p', { class: 'interest' }, icon('star', 14), t(v.lang, 'interestIn', { topics: hits.join(', ') })) : null,
       j.pickedBy?.length ? h('p', { class: 'reposted' }, icon('people', 14), j.pickedBy.length > 1 ? t(v.lang, 'pickedByMany', { who: nameOf(v, j.pickedBy[0]!), n: j.pickedBy.length - 1 }) : t(v.lang, 'pickedByOne', { who: nameOf(v, j.pickedBy[0]!) })) : null,
       j.repostedBy?.length ? h('p', { class: 'reposted' }, icon('repost', 14), j.repostedBy.length > 1 ? t(v.lang, 'repostedMany', { who: nameOf(v, j.repostedBy[0]!), n: j.repostedBy.length - 1 }) : t(v.lang, 'repostedOne', { who: nameOf(v, j.repostedBy[0]!) })) : null,
       h('header', {},
@@ -368,7 +371,7 @@ export function renderHelp(v: View, open: ReadonlySet<string>, onToggle: (id: st
 export const SOURCE_URL = 'https://github.com/rzazo24/quill'
 
 export interface PrefsProps {
-  font: FontSize; avatars: AvatarStyle; sampleKey: string; onAvatars: (s: AvatarStyle) => void; reposts: boolean; onReposts: (on: boolean) => void; autoImages: boolean; onAutoImages: (on: boolean) => void; scheme: Scheme; onScheme: (s: Scheme) => void; halloween: boolean; onHalloween: (on: boolean) => void; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
+  font: FontSize; avatars: AvatarStyle; sampleKey: string; onAvatars: (s: AvatarStyle) => void; reposts: boolean; onReposts: (on: boolean) => void; interests: string[]; onInterests: (text: string) => void; autoImages: boolean; onAutoImages: (on: boolean) => void; scheme: Scheme; onScheme: (s: Scheme) => void; halloween: boolean; onHalloween: (on: boolean) => void; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
   /** The list published on Nostr compared with this one, and what can be done about it. */
   list: { state: ListState; publishedCount: number; canSign: boolean; confirming: boolean }
   onAskPublish: () => void; onCancelPublish: () => void; onPublish: () => void; onUsePublished: () => void
@@ -393,6 +396,7 @@ export function renderPrefs(p: PrefsProps, v: View): HTMLElement {
     h('label', { class: 'check' }, h('span', {}, t(v.lang, 'halloweenTheme')), h('input', { type: 'checkbox', role: 'switch', ...(p.halloween ? { checked: true } : {}), onChange: (e: Event) => p.onHalloween((e.target as HTMLInputElement).checked) })), h('p', { class: 'meta' }, t(v.lang, 'halloweenHelp')),
     h('label', { class: 'check' }, h('span', {}, t(v.lang, 'showReposts')), h('input', { type: 'checkbox', role: 'switch', ...(p.reposts ? { checked: true } : {}), onChange: (e: Event) => p.onReposts((e.target as HTMLInputElement).checked) })),
     h('label', { class: 'check' }, h('span', {}, t(v.lang, 'autoImages')), h('input', { type: 'checkbox', role: 'switch', ...(p.autoImages ? { checked: true } : {}), onChange: (e: Event) => p.onAutoImages((e.target as HTMLInputElement).checked) })), h('p', { class: 'meta' }, t(v.lang, 'autoImagesHelp')),
+    h('h3', {}, t(v.lang, 'interestsTitle')), interestsArea(p), h('p', { class: 'meta' }, t(v.lang, 'interestsHelp')),
     h('h3', {}, t(v.lang, 'relaysTitle')), h('p', { class: 'meta' }, t(v.lang, 'relaysHelp')),
     h('ul', { class: 'relay-list' }, ...p.relays.map((u) => h('li', {},
       h('span', { class: 'url' }, u.replace(/^wss:\/\//, '')),
@@ -403,6 +407,12 @@ export function renderPrefs(p: PrefsProps, v: View): HTMLElement {
     p.error ? h('p', { class: 'error', role: 'alert' }, p.error) : null,
     p.isDefault ? null : h('p', {}, h('button', { type: 'button', class: 'link', onClick: p.onReset }, t(v.lang, 'relayReset'))),
     renderRelayListSync(p, v))
+}
+
+function interestsArea(p: PrefsProps): HTMLElement {
+  const area = h('textarea', { class: 'interests', rows: '3', autocapitalize: 'none', spellcheck: 'false', onChange: (e: Event) => p.onInterests((e.target as HTMLTextAreaElement).value) }) as HTMLTextAreaElement
+  area.value = p.interests.join('\n')
+  return area
 }
 
 /** Is the list the same on Nostr? Publishing it is a public act, so it asks first. */

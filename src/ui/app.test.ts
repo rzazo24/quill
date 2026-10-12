@@ -1170,3 +1170,16 @@ describe('your own npub in Me', () => {
     ;(a.root.querySelector('.account button.npub-copy') as HTMLButtonElement).click(); expect(copied).toEqual([nip19.npubEncode(me)])
   })
 })
+
+describe('topics you care about', () => {
+  it('a note about one is marked "For you", the order of the feed unchanged; set in Settings, kept on this device', async () => {
+    const a = boot({ events: [...world, ev(friend, 'all about relays today', { created_at: 8000 }), ev(friend, 'something else', { created_at: 8100 })], stored: { me, interests: 'relay' } }); await tick(300)
+    const notes = [...a.root.querySelectorAll('article.note')]
+    const marked = notes.filter((n) => n.classList.contains('interesting')).map((n) => n.querySelector('.body')!.textContent)
+    expect(marked).toEqual(['all about relays today']); expect(notes.find((n) => n.classList.contains('interesting'))!.querySelector('.interest')!.textContent).toBe('For you: relay')
+    expect(notes.map((n) => n.querySelector('.body')!.textContent).indexOf('something else')).toBeLessThan(notes.map((n) => n.querySelector('.body')!.textContent).indexOf('all about relays today')) // newest first, as always
+    await a.go('#/settings'); await tick(100)
+    const area = a.root.querySelector('textarea.interests') as HTMLTextAreaElement; expect(area.value).toBe('relay')
+    area.value = 'relay\nSomething'; area.dispatchEvent(new Event('change')); expect(a.mem.get('interests')).toBe('relay\nsomething')
+  })
+})

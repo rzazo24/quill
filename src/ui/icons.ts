@@ -33,6 +33,8 @@ const PATHS = {
   video: ['M4 6h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z', 'M17 10l5-3v10l-5-3'],
   /** a magnifying glass: search */
   search: ['M18 11a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z', 'M20 20l-4.2-4.2'],
+  /** a star: something the reader cares about */
+  star: ['M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9L12 3Z'],
   refresh: ['M20 11a8 8 0 0 0-14.7-3', 'M4 4v4h4', 'M4 13a8 8 0 0 0 14.7 3', 'M20 20v-4h-4'],
 } as const
 
