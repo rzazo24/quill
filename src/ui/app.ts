@@ -9,6 +9,7 @@ import { isReply } from '../core/thread.js'
 import { judgeAll, tally, type Context, type Judged, type Settings } from '../core/verdict.js'
 import { loadNetwork } from '../data/network.js'
 import { loadPopular } from '../data/popular.js'
+import { aboutOf, aboutTemplate, MAX_ABOUT_CHARS, PROFILE_KIND } from '../core/profileedit.js'
 import { loadTrust, type TrustScore } from '../data/trust.js'
 import { matchNotes, matchPeople, MIN_QUERY, parseTarget, searchNetwork, searchTag, SEARCH_RELAYS, tagOf, type Found } from '../data/search.js'
 import { loadProfile, type ProfileInfo } from '../data/profile.js'
@@ -26,7 +27,7 @@ import { checkTemplate, MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
 import { cobweb, icon, logo, pumpkin } from './icons.js'
 import { detectLang, problemText, setSpooky, t, type Key, type Lang } from './i18n.js'
-import { PAGE, npubEl, renderTrust, renderPeople, renderProfileHead, renderProfileMode, renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
+import { PAGE, renderContent, npubEl, renderTrust, renderPeople, renderProfileHead, renderProfileMode, renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type FollowPanel, type Review } from './sign-ui.js'
 import { installHint, type Env } from './install.js'
 import { halloweenOn, parseScheme, parseTheme, type Scheme, type ThemeChoice, parseAvatars, parseFeedMode, parseFont, parseLang, parseReposts, parseSettings, parseWords, safeGet, safeSet, type AvatarStyle, type FeedMode, type FontSize, type KV } from './store.js'
@@ -112,6 +113,10 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const saveKnownFollowing = (s: Set<string>) => { knownFollowing = s; safeSet(kv, followingKey(), JSON.stringify([...s])) }
   type FollowFlow = { stage: 'checking'; pubkey: string; action: FollowAction } | { stage: 'confirm'; pubkey: string; action: FollowAction; base: NostrEvent | null; changed: boolean } | { stage: 'refuse'; pubkey: string; action: FollowAction; why: 'none' | 'shrunk'; known: number; found: number; base: NostrEvent | null }
   let followFlow: FollowFlow | null = null
+  // the reader's description (their profile's `about`) and its editor; declared up here because the first draw can come before the functions below run
+  let myProfile: NostrEvent | null | undefined // undefined: not read yet; null: none found
+  let aboutEdit: { text: string; busy: boolean; note: string | null } | null = null
+  let aboutBox: HTMLTextAreaElement | null = null // kept across redraws while editing, so what is typed and the cursor stay
   let shareConfirm: NostrEvent | null = null // the note about to be shared (sharing asks first: it is public)
   const shareable = new Set<string>() // ids of the notes whose bar offers Share (visible to the filter, shareable)
   const helpOpen = new Set<string>(['about']) // which Help sections are unfolded
@@ -231,7 +236,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const followersSeen = new Set<string>() // everybody seen following you since this page opened (the known ones are in `knownFollowers`)
   /** How many accounts have been seen following the reader: only a lower bound (each relay knows part of them), and it only grows. Null while nothing has been looked at yet. */
   const followerCount = (): number | null => { const k = loadKnown(); return k === null && followersSeen.size === 0 ? null : new Set([...(k ?? []), ...followersSeen]).size }
-  const forgetAccount = () => { reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
+  const forgetAccount = () => { myProfile = undefined; aboutEdit = null; reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
   const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
@@ -454,7 +459,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
           if (seenAt === null) loadSeen()
           const opts = activityOptions(); act = await loadActivity(fetcher, ctx(), settings, opts); afterActivity(act, !!opts.verifyKnown)
         }
-        const items = act ? act.notes : route.name === 'me' ? await loadMine(fetcher, ctx(), settings) : (feedMode === 'network' ? await loadNetwork(fetcher, session!, ctx(), settings) : feedMode === 'popular' ? await loadPopular(fetcher, ctx(), nowSec(), settings) : await loadFollowing(fetcher, ctx(), settings, { reposts: showReposts }))
+        const items = act ? act.notes : route.name === 'me' ? (await Promise.all([loadMine(fetcher, ctx(), settings), loadMyProfile()]))[0] : (feedMode === 'network' ? await loadNetwork(fetcher, session!, ctx(), settings) : feedMode === 'popular' ? await loadPopular(fetcher, ctx(), nowSec(), settings) : await loadFollowing(fetcher, ctx(), settings, { reposts: showReposts }))
         if (!alive()) return null
         // the first visit to Mentions ever takes the followers of today as its starting point (nothing is "new" yet); later, the ones not seen before are
         const baseline = act ? (loadKnown() ?? new Set(act.followers)) : null
@@ -743,7 +748,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     else say('error', t(lang, 'e_not_signed', { why: (e instanceof Error ? e.message : String(e)).trim() || t(lang, 'noReason') }))
   }
 
-  async function send(template: Template, opts: { followBase?: NostrEvent | null; me?: string } = {}): Promise<boolean> {
+  async function send(template: Template, opts: { followBase?: NostrEvent | null; me?: string; profileBase?: NostrEvent } = {}): Promise<boolean> {
     if (!signer || !publisher) return false
     // Still waiting for the signer to answer an earlier tap (e.g. Clave was closed): a new tap replaces it, so opening Clave and tapping again works.
     // Once the signature is made and the event is being sent, a second tap is ignored (no double posts).
@@ -751,7 +756,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     busy = true; flash = null; result = null; const mine = signing = new AbortController(); draw()
     current = (async () => {
       try {
-        result = await signAndPublish({ signer, publisher, kv, now: deps.nowMs, signal: mine.signal, followBase: opts.followBase }, template, (s) => { step = s; draw() })
+        result = await signAndPublish({ signer, publisher, kv, now: deps.nowMs, signal: mine.signal, followBase: opts.followBase, ...(opts.profileBase ? { profileBase: opts.profileBase } : {}) }, template, (s) => { step = s; draw() })
         step = null; fetcher.clear()
         return true
       } catch (e) { step = null; if (!(mine.signal.aborted && signing !== mine)) sayPipelineError(e); return false } finally { if (signing === mine) { busy = false; signing = null } draw() }
@@ -913,8 +918,65 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   function accountCard(): HTMLElement {
-    return h('section', { class: 'account card' }, avatarEl(me!, view(), 'lg'),
-      h('div', {}, h('strong', {}, nameOf(view(), me!)), npubEl(me!, view()), countsLine()))
+    const head = h('div', { class: 'account-top' }, avatarEl(me!, view(), 'lg'), h('div', {}, h('strong', {}, nameOf(view(), me!)), npubEl(me!, view()), countsLine()))
+    return h('section', { class: 'account card' }, head, aboutArea())
+  }
+  // The reader's description (the `about` of their profile): shown under their name, and editable with a signer. A profile is one event that a new one
+  // replaces whole, so the newest one is read right before signing and only `about` changes (see core/profileedit.ts).
+  async function loadMyProfile(): Promise<void> {
+    if (!me) return
+    const who = me
+    try { const p = await loadFollowList(fetcher, who, PROFILE_KIND); if (me === who) myProfile = p } catch { /* keeps what it had */ }
+  }
+  function aboutArea(): HTMLElement | null {
+    const canEdit = signer?.state === 'connected'
+    if (aboutEdit) {
+      if (!aboutBox) {
+        const box = aboutBox = h('textarea', { class: 'about-edit', rows: '5', maxlength: String(MAX_ABOUT_CHARS), 'aria-label': t(lang, 'aboutLabel') }) as HTMLTextAreaElement
+        box.value = aboutEdit.text
+        box.addEventListener('input', () => { if (aboutEdit) aboutEdit.text = box.value })
+        setTimeout(() => { if (box.isConnected) box.focus() }, 0)
+      } else if (aboutBox.value !== aboutEdit.text) aboutBox.value = aboutEdit.text
+      const box = aboutBox
+      box.disabled = aboutEdit.busy
+      return h('div', { class: 'about-area' },
+        box, aboutEdit.note ? h('p', { class: 'error', role: 'alert' }, aboutEdit.note) : null, h('p', { class: 'meta' }, t(lang, 'aboutPublic')),
+        h('p', { class: 'buttons' }, h('button', { type: 'button', class: 'primary', ...(aboutEdit.busy || busy ? { disabled: true } : {}), onClick: () => void saveAbout() }, t(lang, aboutEdit.busy ? 'aboutSaving' : 'aboutSave')), ' ', h('button', { type: 'button', class: 'link', ...(aboutEdit.busy ? { disabled: true } : {}), onClick: () => { aboutEdit = null; draw() } }, t(lang, 'cancel'))))
+    }
+    aboutBox = null
+    const about = aboutOf(myProfile)
+    if (!about && !canEdit) return null
+    return h('div', { class: 'about-area' },
+      about ? h('div', { class: 'about' }, renderContent(about, view())) : h('p', { class: 'meta' }, t(lang, myProfile === undefined ? 'aboutLoading' : 'aboutNone')),
+      canEdit && myProfile ? h('p', { class: 'buttons' }, h('button', { type: 'button', onClick: () => { aboutEdit = { text: about, busy: false, note: null }; draw() } }, t(lang, 'aboutEditButton'))) : null)
+  }
+  async function saveAbout(): Promise<void> {
+    const e = aboutEdit
+    if (!e || e.busy || !me || !signer || signer.state !== 'connected') return
+    const who = me, text = e.text.replace(/\r\n/g, '\n').trim()
+    e.busy = true; e.note = null; draw()
+    fetcher.clear()
+    let fresh: NostrEvent | null = null
+    try { fresh = await loadFollowList(fetcher, who, PROFILE_KIND, { quick: false }) } catch { fresh = null } // every relay: a fast one with an old copy must not undo a recent change made elsewhere
+    if (me !== who || aboutEdit !== e) return
+    e.busy = false
+    if (!fresh) { e.note = t(lang, 'aboutNoProfile'); return draw() } // never publish a profile from nothing: it would erase the real one
+    if (myProfile && fresh.id !== myProfile.id) { myProfile = fresh; e.note = t(lang, 'aboutChanged'); return draw() } // changed elsewhere meanwhile: look again before saving
+    myProfile = fresh
+    const template = aboutTemplate(fresh, text, nowSec())
+    if (!template) { if (aboutOf(fresh) === text) { aboutEdit = null; say('info', t(lang, 'aboutSame')) } else e.note = problemText(lang, 'profile'); return draw() }
+    aboutEdit = null
+    if (await send(template, { profileBase: fresh })) {
+      let confirmed = false
+      for (const wait of deps.verifyWaitsMs ?? [1500, 3000]) {
+        await new Promise((r) => setTimeout(r, wait))
+        try { fetcher.clear(); const after = await loadFollowList(fetcher, who, PROFILE_KIND); if (after) { myProfile = after; confirmed = aboutOf(after) === text } } catch { confirmed = false }
+        if (confirmed) break
+      }
+      if (result && !failedRelays(result.outcomes).length) result = null
+      say('info', t(lang, confirmed ? 'aboutSaved' : 'aboutUnconfirmed'), confirmed ? undefined : 7000)
+    } else aboutEdit = { ...e, text, busy: false }
+    draw()
   }
 
   /** Wide screens: Following, Mentions and Me side by side, each scrolling on its own, and a panel on the right for the thread, account or list you opened. */
@@ -938,6 +1000,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     // the old one, which then collapses to zero.
     const kept = root.querySelector('main.view')?.scrollTop ?? 0
     const searching = !!searchInput && root.ownerDocument.activeElement === searchInput // read before building: moving the search page into the new view takes the cursor away
+    const editingAbout = !!aboutBox && root.ownerDocument.activeElement === aboutBox
     const keptCols = new Map<string, number>([...root.querySelectorAll<HTMLElement>('.col[data-col]')].map((c) => [c.dataset.col!, c.scrollTop]))
     const route = parseRoute(deps.location.hash)
     const isWide = wide() && !!me && route.name !== 'settings' && route.name !== 'help'
@@ -986,6 +1049,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (scrollToTop || flash || composer || review || result || followFlow || shareConfirm || connectOpen) barsHidden = false // a new view, or something that talks to you: the bars stay
     root.replaceChildren(...page.filter((x): x is HTMLElement => x !== null))
     if (searching && searchInput!.isConnected) searchInput!.focus({ preventScroll: true })
+    if (editingAbout && aboutBox?.isConnected) aboutBox.focus({ preventScroll: true })
     root.classList.toggle('bars-hidden', barsHidden && !isWide)
     root.classList.toggle('wide', isWide)
     root.classList.toggle('has-tabs', !!me && !isWide)

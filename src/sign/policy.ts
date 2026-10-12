@@ -3,19 +3,20 @@
 import { isReactionContent } from '../core/compose.js'
 import { nip19 } from 'nostr-tools'
 import { followChange, FOLLOW_LIST_KIND, MUTE_LIST_KIND } from '../core/follow.js'
+import { isAboutChange, PROFILE_KIND } from '../core/profileedit.js'
 import { checkRepost, REPOST_KIND, type RepostProblem } from '../core/repost.js'
 import type { Event } from 'nostr-tools'
 import { MAX_RELAYS, normalizeRelay } from '../net/relays.js'
 
 /** NIP-65: the list of relays a person writes to and reads from. */
 export const RELAY_LIST_KIND = 10002
-export const ALLOWED_KINDS = [1, FOLLOW_LIST_KIND, REPOST_KIND, 7, MUTE_LIST_KIND, RELAY_LIST_KIND] as const
+export const ALLOWED_KINDS = [PROFILE_KIND, 1, FOLLOW_LIST_KIND, REPOST_KIND, 7, MUTE_LIST_KIND, RELAY_LIST_KIND] as const
 export const MAX_NOTE_CHARS = 1000
 export const MAX_SIGNATURES_PER_HOUR = 20
 
 export interface Template { kind: number; content: string; tags: string[][]; created_at: number }
 
-export type Problem = 'kind' | 'empty' | 'too-long' | 'reaction' | 'tags' | 'reaction-target' | 'relay-list' | 'quote' | 'follow' | RepostProblem
+export type Problem = 'kind' | 'empty' | 'too-long' | 'reaction' | 'tags' | 'reaction-target' | 'relay-list' | 'quote' | 'follow' | 'profile' | RepostProblem
 
 const TAG_NAMES = new Set(['e', 'p', 't', 'k', 'a', 'q'])
 const HEX64 = /^[0-9a-f]{64}$/
@@ -34,11 +35,12 @@ function checkQuote(t: Template): boolean {
 }
 
 /** What a check can need besides the template: the reader's follow list a follow-list change was built from. */
-export interface CheckContext { followBase?: Event | null; /** the reader, for a first mute list (built from no list at all) */ me?: string }
+export interface CheckContext { followBase?: Event | null; /** the reader, for a first mute list (built from no list at all) */ me?: string; /** the reader's profile a description change was built from */ profileBase?: Event }
 
 /** Null when the template is fine, otherwise why not. */
 export function checkTemplate(t: Template, ctx: CheckContext = {}): Problem | null {
   if (!(ALLOWED_KINDS as readonly number[]).includes(t.kind)) return 'kind'
+  if (t.kind === PROFILE_KIND) return ctx.profileBase && isAboutChange(ctx.profileBase, t) ? null : 'profile' // only the description changes, everything else as it was
   if (t.kind === FOLLOW_LIST_KIND || t.kind === MUTE_LIST_KIND) return ctx.followBase !== undefined && followChange(ctx.followBase, t, ctx.me) ? null : 'follow' // only ONE account more or less than the list it was built from
   if (t.kind === REPOST_KIND) return checkRepost(t) // the copy of a real note and exactly its pointer
   if (t.kind === RELAY_LIST_KIND) { // exactly `["r", "wss://…"]` per relay, each one valid and tidy, no repeats, nothing else

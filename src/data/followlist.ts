@@ -2,12 +2,12 @@
 // and refuses to go on if it does not look like the list it has been seeing (a stale or partial copy would make the new list erase follows).
 import type { Event } from 'nostr-tools'
 import { followPubkeys, FOLLOW_LIST_KIND } from '../core/follow.js'
-import type { Fetcher } from '../net/fetcher.js'
+import type { Fetcher, QueryOptions } from '../net/fetcher.js'
 import { newestPerAuthor } from './lists.js'
 
 /** The newest follow list of the reader across the relays (what a relay holds may be an older version), or null when none was found. */
-export async function loadFollowList(f: Fetcher, me: string, kind: number = FOLLOW_LIST_KIND): Promise<Event | null> {
-  const lists = (await f.query({ kinds: [kind], authors: [me], limit: 20 })).filter((e) => e.kind === kind && e.pubkey === me)
+export async function loadFollowList(f: Fetcher, me: string, kind: number = FOLLOW_LIST_KIND, options?: QueryOptions): Promise<Event | null> {
+  const lists = (await f.query({ kinds: [kind], authors: [me], limit: 20 }, options)).filter((e) => e.kind === kind && e.pubkey === me)
   return newestPerAuthor(lists).get(me) ?? null
 }
 

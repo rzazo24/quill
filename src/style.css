@@ -66,7 +66,7 @@ h2.section { font-size: 1.05rem; margin-top: 8px } .foot { margin: 8px 0 0 }
 .avatar { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: none; user-select: none; font-weight: 700; font-size: .9rem; color: var(--text);
   background: hsl(var(--h, 200) 45% 26%); border: 1px solid hsl(var(--h, 200) 45% 38%) }
 .avatar.lg { width: 56px; height: 56px; font-size: 1.15rem }
-.account { display: flex; align-items: center; gap: 14px } .account strong { font-size: 1.1rem }
+.account { display: grid; gap: 10px } .account-top { display: flex; align-items: center; gap: 14px } .account strong { font-size: 1.1rem }
 
 /* notes */
 .list { display: grid; gap: 8px }
@@ -312,8 +312,8 @@ html[data-theme=halloween] ::selection { background: rgba(var(--accent-rgb), .35
 
 /* the buttons of one panel or notice (Publish / Back, Retry / Close, Confirm / Cancel…) are one size: as wide as the widest of them, side by side in one row (their words wrap if they must) */
 .sign .buttons, .confirm-signout .buttons { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; width: fit-content; max-width: 100% }
-.sign .buttons button, .confirm-signout .buttons button { min-width: 0; white-space: normal; min-height: 38px; padding: 4px 10px; font-size: .92rem; line-height: 1.25 }
-@media (max-width: 459px) { .sign .buttons button, .confirm-signout .buttons button { padding: 4px 6px; font-size: .86rem } }
+.sign .buttons button, .confirm-signout .buttons button, .about-area .buttons button { min-width: 0; white-space: normal; min-height: 38px; padding: 4px 10px; font-size: .92rem; line-height: 1.25 }
+@media (max-width: 459px) { .sign .buttons button, .confirm-signout .buttons button, .about-area .buttons button { padding: 4px 6px; font-size: .86rem } }
 
 /* what a note of yours got: reactions, reposts and replies, small and quiet under the text */
 .reach { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; color: var(--muted); font-size: .85rem }
@@ -373,3 +373,7 @@ a.quote { display: grid; gap: 4px; margin: 8px 0 4px; padding: 10px 12px; border
 
 /* the npub on an account page: a tap copies it */
 button.npub-copy { display: block; min-height: 0; padding: 0; background: none; border: 0; text-align: left; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; -webkit-tap-highlight-color: transparent }
+
+/* the reader's description, and its editor */
+.about-area { display: grid; gap: 6px } .about-area .about { white-space: pre-wrap; overflow-wrap: anywhere } .about-area p { margin: 0 }
+.about-edit { width: 100%; box-sizing: border-box; font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); resize: vertical }

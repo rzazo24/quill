@@ -709,3 +709,50 @@ describe('muting and unmuting (the mute list, kind 10000, with the same care as 
     item.click(); await tick(250); expect(a.root.querySelector('.sheet h2')!.textContent).toBe('Mute Quinn?')
   })
 })
+
+describe('editing your description in Me', () => {
+  const myProfile = (about: string, at = 1000, extra: Record<string, unknown> = {}) => ev(me, JSON.stringify({ name: 'Me', picture: 'https://p.example/me.png', lud16: 'me@wallet.example', about, ...extra }), { kind: 0, created_at: at, tags: [['alt', 'profile']] })
+  const learn = (events: Event[]) => { const pub = publisherFake(); const real = pub.p.publish; pub.p.publish = async (e, o) => { if (e.kind === 0) { const i = events.findIndex((x) => x.kind === 0 && x.pubkey === e.pubkey); if (i >= 0) events.splice(i, 1); events.push(e) } return real(e, o) }; return pub }
+  const open = async (events: Event[]) => { const sg = fakeSigner(); const a = boot({ events, signer: sg, pub: learn(events) }); await tick(100); await connectClave(a, sg); await a.go('#/me'); await tick(300); return { a, events } }
+  const btn = (a: ReturnType<typeof boot>, label: string) => [...a.root.querySelectorAll('.account button')].find((b) => b.textContent === label) as HTMLButtonElement | undefined
+  const typeIn = (a: ReturnType<typeof boot>, text: string) => { const t = a.root.querySelector('textarea.about-edit') as HTMLTextAreaElement; t.value = text; t.dispatchEvent(new Event('input')) }
+
+  it('shows it under your name; saving publishes your newest profile with only the description changed, and checks the relays', async () => {
+    const { a } = await open([...world, myProfile('old about')])
+    expect(a.root.querySelector('.account .about')!.textContent).toBe('old about')
+    btn(a, 'Edit description')!.click(); await tick(30); expect(a.root.querySelector('.account')!.textContent).toContain('Quill changes only the description')
+    typeIn(a, 'new about'); btn(a, 'Save')!.click(); await tick(600)
+    const e = a.pub.sent[0]!.event; expect(e.kind).toBe(0); expect(e.tags).toEqual([['alt', 'profile']])
+    expect(JSON.parse(e.content)).toEqual({ name: 'Me', picture: 'https://p.example/me.png', lud16: 'me@wallet.example', about: 'new about' })
+    expect(a.text()).toContain('Description saved'); expect(a.root.querySelector('.account .about')!.textContent).toBe('new about')
+  })
+  it('refuses when your profile is not found right then (a profile from nothing would erase the real one)', async () => {
+    const events = [...world, myProfile('old about')]; const { a } = await open(events)
+    btn(a, 'Edit description')!.click(); await tick(30)
+    events.splice(events.findIndex((x) => x.kind === 0 && x.pubkey === me), 1)
+    typeIn(a, 'new'); btn(a, 'Save')!.click(); await tick(300)
+    expect(a.pub.sent).toEqual([]); expect(a.text()).toContain('Your profile was not found')
+  })
+  it('if the profile changed elsewhere meanwhile, nothing is signed until you save again; then the NEW profile is kept', async () => {
+    const events = [...world, myProfile('old about')]; const { a } = await open(events)
+    btn(a, 'Edit description')!.click(); await tick(30); typeIn(a, 'mine')
+    events.splice(events.findIndex((x) => x.kind === 0 && x.pubkey === me), 1, myProfile('old about', 2000, { picture: 'https://p.example/new.png' }))
+    btn(a, 'Save')!.click(); await tick(300); expect(a.pub.sent).toEqual([]); expect(a.text()).toContain('changed elsewhere')
+    btn(a, 'Save')!.click(); await tick(600)
+    expect(JSON.parse(a.pub.sent[0]!.event.content)).toMatchObject({ picture: 'https://p.example/new.png', about: 'mine' })
+  })
+  it('without a signer there is no Edit button', async () => {
+    const a = boot({ events: [...world, myProfile('hello')], stored: { me } }); await tick(100); await a.go('#/me'); await tick(300)
+    expect(a.root.querySelector('.account .about')!.textContent).toBe('hello'); expect(btn(a, 'Edit description')).toBeUndefined()
+  })
+})
+
+describe('starting with the signer already connected', () => {
+  it('the app comes up (a draw during start must not reach state declared further down) and Me shows the description with its Edit button', async () => {
+    const sg = fakeSigner({ saved: true }); sg.raw.state = 'connected'; sg.raw.pubkey = me
+    const a = boot({ events: [...world, ev(me, JSON.stringify({ name: 'Me', about: 'hello there' }), { kind: 0, created_at: 5 })], signer: sg, stored: { me } }); await tick(200)
+    await a.go('#/me'); await tick(400)
+    expect(a.root.querySelector('.account .about')!.textContent).toBe('hello there')
+    expect([...a.root.querySelectorAll('.account button')].some((b) => b.textContent === 'Edit description')).toBe(true)
+  })
+})
