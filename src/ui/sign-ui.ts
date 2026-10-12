@@ -271,7 +271,7 @@ function moreReactions(chips: HTMLElement[], v: View): HTMLElement {
   return box
 }
 
-export function reactionBar(target: NostrEvent, onReact: (emoji: string) => void, onReply: () => void, v: View, mine: Mine = { reactions: new Set(), replied: false, reposted: false }, onShare?: () => void, onZap?: () => void): HTMLElement {
+export function reactionBar(target: NostrEvent, onReact: (emoji: string) => void, onReply: () => void, v: View, mine: Mine = { reactions: new Set(), replied: false, reposted: false }, onShare?: () => void, onZap?: () => void, zapped = false): HTMLElement {
   const base = v.halloween ? [...REACTIONS, ...HALLOWEEN_REACTIONS] : REACTIONS
   const offered = base.map((e) => normReaction(e))
   const extra = [...mine.reactions].filter((c) => !offered.includes(c)) // given from elsewhere, e.g. 🔥: shown too, so the bar tells the truth
@@ -290,6 +290,6 @@ export function reactionBar(target: NostrEvent, onReact: (emoji: string) => void
     ...shown.map(([c, label]) => chip(c, label)),
     folded.length ? moreReactions(folded.map(([c, label]) => chip(c, label)), v) : null,
     // a zap, paid by the reader's wallet: only when one is connected on this device
-    onZap ? h('button', { type: 'button', class: 'react zap-btn', 'aria-label': t(v.lang, 'zap'), title: t(v.lang, 'zap'), onClick: onZap }, icon('zap', 16)) : null,
+    onZap ? h('button', { type: 'button', class: zapped ? 'react zap-btn on' : 'react zap-btn', 'aria-pressed': String(zapped), 'aria-label': t(v.lang, zapped ? 'zappedByYou' : 'zap'), title: t(v.lang, zapped ? 'zappedByYou' : 'zap'), onClick: onZap }, icon('zap', 16)) : null,
   )
 }

@@ -18,7 +18,7 @@ export const hasReach = (r: Reach | undefined): r is Reach => !!r && (r.reposts 
 export const reactionTotal = (r: Reach): number => [...r.reactions.values()].reduce((a, b) => a + b, 0)
 
 /** Pure: the counts for `ids` from the events the relays returned. Anything that is not about one of the ids, or comes from the reader or a muted account, is ignored. */
-export function reachOf(events: Event[], ids: readonly string[], ctx: Pick<Context, 'me' | 'muted'>, verify: (e: Event) => boolean = verifyEvent): Map<string, Reach> {
+export function reachOf(events: Event[], ids: readonly string[], ctx: Pick<Context, 'me' | 'muted'>, verify: (e: Event) => boolean = verifyEvent, { countMyZaps = false } = {}): Map<string, Reach> {
   const wanted = new Set(ids)
   const reacted = new Map<string, Map<string, Set<string>>>(), reposted = new Map<string, Set<string>>(), replied = new Map<string, Set<string>>() // note -> emoji -> people, note -> people, note -> events
   const add = <K, V>(m: Map<K, Set<V>>, k: K, v: V) => { const s = m.get(k) ?? new Set<V>(); s.add(v); m.set(k, s) }
@@ -26,7 +26,7 @@ export function reachOf(events: Event[], ids: readonly string[], ctx: Pick<Conte
   for (const e of events) {
     if (e.kind === ZAP_RECEIPT_KIND) { // signed by the recipient's Lightning server: who sent it is read from the request inside
       const z = readZap(e, verify)
-      if (!z || !wanted.has(z.target) || zapSeen.has(e.id) || (z.sender && (z.sender === ctx.me || ctx.muted.has(z.sender)))) continue
+      if (!z || !wanted.has(z.target) || zapSeen.has(e.id) || (z.sender && ((z.sender === ctx.me && !countMyZaps) || ctx.muted.has(z.sender)))) continue
       zapSeen.add(e.id)
       const acc = zapped.get(z.target) ?? { sats: 0, count: 0, by: new Map<string | null, number>() }
       acc.sats += z.sats; acc.count++; acc.by.set(z.sender, (acc.by.get(z.sender) ?? 0) + z.sats); zapped.set(z.target, acc)
@@ -78,5 +78,6 @@ export async function loadZaps(f: Fetcher, ids: readonly string[], ctx: Pick<Con
   for (let i = 0; i < unique.length; i += CHUNK) chunks.push(unique.slice(i, i + CHUNK))
   const answers = await Promise.all(chunks.map((c) => f.query({ kinds: [ZAP_RECEIPT_KIND], '#e': c, limit: 500 }).catch(() => [] as Event[])))
   const seen = new Set<string>()
-  return reachOf(answers.flat().filter((e) => e.kind === ZAP_RECEIPT_KIND && !seen.has(e.id) && seen.add(e.id)), unique, ctx, verify)
+  // on someone else's note the reader's own zaps count too (on the reader's notes they never do: nobody zaps themselves into the numbers)
+  return reachOf(answers.flat().filter((e) => e.kind === ZAP_RECEIPT_KIND && !seen.has(e.id) && seen.add(e.id)), unique, ctx, verify, { countMyZaps: true })
 }

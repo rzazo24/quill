@@ -920,6 +920,18 @@ describe('zaps paid with the reader\'s wallet (NWC)', () => {
     expect(b.text()).toContain('no Lightning address in its profile'); expect(w.calls).toEqual([])
   })
 
+  it('your own zap on someone else\'s note counts in its ⚡, with your name, and its button is lit', async () => {
+    const sk = generateSecretKey(), mine = getPublicKey(sk) // a real key: the zap request inside the receipt must be validly signed to name its sender
+    const req = finalizeEvent({ kind: 9734, created_at: 1, content: '', tags: [['e', post.id], ['p', friend], ['amount', '21000']] }, sk)
+    const receipt = ev(pk('e'), '', { kind: 9735, created_at: 1_699_999_100, tags: [['e', post.id], ['p', friend], ['bolt11', 'lnbc210n1pexample'], ['description', JSON.stringify(req)]] })
+    const sg = fakeSigner({ pubkey: mine })
+    const a = boot({ signer: sg, events: [...world, list(mine, 3, [['p', friend]]), profile, receipt, ev(mine, JSON.stringify({ name: 'Raúl' }), { kind: 0 })], stored: { me: mine, [`nwc:${mine}`]: nwc } }); await tick(100); await connectClave(a, sg); await tick(900)
+    const card = [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('my friend'))!
+    expect(card.querySelector('.reach')!.getAttribute('aria-label')).toBe('1 zap (21 sats)')
+    ;(card.querySelector('button.reach') as HTMLElement).click(); expect(card.querySelector('.reach-who')!.textContent).toContain('Raúl · 21 sats')
+    const zb = card.querySelector('button.zap-btn')!; expect(zb.classList.contains('on')).toBe(true); expect(zb.getAttribute('aria-label')).toContain('You zapped this note')
+  })
+
   it('without a wallet on this device there is no zap button', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg, events: [...world, profile] }); await tick(100); await connectClave(a, sg); await tick(100)
     expect(a.root.querySelector('button.zap-btn')).toBeNull(); expect(a.root.querySelector('.actions')).not.toBeNull()
