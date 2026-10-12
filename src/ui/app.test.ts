@@ -1279,3 +1279,19 @@ describe('searching only people or only notes', () => {
     expect(document.activeElement === box || box.isConnected).toBe(true)
   })
 })
+
+describe('the network search, on its own', () => {
+  it('once the network answers, only its results show (not mixed with what was loaded); "Back to what was loaded" returns, and they can be shown again without asking again', async () => {
+    const a = boot({ events: [...world, ev(friend, 'loaded quillish note', { created_at: 8000 })], stored: { me }, searchable: [ev(far, 'network quillish note', { created_at: 7000 })] }); await tick(300)
+    await a.go('#/search'); await tick(50)
+    const box = a.root.querySelector('input.search-box') as HTMLInputElement; box.value = 'quillish'; box.dispatchEvent(new Event('input')); await tick(20)
+    expect(a.text()).toContain('loaded quillish note')
+    ;([...a.root.querySelectorAll('.search-net button')].find((b) => b.textContent!.includes('Search the network too')) as HTMLButtonElement).click(); await tick(200)
+    expect(a.text()).toContain('From the network'); expect(a.text()).toContain('network quillish note'); expect(a.text()).not.toContain('loaded quillish note')
+    ;([...a.root.querySelectorAll('.search-net-head button')][0] as HTMLButtonElement).click(); await tick(20)
+    expect(a.text()).toContain('loaded quillish note'); expect(a.text()).not.toContain('network quillish note')
+    const calls = a.calls.n
+    ;([...a.root.querySelectorAll('.search-net button')].find((b) => b.textContent!.includes('again')) as HTMLButtonElement).click(); await tick(20)
+    expect(a.text()).toContain('network quillish note'); expect(a.calls.n).toBe(calls)
+  })
+})

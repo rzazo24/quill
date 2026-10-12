@@ -369,6 +369,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
   let searchQuery = ''
   let searchKind: SearchKind = 'all' // All | People | Notes, under the box
+  let searchShowNet = false // the network's answer is on screen (instead of what was loaded)
   let searchNet: { query: string; state: 'loading' } | { query: string; state: 'failed' } | { query: string; state: 'done'; notes: Judged[]; people: Found[]; kind?: SearchKind } | null = null
   let searchInput: HTMLInputElement | null = null
   // a single #tag is also asked of the reader's own relays (they all filter by tag), a moment after typing stops
@@ -422,6 +423,17 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     else if (q.length < MIN_QUERY) { /* the tip under the box says what to type */ }
     else {
       const wantPeople = searchKind !== 'notes', wantNotes = searchKind !== 'people'
+      // once the network was asked, only its answer shows (mixing it with what was loaded confused): a link goes back to what was loaded
+      const net = searchNet?.query === q && searchNet.state === 'done' && (!searchNet.kind || searchNet.kind === 'all' || searchNet.kind === searchKind) ? searchNet : null
+      if (net && searchShowNet) {
+        const people = wantPeople ? net.people : [], notes = wantNotes ? net.notes : []
+        parts.push(h('div', { class: 'search-net-head' }, h('h2', { class: 'section' }, t(lang, 'searchNetFrom')), h('button', { type: 'button', class: 'link', onClick: () => { searchShowNet = false; drawSearch() } }, t(lang, 'searchBackLocal'))))
+        if (people.length) parts.push(peopleCard(t(lang, 'searchPeople'), people, v))
+        if (notes.length) parts.push(h('h2', { class: 'section' }, `${t(lang, 'searchNotes')} · ${notes.length}`), renderList(notes, { ...v, seen: undefined })) // not "loaded": back on what was loaded, they do not show
+        if (!people.length && !notes.length) parts.push(h('p', { class: 'empty' }, t(lang, 'searchNetNone')))
+        searchResults.replaceChildren(...parts.filter((x): x is HTMLElement => x !== null)); if (searchTip) searchTip.hidden = true
+        return
+      }
       const tag = wantNotes ? tagOf(q) : null
       if (tag) askTag(tag); else { clearTimeout(tagTimer); tagSearch = null }
       const people = wantPeople ? matchPeople(names, q, ctx()) : [], local = wantNotes ? matchNotes(knownNotes.values(), q) : []
@@ -446,21 +458,17 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (!net) return h('div', { class: 'search-net' }, h('button', { type: 'button', onClick: () => void runNetSearch(q) }, icon('search', 16), t(lang, 'searchNet')), h('p', { class: 'meta' }, t(lang, 'searchNetHint', { relays: SEARCH_RELAYS.map((r) => r.replace(/^wss:\/\//, '')).join(' · ') })))
     if (net.state === 'loading') return h('p', { class: 'status loading', role: 'status' }, h('span', {}, t(lang, 'searchNetLoading')))
     if (net.state === 'failed') return h('div', { class: 'search-net' }, h('p', { class: 'error' }, t(lang, 'searchNetFailed')), h('button', { type: 'button', onClick: () => void runNetSearch(q) }, t(lang, 'searchRetry')))
-    const people = searchKind === 'notes' ? [] : net.people.filter((p) => !havePeople.has(p.pubkey)), notes = searchKind === 'people' ? [] : net.notes.filter((n) => !haveNotes.has(n.event.id))
-    return h('div', { class: 'stack search-net' }, h('h2', { class: 'section' }, t(lang, 'searchNetFrom')),
-      people.length ? peopleCard(t(lang, 'searchPeople'), people, v) : null,
-      notes.length ? h('h2', { class: 'section' }, `${t(lang, 'searchNotes')} · ${notes.length}`) : null, notes.length ? renderList(notes, v) : null,
-      !people.length && !notes.length ? h('p', { class: 'empty' }, t(lang, 'searchNetNone')) : null)
+    void havePeople; void haveNotes
+    return h('div', { class: 'search-net' }, h('button', { type: 'button', onClick: () => { searchShowNet = true; drawSearch() } }, icon('search', 16), t(lang, 'searchNetShow')))
   }
   async function runNetSearch(q: string): Promise<void> {
     if (!deps.searchFetcher || !session) return
     const who = me
-    searchNet = { query: q, state: 'loading' }; drawSearch()
+    searchNet = { query: q, state: 'loading' }; searchShowNet = true; drawSearch()
     try {
       const kind = searchKind
       const found = await searchNetwork(deps.searchFetcher, q, ctx(), settings, kind)
       if (me !== who) return
-      for (const p of found.people) if (!names.has(p.pubkey)) names.set(p.pubkey, p.name)
       await nameThem(found.notes.slice(0, PAGE)).catch(() => {})
       if (me !== who || searchNet?.query !== q) return
       searchNet = { query: q, state: 'done', notes: found.notes, people: found.people, kind }
