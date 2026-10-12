@@ -6,6 +6,8 @@ import { queryAuthors, type Fetcher } from '../net/fetcher.js'
 
 /** Most follow lists fetched for the graph: bounds the work for people who follow thousands. */
 export const MAX_GRAPH_FOLLOWS = 500
+/** Asked only for follow lists the reader's own relays do not have (purplepag.es keeps profiles and lists for everybody). */
+export const LIST_RELAYS = ['wss://purplepag.es']
 
 export interface Session {
   me: string
@@ -29,6 +31,12 @@ export async function loadGraphInfo(f: Fetcher, me: string, follows: ReadonlySet
   const graphOwners = [...follows].slice(0, MAX_GRAPH_FOLLOWS)
   const lists = new Map<string, string[]>()
   for (const [owner, e] of newestPerAuthor(await queryAuthors(f, { kinds: [3], limit: 200 }, graphOwners))) lists.set(owner, followsOf(e))
+  // the lists the reader's relays do not have: asked of a relay that keeps profiles, follow lists and relay lists for everybody (nothing else is read there)
+  const missing = graphOwners.filter((k) => !lists.has(k))
+  if (missing.length) {
+    const found = await queryAuthors(f, { kinds: [3], limit: 200 }, missing, 100, { only: LIST_RELAYS, quick: true, grace: 300 }).catch(() => [])
+    for (const [owner, e] of newestPerAuthor(found.filter((e) => e.kind === 3 && missing.includes(e.pubkey)))) lists.set(owner, followsOf(e))
+  }
   return buildGraph(me, follows, lists, graphOwners.length)
 }
 

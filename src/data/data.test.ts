@@ -160,3 +160,15 @@ describe('profile pictures', () => {
     expect(pic('https://user:pw@img.example/a.jpg')).toBeUndefined(); expect(pic(42)).toBeUndefined(); expect(pictureOf({ content: 'not json' })).toBeUndefined()
   })
 })
+
+describe('follow lists the reader\'s relays do not have', () => {
+  it('are asked of the list relay, and only those', async () => {
+    const { loadGraphInfo, LIST_RELAYS } = await import('./session.js')
+    const asked: { authors?: string[]; only?: string[] }[] = []
+    const onMine = list(a, 3, [['p', c]]), onListRelay = list(b, 3, [['p', far]])
+    const f: Fetcher = { query: async (flt, o) => { asked.push({ authors: flt.authors, ...(o?.only ? { only: o.only } : {}) }); return (o?.only ? [onListRelay] : [onMine]).filter((e) => answers(flt, e)) } }
+    const g = await loadGraphInfo(f, me, new Set([a, b]))
+    expect(g.answered).toBe(2); expect(g.graph.distance(far)).toBe(2)
+    const second = asked.find((x) => x.only); expect(second!.only).toEqual(LIST_RELAYS); expect(second!.authors).toEqual([b])
+  })
+})
