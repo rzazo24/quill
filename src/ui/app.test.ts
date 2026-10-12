@@ -1202,3 +1202,26 @@ describe('long-form articles', () => {
     expect(a.text()).toContain('That article was not found')
   })
 })
+
+describe('NIP-22 comments in threads, Mentions and the numbers under your notes', () => {
+  it('a thread shows kind 1111 comments in their place, next to kind 1 replies, comments on comments included', async () => {
+    const rootNote = ev(friend, 'the root note', { created_at: 7000 })
+    const reply1 = ev(far, 'a classic reply', { created_at: 7100, tags: [['e', rootNote.id, '', 'root'], ['p', friend]] })
+    const c1 = ev(far, 'a comment', { kind: 1111, created_at: 7200, tags: [['E', rootNote.id], ['K', '1'], ['P', friend], ['e', rootNote.id], ['k', '1'], ['p', friend]] })
+    const c2 = ev(friend, 'a comment on the comment', { kind: 1111, created_at: 7300, tags: [['E', rootNote.id], ['K', '1'], ['P', friend], ['e', c1.id], ['k', '1111'], ['p', far]] })
+    const settings = JSON.stringify({ rules: { repeatedText: true, burst: true, linkOnly: true, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 })
+    const a = boot({ events: [...world, rootNote, reply1, c1, c2], stored: { me, settings } }); await tick(200)
+    await a.go(`#/note/${rootNote.id}`); await tick(400)
+    expect(a.text()).toContain('a classic reply'); expect(a.text()).toContain('a comment'); expect(a.text()).toContain('a comment on the comment')
+    const c2card = [...a.root.querySelectorAll('article.note')].find((n) => n.querySelector('.body')!.textContent === 'a comment on the comment')!
+    const c1card = [...a.root.querySelectorAll('article.note')].find((n) => n.querySelector('.body')!.textContent === 'a comment')!
+    expect(c1card.closest('.reply')!.getAttribute('data-depth')).toBe('0'); expect(c2card.closest('.reply')!.getAttribute('data-depth')).toBe('1') // the comment on the comment sits under it
+    expect(c1card.closest('.reply')!.contains(c2card)).toBe(true)
+  })
+  it('a comment on your note shows in Mentions', async () => {
+    const mine = ev(me, 'my note', { created_at: 7000 })
+    const c = ev(friend, 'commenting on yours', { kind: 1111, created_at: 7100, tags: [['E', mine.id], ['K', '1'], ['P', me], ['e', mine.id], ['k', '1'], ['p', me]] })
+    const a = boot({ events: [...world, mine, c], stored: { me } }); await tick(200); await a.go('#/mentions'); await tick(500)
+    expect(a.text()).toContain('commenting on yours')
+  })
+})

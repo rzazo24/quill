@@ -23,3 +23,18 @@ describe('threadRefs', () => {
     expect(isReply({ tags: [] })).toBe(false)
   })
 })
+
+describe('NIP-22 comments (kind 1111)', () => {
+  const root = 'a'.repeat(64), parent = 'b'.repeat(64), author = 'c'.repeat(64), other = 'd'.repeat(64)
+  it('the root is the upper-case E, the note it answers the lower-case e; both p and P are people', async () => {
+    const { threadRefs, isReply } = await import('./thread.js')
+    const c = { kind: 1111, tags: [['E', root, '', author], ['K', '1'], ['P', author], ['e', parent, '', other], ['k', '1111'], ['p', other]] }
+    expect(threadRefs(c)).toEqual({ root, reply: parent, people: [author, other] })
+    const first = { kind: 1111, tags: [['E', root], ['K', '1'], ['e', root], ['k', '1'], ['p', author]] }
+    expect(threadRefs(first)).toMatchObject({ root, reply: root }); expect(isReply(first)).toBe(true)
+  })
+  it('a comment on something that is not a note is still a reply, never a root note of a feed', async () => {
+    const { isReply } = await import('./thread.js')
+    expect(isReply({ kind: 1111, tags: [['A', '30023:x:y'], ['K', '30023'], ['a', '30023:x:y'], ['k', '30023']] })).toBe(true)
+  })
+})

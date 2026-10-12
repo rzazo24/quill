@@ -1,7 +1,7 @@
 // What each of the reader's notes got from other people: reactions (by emoji), reposts and replies (quotes count too). Read from the relays by the ids of the notes,
 // counted per person (a person who reacted twice with the same emoji, or reposted twice, counts once), never counting the reader or anybody muted.
 import type { Event } from 'nostr-tools'
-import { threadRefs } from '../core/thread.js'
+import { COMMENT_KIND, threadRefs } from '../core/thread.js'
 import type { Context } from '../core/verdict.js'
 import type { Fetcher } from '../net/fetcher.js'
 import { reactionTarget, showReaction } from './activity.js'
@@ -30,7 +30,7 @@ export function reachOf(events: Event[], ids: readonly string[], ctx: Pick<Conte
     } else if (e.kind === 6 || e.kind === 16) {
       const id = reactionTarget(e)
       if (id && wanted.has(id)) add(reposted, id, e.pubkey)
-    } else if (e.kind === 1) {
+    } else if (e.kind === 1 || e.kind === COMMENT_KIND) { // a NIP-22 comment is a reply too
       const reply = threadRefs(e).reply
       if (reply && wanted.has(reply)) add(replied, reply, e.id)
       for (const t of e.tags) if (t[0] === 'q' && HEX64.test(t[1] ?? '') && wanted.has(t[1]!)) add(replied, t[1]!, e.id) // a quote counts like a reply
@@ -53,7 +53,7 @@ export async function loadReach(f: Fetcher, ids: readonly string[], ctx: Pick<Co
   const chunks: string[][] = []
   for (let i = 0; i < unique.length; i += CHUNK) chunks.push(unique.slice(i, i + CHUNK))
   const answers = await Promise.all(chunks.flatMap((c) => [
-    f.query({ kinds: [7], '#e': c, limit: 500 }), f.query({ kinds: [6, 16], '#e': c, limit: 300 }), f.query({ kinds: [1], '#e': c, limit: 300 }), f.query({ kinds: [1], '#q': c, limit: 100 }),
+    f.query({ kinds: [7], '#e': c, limit: 500 }), f.query({ kinds: [6, 16], '#e': c, limit: 300 }), f.query({ kinds: [1, COMMENT_KIND], '#e': c, limit: 300 }), f.query({ kinds: [1], '#q': c, limit: 100 }),
   ].map((p) => p.catch(() => [] as Event[]))))
   const seen = new Set<string>()
   return reachOf(answers.flat().filter((e) => !seen.has(e.id) && seen.add(e.id)), unique, ctx)

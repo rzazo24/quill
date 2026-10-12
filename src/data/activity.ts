@@ -1,5 +1,6 @@
 // What happened around the reader's own notes while they were away: replies and mentions, and reactions to their notes. Everything goes through the
 // same filter as the rest of the app, and the new-since-last-visit count only includes what the filter would SHOW (hidden things are counted apart).
+import { COMMENT_KIND } from '../core/thread.js'
 import type { Event } from 'nostr-tools'
 import { analyse, judge, type Context, type Judged, type Settings, DEFAULT_SETTINGS } from '../core/verdict.js'
 import { queryAuthors, type Fetcher } from '../net/fetcher.js'
@@ -40,7 +41,7 @@ export const reactionTarget = (e: Pick<Event, 'tags'>): string | undefined => [.
 
 export async function loadActivity(f: Fetcher, ctx: Context, settings: Settings = DEFAULT_SETTINGS, opts: ActivityOptions = {}): Promise<Activity> {
   const since = opts.since !== undefined ? { since: opts.since } : {}
-  const [mentions, reacts, lists, reposted] = await Promise.all([f.query({ kinds: [1], '#p': [ctx.me], limit: LIMIT, ...since }), f.query({ kinds: [7], '#p': [ctx.me], limit: LIMIT, ...since }), f.query({ kinds: [3], '#p': [ctx.me], limit: FOLLOWER_LIMIT, ...since }, { quick: true, grace: 600 }).catch(() => []) /* the followers are approximate anyway: a majority of the relays is enough */, f.query({ kinds: [6, 16], '#p': [ctx.me], limit: LIMIT, ...since }).catch(() => [])])
+  const [mentions, reacts, lists, reposted] = await Promise.all([f.query({ kinds: [1, COMMENT_KIND], '#p': [ctx.me], limit: LIMIT, ...since }), f.query({ kinds: [7], '#p': [ctx.me], limit: LIMIT, ...since }), f.query({ kinds: [3], '#p': [ctx.me], limit: FOLLOWER_LIMIT, ...since }, { quick: true, grace: 600 }).catch(() => []) /* the followers are approximate anyway: a majority of the relays is enough */, f.query({ kinds: [6, 16], '#p': [ctx.me], limit: LIMIT, ...since }).catch(() => [])])
   const notes = mentions.filter((e) => e.pubkey !== ctx.me).sort(byNewest)
   // Anyone can put the reader's key in a `p` tag of a reaction to somebody else's note: only reactions to notes the reader really wrote count.
   const candidate = reacts.filter((e) => e.pubkey !== ctx.me && reactionTarget(e))

@@ -1,5 +1,6 @@
 // The three views: people you follow, notes that mention you, and a thread. Each one loads, filters and returns judged notes.
 import type { Event } from 'nostr-tools'
+import { COMMENT_KIND } from '../core/thread.js'
 import { isReply, threadRefs } from '../core/thread.js'
 import { analyse, judge, judgeAll, type Context, type Judged, type Settings, DEFAULT_SETTINGS } from '../core/verdict.js'
 import { newestPerAuthor, nameOf } from './lists.js'
@@ -25,7 +26,7 @@ export async function loadFollowing(f: Fetcher, ctx: Context, settings: Settings
 
 /** Notes that tag you (replies and mentions) from anyone: this is where the filter has work to do. */
 export async function loadMentions(f: Fetcher, ctx: Context, settings: Settings = DEFAULT_SETTINGS): Promise<Judged[]> {
-  const events = (await f.query({ kinds: [1], '#p': [ctx.me], limit: FEED_LIMIT })).filter((e) => e.pubkey !== ctx.me).sort(byNewest)
+  const events = (await f.query({ kinds: [1, COMMENT_KIND], '#p': [ctx.me], limit: FEED_LIMIT })).filter((e) => e.pubkey !== ctx.me).sort(byNewest)
   return judgeAll(events, ctx, settings)
 }
 
@@ -64,11 +65,14 @@ function createsCycle(nodes: Map<string, ThreadNode>, from: ThreadNode, id: stri
 
 /** A thread from any of its notes: finds the root, fetches the replies, judges all of them together. */
 export async function loadThread(f: Fetcher, id: string, ctx: Context, settings: Settings = DEFAULT_SETTINGS): Promise<Thread | null> {
-  const [first] = await f.query({ ids: [id], kinds: [1], limit: 1 })
+  const [first] = await f.query({ ids: [id], kinds: [1, COMMENT_KIND], limit: 1 })
   if (!first) return null
   const rootId = threadRefs(first).root ?? first.id
   const rootEvent = rootId === first.id ? first : (await f.query({ ids: [rootId], kinds: [1], limit: 1 }))[0]
-  const replies = (await f.query({ kinds: [1], '#e': [rootId], limit: 300 })).filter((e) => e.id !== rootId)
+  // replies (kind 1) and NIP-22 comments (kind 1111) name the root in a lower-case e tag; a comment further down names it in an upper-case E
+  const [direct, comments] = await Promise.all([f.query({ kinds: [1, COMMENT_KIND], '#e': [rootId], limit: 300 }), f.query({ kinds: [COMMENT_KIND], '#E': [rootId], limit: 300 })])
+  const seenIds = new Set<string>()
+  const replies = [...direct, ...comments].filter((e) => e.id !== rootId && !seenIds.has(e.id) && seenIds.add(e.id) && threadRefs(e).root === rootId)
   const pool = [...replies, ...(rootEvent ? [rootEvent] : [])]
   const signals = analyse(pool)
   const judged = replies.map((event) => ({ event, verdict: judge(event, ctx, signals, settings) }))
@@ -82,7 +86,7 @@ export async function loadThread(f: Fetcher, id: string, ctx: Context, settings:
 
 /** One note, judged on its own (for "quoted from this note"). Null when no relay has it. */
 export async function loadNote(f: Fetcher, id: string, ctx: Context, settings: Settings = DEFAULT_SETTINGS): Promise<Judged | null> {
-  const [event] = await f.query({ ids: [id], kinds: [1], limit: 1 })
+  const [event] = await f.query({ ids: [id], kinds: [1, COMMENT_KIND], limit: 1 })
   return event ? { event, verdict: judge(event, ctx, analyse([event]), settings) } : null
 }
 
