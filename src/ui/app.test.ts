@@ -1225,3 +1225,27 @@ describe('NIP-22 comments in threads, Mentions and the numbers under your notes'
     expect(a.text()).toContain('commenting on yours')
   })
 })
+
+describe('notes saved for later', () => {
+  const menuItem = (n: Element, label: string) => { (n.querySelector('.more-btn') as HTMLButtonElement).click(); return [...n.querySelectorAll('.more-list button')].find((b) => b.textContent === label) as HTMLButtonElement | undefined }
+  it('"Save for later" in the … keeps the whole note on the device; Me links to the list; it survives a restart; "Remove from saved" takes it out', async () => {
+    const note = ev(friend, 'worth reading later', { created_at: 8000 })
+    const a = boot({ events: [...world, note], stored: { me } }); await tick(300)
+    const card = [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('worth reading later'))!
+    menuItem(card, 'Save for later')!.click(); await tick(30)
+    expect(JSON.parse(a.mem.get(`saved:${me}`)!)[0].event.id).toBe(note.id)
+    await a.go('#/me'); await tick(300); const link = a.root.querySelector('a[href="#/me/saved"]')!; expect(link.textContent).toBe('1 saved')
+    const b = boot({ events: world.filter((e) => e.id !== note.id), stored: { me, [`saved:${me}`]: a.mem.get(`saved:${me}`)! } }); await tick(200) // the note is gone from the relays: still there
+    await b.go('#/me/saved'); await tick(300)
+    expect(b.text()).toContain('Saved notes · 1'); expect(b.text()).toContain('worth reading later')
+    const saved = [...b.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('worth reading later'))!
+    menuItem(saved, 'Remove from saved')!.click(); await tick(300)
+    expect(b.mem.has(`saved:${me}`)).toBe(false); expect(b.text()).toContain('No saved notes yet')
+  })
+  it('a saved note whose signature does not check out is dropped when read back', async () => {
+    const note = ev(friend, 'tampered later', { created_at: 8000 })
+    const bad = JSON.stringify([{ event: { ...note, content: 'tampered' }, at: 1 }]) // the test verifier refuses 'tampered' (as a real one refuses any change after signing)
+    const a = boot({ events: world, stored: { me, [`saved:${me}`]: bad } }); await tick(200); await a.go('#/me/saved'); await tick(300)
+    expect(a.text()).not.toContain('tampered'); expect(a.text()).toContain('No saved notes yet')
+  })
+})

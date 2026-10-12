@@ -64,7 +64,7 @@ export interface Deps {
   verify?: (e: NostrEvent) => boolean
 }
 
-type Route = { name: 'following' } | { name: 'search' } | { name: 'article'; naddr: string; pubkey: string; identifier: string; relays: string[] } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'help' } | { name: 'user'; pubkey: string } | { name: 'people'; list: 'following' | 'followers' } | { name: 'note'; id: string; from?: string }
+type Route = { name: 'following' } | { name: 'search' } | { name: 'saved' } | { name: 'article'; naddr: string; pubkey: string; identifier: string; relays: string[] } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'help' } | { name: 'user'; pubkey: string } | { name: 'people'; list: 'following' | 'followers' } | { name: 'note'; id: string; from?: string }
 /** Someone with no account who opens a link to a note: they read that one public note and its replies, exactly as they are. No follows, no mutes, no rule that hides anything. */
 const GUEST_CONTEXT: Context = { me: '', follows: new Set(), muted: new Set(), mutedWords: [], graph: { loaded: false, distance: () => null } }
 const GUEST_SETTINGS: Settings = { rules: { repeatedText: false, burst: false, linkOnly: false, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 }
@@ -83,6 +83,7 @@ export function parseRoute(hash: string): Route {
   }
   const art = /^#\/article\/(naddr1[a-z0-9]+)$/i.exec(hash)
   if (art) { const p = refs(`nostr:${art[1]!.toLowerCase()}`)[0]; if (p?.type === 'article') return { name: 'article', naddr: p.naddr, pubkey: p.pubkey, identifier: p.identifier, relays: p.relays ?? [] } }
+  if (hash === '#/me/saved') return { name: 'saved' }
   if (hash === '#/me/following' || hash === '#/me/followers') return { name: 'people', list: hash === '#/me/following' ? 'following' : 'followers' }
   const u = /^#\/user\/(.+)$/.exec(hash)
   if (u) { const r = parseIdentity(decodeURIComponent(u[1]!)); if (r.ok) return { name: 'user', pubkey: r.pubkey } } // an account: its key in hex, npub or nprofile
@@ -121,6 +122,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let myProfile: NostrEvent | null | undefined // undefined: not read yet; null: none found
   let aboutEdit: { text: string; busy: boolean; note: string | null } | null = null
   let aboutBox: HTMLTextAreaElement | null = null // kept across redraws while editing, so what is typed and the cursor stay
+  let savedCache: { who: string | null; list: { event: NostrEvent; at: number }[] } = { who: null, list: [] } // notes saved for later (see savedNotes); up here because the first draw already reads it
   let followNamesAsked: string | null = null // whose follows' names were asked for (once, when the composer first opens)
   let deletedCache: { who: string | null; ids: Set<string> } = { who: null, ids: new Set() } // the notes the reader deleted (see deletedIds); up here because the first draw already reads it
   const articleShown = new Set<string>() // articles the reader chose to read although the filter would hide their author
@@ -273,7 +275,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
   /** The lists are built once and reused between redraws, so a bar already on screen keeps what it showed: redo the bar(s) of this note in place. */
   const rebar = (e: NostrEvent) => { for (const old of root.querySelectorAll(`article.note[data-id="${e.id}"] .actions`)) old.replaceWith(barFor(e)) }
-  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), quoted: (id: string) => quotedMap.get(id), wantQuote, suggestPeople: (word: string) => (session ? matchPeople(names, word, ctx(), 50).filter((p) => fold(p.name).split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(fold(word)))).slice(0, 5) : []), articleTitle: (pk: string, d: string) => (articleTitles.has(`${pk}:${d}`) ? articleTitles.get(`${pk}:${d}`) ?? null : undefined), wantArticle, seen: rememberNotes, interests, deleted: deletedIds(), ...(me ? { self: me } : {}), ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk), deleteNote: (e: NostrEvent) => { if (e.pubkey === me && e.kind === 1) { deleteConfirm = e; draw() } } } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
+  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), quoted: (id: string) => quotedMap.get(id), wantQuote, suggestPeople: (word: string) => (session ? matchPeople(names, word, ctx(), 50).filter((p) => fold(p.name).split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(fold(word)))).slice(0, 5) : []), articleTitle: (pk: string, d: string) => (articleTitles.has(`${pk}:${d}`) ? articleTitles.get(`${pk}:${d}`) ?? null : undefined), wantArticle, ...(me ? { saved: { has: (id: string) => savedNotes().some((x) => x.event.id === id), toggle: toggleSaved } } : {}), seen: rememberNotes, interests, deleted: deletedIds(), ...(me ? { self: me } : {}), ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk), deleteNote: (e: NostrEvent) => { if (e.pubkey === me && e.kind === 1) { deleteConfirm = e; draw() } } } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
   const ctx = () => contextOf(session!, { mutedWords: words, mutedKeys: [] })
   const who = () => (signer?.pubkey ? nameOf(view(), signer.pubkey) : '')
 
@@ -458,6 +460,14 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   /** The content of one view (a feed, a thread, an account, a list…). `alive` says whether the answer is still wanted: when it is not, null comes back. */
   async function buildContent(route: Route, alive: () => boolean): Promise<HTMLElement | null> {
     if (route.name === 'search') return searchPage()
+    if (route.name === 'saved') {
+      const list = savedNotes()
+      const here: Settings = { ...settings, rules: { ...settings.rules, outsideNetwork: false } } // saved on purpose
+      const items = judgeAll(list.map((x) => x.event), ctx(), here)
+      await nameThem(items.slice(0, PAGE))
+      if (!alive()) return null
+      return h('div', { class: 'stack' }, backLink(), h('h2', { class: 'section' }, t(lang, 'savedTitle', { n: list.length })), h('p', { class: 'meta' }, t(lang, 'savedHelp')), list.length ? renderList(items, view()) : h('p', { class: 'empty' }, t(lang, 'savedNone')))
+    }
     if (route.name === 'article') {
       let e: NostrEvent | null = null
       try { e = await loadArticle(fetcher, route.pubkey, route.identifier, route.relays) } catch { e = null }
@@ -551,7 +561,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const route = parseRoute(deps.location.hash)
     const jobs: Promise<void>[] = [] // Settings and Help too: a change made there (avatars, filter, relays) must already be in the columns when you go back
     if (scope === 'all') for (const id of ['following', 'mentions', 'me'] as const) jobs.push(loadPane(panes[id], { name: id }))
-    if (route.name === 'note' || route.name === 'user' || route.name === 'people' || route.name === 'article') {
+    if (route.name === 'note' || route.name === 'user' || route.name === 'people' || route.name === 'article' || route.name === 'saved') {
       const key = JSON.stringify(route)
       if (scope === 'all' || key !== detailKey) {
         if (key !== detailKey) { panes.detail.body = null; panes.detail.resetScroll = true; profileMode = 'notes' }
@@ -914,6 +924,30 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (deletedCache.who !== me) { let ids: string[] = []; try { const v = JSON.parse(safeGet(kv, deletedKey()) ?? '[]') as unknown; if (Array.isArray(v)) ids = v.filter((x): x is string => typeof x === 'string' && /^[0-9a-f]{64}$/.test(x)) } catch { /* none */ } deletedCache = { who: me, ids: new Set(ids) } }
     return deletedCache.ids
   }
+  // Notes saved for later, kept WHOLE on this device (newest first, up to 300): readable even if the author deletes them or the relays drop them;
+  // every signature is checked again when they are read back.
+  const savedKey = () => `saved:${me}`
+  function savedNotes(): { event: NostrEvent; at: number }[] {
+    if (savedCache.who !== me) {
+      let list: { event: NostrEvent; at: number }[] = []
+      try {
+        const v = JSON.parse(safeGet(kv, savedKey()) ?? '[]') as unknown
+        if (Array.isArray(v)) list = v.filter((x): x is { event: NostrEvent; at: number } => !!x && typeof x === 'object' && typeof (x as { at: unknown }).at === 'number' && !!(x as { event?: NostrEvent }).event && (deps.verify ?? verifyEvent)({ ...(x as { event: NostrEvent }).event }))
+      } catch { /* none */ }
+      savedCache = { who: me, list }
+    }
+    return savedCache.list
+  }
+  function toggleSaved(e: NostrEvent): void {
+    if (!me) return
+    const list = savedNotes(), i = list.findIndex((x) => x.event.id === e.id)
+    if (i >= 0) list.splice(i, 1); else list.unshift({ event: { id: e.id, pubkey: e.pubkey, kind: e.kind, created_at: e.created_at, tags: e.tags, content: e.content, sig: e.sig }, at: nowSec() })
+    if (list.length > 300) list.length = 300
+    safeSet(kv, savedKey(), list.length ? JSON.stringify(list) : null)
+    say('info', t(lang, i >= 0 ? 'unsavedNote' : 'savedNote'))
+    const r = parseRoute(deps.location.hash)
+    if (r.name === 'saved') void load('route'); else draw()
+  }
   async function deleteNote(): Promise<void> {
     const target = deleteConfirm; deleteConfirm = null
     if (!target || !me || target.pubkey !== me || !signer || signer.state !== 'connected') return draw()
@@ -976,7 +1010,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (!session) return null
     const n = followerCount()
     const followers = n === null ? null : n === 0 ? t(lang, 'followersNone') : t(lang, n === 1 ? 'followersAtLeastOne' : 'followersAtLeast', { n })
-    return h('div', { class: 'meta counts' }, h('a', { href: '#/me/following' }, t(lang, 'followingN', { n: session.follows.size })), followers ? ' · ' : null, followers ? h('a', { href: '#/me/followers' }, followers) : null)
+    return h('div', { class: 'meta counts' }, h('a', { href: '#/me/following' }, t(lang, 'followingN', { n: session.follows.size })), followers ? ' · ' : null, followers ? h('a', { href: '#/me/followers' }, followers) : null, savedNotes().length ? ' · ' : null, savedNotes().length ? h('a', { href: '#/me/saved' }, t(lang, 'savedN', { n: savedNotes().length })) : null)
   }
 
   function accountCard(): HTMLElement {
@@ -1047,8 +1081,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       h('section', { class: 'col', 'data-col': id }, h('h2', { class: 'col-title' }, h('span', {}, title), ...extra), ...nodes)
     const write = signer?.state === 'connected' ? h('button', { type: 'button', class: 'primary write', onClick: startNote }, icon('feather', 16), t(lang, 'newNote').replace(/…$/, '')) : null
     const count = badge > 0 ? h('span', { class: 'badge', 'aria-label': `${badge}` }, badge > 9 ? '9+' : String(badge)) : null
-    const detailOpen = route.name === 'note' || route.name === 'user' || route.name === 'people' || route.name === 'article'
-    const detailTitle = route.name === 'article' ? t(lang, 'article') : route.name === 'note' ? t(lang, 'thread') : route.name === 'people' ? t(lang, route.list === 'following' ? 'peopleFollowing' : 'peopleFollowers') : t(lang, 'account')
+    const detailOpen = route.name === 'note' || route.name === 'user' || route.name === 'people' || route.name === 'article' || route.name === 'saved'
+    const detailTitle = route.name === 'saved' ? t(lang, 'savedShort') : route.name === 'article' ? t(lang, 'article') : route.name === 'note' ? t(lang, 'thread') : route.name === 'people' ? t(lang, route.list === 'following' ? 'peopleFollowing' : 'peopleFollowers') : t(lang, 'account')
     return h('div', { class: detailOpen ? 'cols with-detail' : 'cols' },
       column('following', t(lang, 'following'), [panes.following.body], [write]),
       column('mentions', t(lang, 'mentions'), [panes.mentions.body], [count]),
