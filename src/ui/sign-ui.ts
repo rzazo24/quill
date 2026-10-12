@@ -19,7 +19,7 @@ export const REACTIONS = ['+', '❤️', '🤙', '😂', '🙏', '🔥', '😮',
 /** Added behind the others while the Halloween theme is on. */
 export const HALLOWEEN_REACTIONS = ['🎃', '👻', '🦇', '💀', '🕷️']
 
-export interface Composer { mode: 'note' | 'reply' | 'quote'; target?: NostrEvent; text: string }
+export interface Composer { mode: 'note' | 'reply' | 'quote'; target?: NostrEvent; text: string; /** the text came back from a saved draft */ restored?: boolean }
 export interface Review { template: Template; target?: NostrEvent; mentions: number; quote?: boolean }
 /** The panel of a follow / unfollow: reading the list, the confirmation, or why Quill will not go on. */
 export type FollowPanel =
@@ -56,7 +56,7 @@ export interface SignUiState {
 
 export interface SignUiHandlers {
   openConnect(): void; cancelConnect(): void; bunker(text: string): void; dismissFlash(): void; confirmFollow(): void; acceptList(): void; cancelFollow(): void; confirmShare(): void; confirmDelete(): void; cancelDelete(): void; startQuote(): void; cancelShare(): void; askDisconnect(): void; cancelDisconnect(): void; disconnect(): void; copy(text: string): void
-  edit(text: string): void; review(): void; publish(): void; back(): void; cancelComposer(): void; retry(): void; dismissResult(): void
+  edit(text: string): void; discardDraft(): void; review(): void; publish(): void; back(): void; cancelComposer(): void; retry(): void; dismissResult(): void
   startNote(): void; cancelSigning(): void; startLink(): void; pasteBunker(): void; editBunker(text: string): void; setLinkOpen(open: boolean): void
 }
 
@@ -131,7 +131,7 @@ function renderComposer(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElemen
   if (!c) return h('div', {})
   // a quote carries the reference to the note after the comment: what it takes is not left to the comment
   const max = c.mode === 'quote' && c.target ? MAX_NOTE_CHARS - quoteReserve(c.target, s.relays[0] ?? '') : MAX_NOTE_CHARS
-  const area = h('textarea', { rows: '4', placeholder: t(v.lang, c.mode === 'quote' ? 'quotePlaceholder' : 'newNote'), 'aria-label': t(v.lang, c.mode === 'reply' ? 'reply' : c.mode === 'quote' ? 'quoteButton' : 'newNote'), onInput: (e: Event) => { hd.edit((e.target as HTMLTextAreaElement).value); count.textContent = t(v.lang, 'chars', { n: [...(e.target as HTMLTextAreaElement).value].length, max }) } })
+  const area = h('textarea', { 'data-keep-focus': 'composer', rows: '4', placeholder: t(v.lang, c.mode === 'quote' ? 'quotePlaceholder' : 'newNote'), 'aria-label': t(v.lang, c.mode === 'reply' ? 'reply' : c.mode === 'quote' ? 'quoteButton' : 'newNote'), onInput: (e: Event) => { hd.edit((e.target as HTMLTextAreaElement).value); count.textContent = t(v.lang, 'chars', { n: [...(e.target as HTMLTextAreaElement).value].length, max }) } })
   area.value = c.text
   const count = h('small', {}, t(v.lang, 'chars', { n: [...c.text].length, max }))
   // "@ana": the accounts whose name starts like that (people you follow first) are offered under the box; a tap puts the standard reference (nostr:npub…)
@@ -166,6 +166,7 @@ function renderComposer(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElemen
   const toggle = picker ? h('button', { type: 'button', class: 'emoji-toggle', 'aria-label': t(v.lang, 'emojis'), title: t(v.lang, 'emojis'), 'aria-expanded': 'false', onClick: () => { picker.hidden = !picker.hidden; toggle!.setAttribute('aria-expanded', String(!picker.hidden)) } }, '🙂') : null
   return h('div', { class: 'composer' },
     (c.mode === 'reply' || c.mode === 'quote') && c.target ? h('p', { class: 'replying' }, t(v.lang, c.mode === 'quote' ? 'quotingTo' : 'replyingTo', { who: nameOf(v, c.target.pubkey) }), ': ', h('q', {}, excerpt(c.target))) : null,
+    c.restored ? h('p', { class: 'meta draft-line' }, t(v.lang, 'draftRestored'), ' ', h('button', { type: 'button', class: 'link', onClick: hd.discardDraft }, t(v.lang, 'draftDiscard'))) : null,
     area, suggest, picker, h('p', { class: 'composer-buttons' }, count, ' ', toggle, toggle ? ' ' : null, h('button', { type: 'button', onClick: hd.review }, t(v.lang, 'review')), ' ', h('button', { type: 'button', onClick: hd.cancelComposer }, t(v.lang, 'cancel'))),
   )
 }

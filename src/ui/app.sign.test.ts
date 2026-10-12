@@ -820,3 +820,47 @@ describe('mention suggestions match the start of a word', () => {
     expect([...a.root.querySelectorAll('.mention-suggest .mention-name')].map((x) => x.textContent)).toEqual(['Derek Ross']) // any word of the name
   })
 })
+
+describe('drafts', () => {
+  const open = async () => { const sg = fakeSigner(); const a = boot({ events: [...world, ev(friend, 'a note to answer', { created_at: 8000 })], signer: sg }); await tick(100); await connectClave(a, sg); await tick(300); return a }
+  const area = (a: ReturnType<typeof boot>) => a.root.querySelector('.composer textarea') as HTMLTextAreaElement
+  const type = (a: ReturnType<typeof boot>, text: string) => { area(a).value = text; area(a).dispatchEvent(new Event('input')) }
+  it('what is typed is kept: closing the box and opening it again brings it back, said so, with Discard', async () => {
+    const a = await open()
+    a.root.querySelector<HTMLElement>('button.fab')!.click(); await tick(60); type(a, 'half a thought')
+    await click(a.root, 'Cancel'); expect(a.text()).toContain('Kept as a draft')
+    a.root.querySelector<HTMLElement>('button.fab')!.click(); await tick(60)
+    expect(area(a).value).toBe('half a thought'); expect(a.root.querySelector('.draft-line')!.textContent).toContain('Draft restored.')
+    await click(a.root.querySelector('.draft-line') as HTMLElement, 'Discard'); expect(area(a).value).toBe(''); expect(a.root.querySelector('.draft-line')).toBeNull()
+    await click(a.root, 'Cancel'); a.root.querySelector<HTMLElement>('button.fab')!.click(); await tick(60); expect(area(a).value).toBe('')
+  })
+  it('it survives closing Quill (it is on the device), and publishing deletes it', async () => {
+    const a = await open()
+    a.root.querySelector<HTMLElement>('button.fab')!.click(); await tick(60); type(a, 'written before a crash')
+    const sg = fakeSigner(); const b = boot({ events: world, signer: sg, stored: Object.fromEntries(a.mem) }); await tick(100); await connectClave(b, sg); await tick(300)
+    b.root.querySelector<HTMLElement>('button.fab')!.click(); await tick(60); expect(area(b).value).toBe('written before a crash')
+    await click(b.root, 'Review'); await tick(60); await click(b.root, 'Publish'); await tick(400)
+    expect(b.pub.sent[0]!.event.content).toBe('written before a crash'); expect(b.mem.has(`drafts:${me}`)).toBe(false)
+  })
+  it('a reply has its own draft, apart from a new note', async () => {
+    const a = await open()
+    a.root.querySelector<HTMLElement>('button.fab')!.click(); await tick(60); type(a, 'a new note'); await click(a.root, 'Cancel')
+    const card = [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('a note to answer'))!
+    await click(card as HTMLElement, 'Reply'); await tick(60); expect(area(a).value).toBe(''); type(a, 'my reply'); await click(a.root, 'Cancel')
+    a.root.querySelector<HTMLElement>('button.fab')!.click(); await tick(60); expect(area(a).value).toBe('a new note'); await click(a.root, 'Cancel')
+    await click(card as HTMLElement, 'Reply'); await tick(60); expect(area(a).value).toBe('my reply')
+  })
+})
+
+describe('typing while the page fills in', () => {
+  it('a redraw of the page gives the cursor back to the box being written in, at the same place', async () => {
+    const sg = fakeSigner(); const a = boot({ events: world, signer: sg }); await tick(100); await connectClave(a, sg); await tick(300)
+    a.root.querySelector<HTMLElement>('button.fab')!.click(); await tick(60)
+    const before = a.root.querySelector('.composer textarea') as HTMLTextAreaElement
+    before.focus(); before.value = 'hello world'; before.dispatchEvent(new Event('input')); before.setSelectionRange(5, 5)
+    ;(sg.raw as unknown as { approve: () => void }).approve(); await tick(400) // the signer says it is connected again: the app checks and loads, drawing the page again
+    expect(a.root.querySelector('.composer textarea')).not.toBe(before) // the box was rebuilt
+    const after = a.root.querySelector('.composer textarea') as HTMLTextAreaElement
+    expect(document.activeElement).toBe(after); expect(after.value).toBe('hello world'); expect(after.selectionStart).toBe(5)
+  })
+})

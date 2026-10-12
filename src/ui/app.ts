@@ -825,10 +825,25 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     followNamesAsked = me
     void nameKeys([...session.follows]).catch(() => { followNamesAsked = null })
   }
-  function startReply(target: NostrEvent): void { knowFollowNames(); composer = { mode: 'reply', target, text: '' }; review = null; result = null; flash = null; draw(); root.querySelector('textarea')?.focus() }
+  // Drafts: what is being written is kept on this device as it is typed, one per kind of writing (a new note, a reply to a note, a quote of a note), so
+  // closing Quill or the box loses nothing; publishing deletes it. Up to 20, and none older than 30 days.
+  const draftsKey = () => `drafts:${me}`
+  const draftKey = (c: Composer) => `${c.mode}:${c.target?.id ?? 'new'}`
+  function readDrafts(): Record<string, { text: string; at: number }> {
+    try { const v = JSON.parse(safeGet(kv, draftsKey()) ?? '{}') as unknown; return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, { text: string; at: number }>) : {} } catch { return {} }
+  }
+  function writeDraft(key: string, text: string | null): void {
+    if (!me) return
+    const all = readDrafts(), now = nowSec()
+    if (text && text.trim()) all[key] = { text: text.slice(0, 5000), at: now }; else delete all[key]
+    const kept = Object.entries(all).filter(([, d]) => d && typeof d.text === 'string' && typeof d.at === 'number' && now - d.at < 30 * 86400).sort((a, b) => b[1].at - a[1].at).slice(0, 20)
+    safeSet(kv, draftsKey(), kept.length ? JSON.stringify(Object.fromEntries(kept)) : null)
+  }
+  function openComposer(c: Composer): Composer { const d = readDrafts()[draftKey(c)]; return d && typeof d.text === 'string' && d.text.trim() ? { ...c, text: d.text, restored: true } : c }
+  function startReply(target: NostrEvent): void { knowFollowNames(); composer = openComposer({ mode: 'reply', target, text: '' }); review = null; result = null; flash = null; draw(); root.querySelector('textarea')?.focus() }
   /** From the share panel: a quote asks for the reader's comment first. */
-  function startQuote(target: NostrEvent): void { knowFollowNames(); shareConfirm = null; composer = { mode: 'quote', target, text: '' }; review = null; result = null; flash = null; draw(); root.querySelector('textarea')?.focus() }
-  function startNote(): void { knowFollowNames(); composer = { mode: 'note', text: '' }; draw(); root.querySelector('textarea')?.focus() }
+  function startQuote(target: NostrEvent): void { knowFollowNames(); shareConfirm = null; composer = openComposer({ mode: 'quote', target, text: '' }); review = null; result = null; flash = null; draw(); root.querySelector('textarea')?.focus() }
+  function startNote(): void { knowFollowNames(); composer = openComposer({ mode: 'note', text: '' }); draw(); root.querySelector('textarea')?.focus() }
   function doReview(): void {
     if (!composer) return
     let template: Template
@@ -840,8 +855,9 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
   async function publish(): Promise<void> {
     if (!review) return
-    const replyingTo = review.quote ? undefined : review.target, ok = await send(review.template) // a quote is not a reply: the note quoted is not marked as answered
-    if (ok) { if (replyingTo) { engagement.addReply(replyingTo.id); rebar(replyingTo) } review = null; composer = null; void load() }
+    const replyingTo = review.quote ? undefined : review.target, written = composer, ok = await send(review.template) // a quote is not a reply: the note quoted is not marked as answered
+    if (ok) { if (written) writeDraft(draftKey(written), null) // published: the draft is done
+      if (replyingTo) { engagement.addReply(replyingTo.id); rebar(replyingTo) } review = null; composer = null; void load() }
   }
   async function react(target: NostrEvent, emoji: string): Promise<void> {
     const template: Template = { kind: 7, content: emoji, tags: reactionTags(target), created_at: Math.floor((deps.nowMs?.() ?? Date.now()) / 1000) }
@@ -1097,6 +1113,9 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const kept = root.querySelector('main.view')?.scrollTop ?? 0
     const searching = !!searchInput && root.ownerDocument.activeElement === searchInput // read before building: moving the search page into the new view takes the cursor away
     const editingAbout = !!aboutBox && root.ownerDocument.activeElement === aboutBox
+    // a box rebuilt by the draw (the composer) gets the cursor back where it was: typing goes on while the page fills in around it
+    const typing = root.ownerDocument.activeElement as (HTMLTextAreaElement & { dataset: DOMStringMap }) | null
+    const keep = typing?.dataset?.keepFocus ? { key: typing.dataset.keepFocus, start: typing.selectionStart, end: typing.selectionEnd } : null
     const keptCols = new Map<string, number>([...root.querySelectorAll<HTMLElement>('.col[data-col]')].map((c) => [c.dataset.col!, c.scrollTop]))
     const route = parseRoute(deps.location.hash)
     const isWide = wide() && !!me && route.name !== 'settings' && route.name !== 'help'
@@ -1115,7 +1134,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     }, {
       openConnect, startLink, pasteBunker: () => void pasteBunker(), cancelConnect, bunker: (x) => void bunker(x), dismissFlash: () => { flash = null; draw() }, confirmFollow: () => void confirmFollow(), acceptList, cancelFollow: () => { followFlow = null; draw() }, confirmShare: () => void share(), startQuote: () => { if (shareConfirm) startQuote(shareConfirm) }, cancelShare: () => { shareConfirm = null; draw() }, confirmDelete: () => void deleteNote(), cancelDelete: () => { deleteConfirm = null; draw() }, askDisconnect: () => { confirmingDisconnect = true; draw() }, cancelDisconnect: () => { confirmingDisconnect = false; draw() },
       disconnect: () => { confirmingDisconnect = false; void signer.disconnect(); composer = review = result = null; flash = null; draw() }, copy: (x) => { deps.copy?.(x); say('info', t(lang, 'copied')); draw() },
-      edit: (x) => { if (composer) composer.text = x }, review: doReview, publish: () => void publish(), back: () => { review = null; draw() }, cancelComposer: () => { composer = null; review = null; draw() },
+      edit: (x) => { if (composer) { composer.text = x; writeDraft(draftKey(composer), x) } }, discardDraft: () => { if (composer) { writeDraft(draftKey(composer), null); composer = { ...composer, text: '', restored: false }; draw(); root.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus() } }, review: doReview, publish: () => void publish(), back: () => { review = null; draw() }, cancelComposer: () => { if (composer?.text.trim()) say('info', t(lang, 'draftKept')); composer = null; review = null; draw() },
       retry: () => void retry(), dismissResult: () => { result = null; draw() }, startNote, cancelSigning: () => signing?.abort(),
       editBunker: (x) => { bunkerText = x }, setLinkOpen: (o) => { linkOpen = o },
     }, view(), true, !me || route.name === 'me' || isWide ? 'me' : 'feed', !!me && !isWide && ['following', 'mentions', 'note', 'user', 'me', 'people'].includes(route.name)) : null
@@ -1147,6 +1166,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     root.replaceChildren(...page.filter((x): x is HTMLElement => x !== null))
     if (searching && searchInput!.isConnected) searchInput!.focus({ preventScroll: true })
     if (editingAbout && aboutBox?.isConnected) aboutBox.focus({ preventScroll: true })
+    if (keep) { const again = root.querySelector<HTMLTextAreaElement>(`[data-keep-focus="${keep.key}"]`); if (again && root.ownerDocument.activeElement !== again) { again.focus({ preventScroll: true }); try { again.setSelectionRange(keep.start ?? again.value.length, keep.end ?? again.value.length) } catch { /* not a text box */ } } }
     root.classList.toggle('bars-hidden', barsHidden && !isWide)
     root.classList.toggle('wide', isWide)
     root.classList.toggle('has-tabs', !!me && !isWide)
