@@ -40,6 +40,7 @@ Principles: behaviour is evidence, **missing data is not** (a key without a prof
 - **What your notes got**: in Me, under each note of yours, small numbers for the reactions, reposts and replies it received (nobody counts twice; you and your muted accounts do not count).
 - **Drafts**: what you write is kept on the device as you type, and comes back when you open the same box again.
 - **Zaps** your notes got (⚡ sats, and who sent them) in the numbers under each note in Me.
+- **Zaps on other people's notes** too (only the zaps, never their reaction or repost counts).
 - **Save notes for later** from their …, kept whole on the device (Me › “N saved”).
 - **Mentions while writing**: type @ and the start of a name to pick the account (people you follow first).
 - **Comments** (NIP-22, kind 1111) show in threads, Mentions and your notes' numbers, next to classic replies.

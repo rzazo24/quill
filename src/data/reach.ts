@@ -70,3 +70,13 @@ export async function loadReach(f: Fetcher, ids: readonly string[], ctx: Pick<Co
   const seen = new Set<string>()
   return reachOf(answers.flat().filter((e) => !seen.has(e.id) && seen.add(e.id)), unique, ctx, verify)
 }
+
+/** Only the zaps of other people's notes (their reactions and reposts are not counted on purpose: numbers of likes are not what Quill shows). */
+export async function loadZaps(f: Fetcher, ids: readonly string[], ctx: Pick<Context, 'me' | 'muted'>, verify?: (e: Event) => boolean): Promise<Map<string, Reach>> {
+  const unique = [...new Set(ids)].filter((i) => HEX64.test(i))
+  const chunks: string[][] = []
+  for (let i = 0; i < unique.length; i += CHUNK) chunks.push(unique.slice(i, i + CHUNK))
+  const answers = await Promise.all(chunks.map((c) => f.query({ kinds: [ZAP_RECEIPT_KIND], '#e': c, limit: 500 }).catch(() => [] as Event[])))
+  const seen = new Set<string>()
+  return reachOf(answers.flat().filter((e) => e.kind === ZAP_RECEIPT_KIND && !seen.has(e.id) && seen.add(e.id)), unique, ctx, verify)
+}

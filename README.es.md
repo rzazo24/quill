@@ -40,6 +40,7 @@ Principios: la conducta es una prueba, **la falta de datos no lo es** (una clave
 - **Lo que recibieron tus notas**: en Yo, bajo cada nota tuya, números pequeños con las reacciones, reposts y respuestas que recibió (nadie cuenta dos veces; ni tú ni tus cuentas silenciadas cuentáis).
 - **Borradores**: lo que escribes se guarda en el dispositivo mientras escribes y vuelve al abrir el mismo cuadro.
 - **Zaps** que reciben tus notas (⚡ sats, y quién los mandó) en los números bajo cada nota en Yo.
+- **Zaps en las notas de los demás** también (solo los zaps, nunca su número de reacciones o reposts).
 - **Guardar notas para luego** desde sus …, enteras en el dispositivo (Yo › «N guardadas»).
 - **Menciones al escribir**: escribe @ y el principio de un nombre para elegir la cuenta (primero la gente que sigues).
 - **Comentarios** (NIP-22, kind 1111): se ven en los hilos, en Menciones y en los números de tus notas, junto a las respuestas clásicas.

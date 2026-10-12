@@ -19,7 +19,7 @@ import { followPubkeys, followTemplate, listKindOf, MUTE_LIST_KIND, type FollowA
 import { addBackup, checkBase, loadFollowList, nextKnown, parseBackups } from '../data/followlist.js'
 import { loadFollowing, loadMentions, loadMine, loadNames, loadNote, loadThread, type Thread, type ThreadNode } from '../data/feed.js'
 import { Engagement, loadEngagement, normReaction } from '../data/engaged.js'
-import { loadReach, type Reach } from '../data/reach.js'
+import { loadReach, loadZaps, type Reach } from '../data/reach.js'
 import { countNew, groupReactions, groupReposts, loadActivity, mergeKnown, newFollowers, parseKnown, type Activity } from '../data/activity.js'
 import { contextOf, loadGraphInfo, loadOwnLists, pendingGraph, type Session } from '../data/session.js'
 import { DEFAULT_RELAYS, memo, type Fetcher } from '../net/fetcher.js'
@@ -198,6 +198,26 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       if (title) void load('all')
     }, () => {})
   }
+  // the zaps of other people's notes (only the zaps): asked for the notes as they are drawn, a moment later, in one go; the page is drawn again if any came
+  const zapMap = new Map<string, Reach | null>(), zapWanted = new Set<string>()
+  let zapTimer: ReturnType<typeof setTimeout> | undefined
+  function wantZaps(id: string): void {
+    if (zapMap.has(id) || zapWanted.has(id) || !me) return
+    zapWanted.add(id)
+    clearTimeout(zapTimer); zapTimer = setTimeout(() => void fetchZaps(), 300)
+  }
+  async function fetchZaps(): Promise<void> {
+    const ids = [...zapWanted]; zapWanted.clear()
+    if (!ids.length || !session || !me) return
+    for (const id of ids) zapMap.set(id, null) // asked: not again (a refresh asks again)
+    const who = me
+    let found = new Map<string, Reach>()
+    try { found = await loadZaps(fetcher, ids, ctx(), deps.verify) } catch { return }
+    if (me !== who || !found.size) return
+    for (const [id, r] of found) zapMap.set(id, r)
+    await nameKeys([...new Set([...found.values()].flatMap((r) => (r.who?.zaps ?? []).map(([k]) => k).filter((k): k is string => !!k)))]).catch(() => {})
+    if (me === who) void load('all')
+  }
   const quoteWanted = new Set<string>(), quoteHints = new Map<string, string[]>() // where each quote says its note can be found
   let quoteTimer: ReturnType<typeof setTimeout> | undefined
   function wantQuote(id: string, relays?: string[]): void {
@@ -262,7 +282,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const followersSeen = new Set<string>() // everybody seen following you since this page opened (the known ones are in `knownFollowers`)
   /** How many accounts have been seen following the reader: only a lower bound (each relay knows part of them), and it only grows. Null while nothing has been looked at yet. */
   const followerCount = (): number | null => { const k = loadKnown(); return k === null && followersSeen.size === 0 ? null : new Set([...(k ?? []), ...followersSeen]).size }
-  const forgetAccount = () => { myProfile = undefined; aboutEdit = null; reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
+  const forgetAccount = () => { myProfile = undefined; zapMap.clear(); aboutEdit = null; reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
   const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
@@ -276,7 +296,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
   /** The lists are built once and reused between redraws, so a bar already on screen keeps what it showed: redo the bar(s) of this note in place. */
   const rebar = (e: NostrEvent) => { for (const old of root.querySelectorAll(`article.note[data-id="${e.id}"] .actions`)) old.replaceWith(barFor(e)) }
-  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), quoted: (id: string) => quotedMap.get(id), wantQuote, suggestPeople: (word: string) => (session ? matchPeople(names, word, ctx(), 50).filter((p) => fold(p.name).split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(fold(word)))).slice(0, 5) : []), articleTitle: (pk: string, d: string) => (articleTitles.has(`${pk}:${d}`) ? articleTitles.get(`${pk}:${d}`) ?? null : undefined), wantArticle, ...(me ? { saved: { has: (id: string) => savedNotes().some((x) => x.event.id === id), toggle: toggleSaved } } : {}), seen: rememberNotes, interests, deleted: deletedIds(), ...(me ? { self: me } : {}), ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk), deleteNote: (e: NostrEvent) => { if (e.pubkey === me && e.kind === 1) { deleteConfirm = e; draw() } } } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
+  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), zapsOf: (id: string) => { const z = zapMap.get(id); if (z === undefined) wantZaps(id); return z ?? undefined }, quoted: (id: string) => quotedMap.get(id), wantQuote, suggestPeople: (word: string) => (session ? matchPeople(names, word, ctx(), 50).filter((p) => fold(p.name).split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(fold(word)))).slice(0, 5) : []), articleTitle: (pk: string, d: string) => (articleTitles.has(`${pk}:${d}`) ? articleTitles.get(`${pk}:${d}`) ?? null : undefined), wantArticle, ...(me ? { saved: { has: (id: string) => savedNotes().some((x) => x.event.id === id), toggle: toggleSaved } } : {}), seen: rememberNotes, interests, deleted: deletedIds(), ...(me ? { self: me } : {}), ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk), deleteNote: (e: NostrEvent) => { if (e.pubkey === me && e.kind === 1) { deleteConfirm = e; draw() } } } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
   const ctx = () => contextOf(session!, { mutedWords: words, mutedKeys: [] })
   const who = () => (signer?.pubkey ? nameOf(view(), signer.pubkey) : '')
 
@@ -702,7 +722,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   /** Reads everything again from the relays (an installed app has no pull-to-refresh). */
-  function refresh(): void { fetcher.clear(); lateNotes.clear(); articleTitles.clear(); reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); session = null; void load() }
+  function refresh(): void { fetcher.clear(); lateNotes.clear(); zapMap.clear(); articleTitles.clear(); reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); session = null; void load() }
 
   const flat = (nodes: ThreadNode[]): Judged[] => nodes.flatMap((n) => [n.item, ...flat(n.children)])
 
