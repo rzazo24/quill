@@ -424,10 +424,10 @@ describe('reposts of the people you follow', () => {
 describe('the switches in Settings', () => {
   it('every rule, the reposts and the pictures options is a switch (a checkbox announced as on/off), with the words first and the switch at the end, and one line that says what on and off mean', async () => {
     const a = boot({ stored: { me } }); await tick(80); await a.go('#/settings'); await tick(100)
-    const rows = [...a.root.querySelectorAll('label.check')]; expect(rows).toHaveLength(9) // six rules + reposts + pictures + the Halloween theme
+    const rows = [...a.root.querySelectorAll('label.check')]; expect(rows).toHaveLength(10) // six rules + reposts + pictures + the Halloween theme + reading people where they write
     for (const r of rows) { const input = r.querySelector('input')!; expect(input.type).toBe('checkbox'); expect(input.getAttribute('role')).toBe('switch'); expect(r.firstElementChild!.tagName).toBe('SPAN'); expect(r.lastElementChild).toBe(input) }
     expect(a.root.querySelector('.settings .meta')!.textContent).toBe('On = the rule hides what meets its condition. Off = it hides nothing.')
-    const rules = rows.filter((r) => !/Halloween|repost|pictures/.test(r.textContent!)); expect(rules).toHaveLength(6)
+    const rules = rows.filter((r) => !/Halloween|repost|pictures|where they write/.test(r.textContent!)); expect(rules).toHaveLength(6)
     expect(rules.map((r) => (r.querySelector('input') as HTMLInputElement).checked)).toEqual([true, true, true, true, true, true]) // all on by default
   })
 })
@@ -1294,5 +1294,16 @@ describe('the network search, on its own', () => {
     expect(a.text()).toContain('loaded quillish note'); expect(a.text()).not.toContain('network quillish note')
     pickFilter(a, 'The network'); await tick(900); await a.go('#/'); await tick(100); await a.go('#/search'); await tick(100)
     expect(a.root.querySelector('.search-filters-btn')!.textContent).toBe('Filters'); expect(a.text()).toContain('loaded quillish note') // back on what is loaded
+  })
+})
+
+describe('reading people where they write', () => {
+  it('is on by default; the switch in Settings turns it off, is remembered, and the account page still loads', async () => {
+    const a = boot({ stored: { me } }); await tick(80); await a.go('#/settings'); await tick(100)
+    const sw = [...a.root.querySelectorAll('label.check')].find((r) => r.textContent!.includes('where they write'))!.querySelector('input') as HTMLInputElement
+    expect(sw.checked).toBe(true)
+    sw.checked = false; sw.dispatchEvent(new Event('change')); await tick(100)
+    expect(a.mem.get('outbox')).toBe('0')
+    await a.go(`#/user/${friend}`); await tick(200); expect(a.root.querySelector('.profile, .account, article.note')).not.toBeNull()
   })
 })

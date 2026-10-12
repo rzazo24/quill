@@ -7,7 +7,8 @@ import type { VerifyMany } from './verifier.js'
 
 /** How long to wait. By default notes and the like do not wait for the slowest relay and everything else waits for all of them; `quick` and `grace` (ms) override that. */
 /** `also`: a few more relays to ask this once (where a note says it can be found), besides the reader's own. */
-export interface QueryOptions { quick?: boolean; grace?: number; also?: string[] }
+/** `only`: ask exactly these relays instead of the reader's (a followed person's own relays, see data/outbox.ts). */
+export interface QueryOptions { quick?: boolean; grace?: number; also?: string[]; only?: string[] }
 
 export interface Fetcher {
   query(filter: Filter, options?: QueryOptions): Promise<Event[]>
@@ -114,17 +115,18 @@ export function poolFetcher(relays: string[] | (() => string[]) = DEFAULT_RELAYS
   }
   return {
     query: async (filter, options) => {
-      const list = health.usable([...new Set([...(typeof relays === 'function' ? relays() : relays), ...(options?.also ?? []).slice(0, 4)])])
+      const list = options?.only?.length ? options.only.filter((u) => !health.resting(u)) : health.usable([...new Set([...(typeof relays === 'function' ? relays() : relays), ...(options?.also ?? []).slice(0, 4)])])
+      if (!list.length) return [] // the only relays asked for are resting: nothing to ask
       return check(filter, options?.quick ?? isQuick(filter) ? await collectQuick(subscribe, list, filter, { maxWait, ...(options?.grace !== undefined ? { grace: options.grace } : {}) }) : await pool.querySync(list, filter, { maxWait }))
     },
   }
 }
 
 /** The same query for many authors, a hundred at a time (relays refuse long lists), merged without duplicates. */
-export async function queryAuthors(f: Fetcher, base: Filter, authors: string[], size = 100): Promise<Event[]> {
+export async function queryAuthors(f: Fetcher, base: Filter, authors: string[], size = 100, options?: QueryOptions): Promise<Event[]> {
   const chunks: string[][] = []
   for (let i = 0; i < authors.length; i += size) chunks.push(authors.slice(i, i + size))
-  const parts = await Promise.all(chunks.map((c) => f.query({ ...base, authors: c })))
+  const parts = await Promise.all(chunks.map((c) => (options ? f.query({ ...base, authors: c }, options) : f.query({ ...base, authors: c }))))
   const seen = new Set<string>()
   return parts.flat().filter((e) => !seen.has(e.id) && seen.add(e.id))
 }
@@ -134,7 +136,7 @@ export function memo(f: Fetcher): Fetcher & { clear(): void } {
   const cache = new Map<string, Promise<Event[]>>()
   return {
     query: (filter, options) => {
-      const key = JSON.stringify([filter, options?.quick === false ? 'all' : '', options?.also ?? []]) // waiting for every relay, or asking more, is another question
+      const key = JSON.stringify([filter, options?.quick === false ? 'all' : '', options?.also ?? [], options?.only ?? []]) // waiting for every relay, or asking more, is another question
       let hit = cache.get(key)
       if (!hit) { hit = f.query(filter, options); hit.catch(() => cache.delete(key)); cache.set(key, hit) }
       return hit

@@ -6,16 +6,22 @@ import { analyse, judge, judgeAll, type Context, type Judged, type Settings, DEF
 import { newestPerAuthor, nameOf } from './lists.js'
 import { queryAuthors, type Fetcher } from '../net/fetcher.js'
 import { fetchOriginals, loadRepostRefs, mergeFeed } from './reposts.js'
+import { fromOutbox, withinPatience } from './outbox.js'
 
 export const FEED_LIMIT = 100
 const byNewest = (a: Event, b: Event) => b.created_at - a.created_at || (a.id < b.id ? -1 : 1)
 
 /** Root notes (not replies) of the people you follow and of you, newest first; with `reposts`, also what they reposted (each note once, marked with who reposted it).
  *  A reposted note is judged by the filter like any other, by ITS author: a repost does not vouch for it. */
-export async function loadFollowing(f: Fetcher, ctx: Context, settings: Settings = DEFAULT_SETTINGS, opts: { reposts?: boolean } = {}): Promise<Judged[]> {
+/** `outbox`: the reader's relays; when given, people who write only elsewhere are also read where they write (see outbox.ts). What arrives from
+ *  there after the reader's relays (plus a moment) goes to `onLate`, so the page can be drawn again with it. */
+export async function loadFollowing(f: Fetcher, ctx: Context, settings: Settings = DEFAULT_SETTINGS, opts: { reposts?: boolean; outbox?: string[]; onLate?: (events: Event[]) => void } = {}): Promise<Judged[]> {
   const authors = [...new Set([ctx.me, ...ctx.follows])]
   const reposted = opts.reposts ? loadRepostRefs(f, authors, FEED_LIMIT).catch(() => []) : null // asked at the same time as the notes: they do not depend on each other
-  const events = await queryAuthors(f, { kinds: [1], limit: FEED_LIMIT }, authors)
+  const ownQ = queryAuthors(f, { kinds: [1], limit: FEED_LIMIT }, authors)
+  const [own, elsewhere] = opts.outbox ? await withinPatience(ownQ, fromOutbox(f, { kinds: [1], limit: FEED_LIMIT }, [...ctx.follows], opts.outbox), undefined, opts.onLate) : [await ownQ, [] as Event[]]
+  const seen = new Set<string>()
+  const events = [...own, ...elsewhere].filter((e) => !seen.has(e.id) && seen.add(e.id))
   const roots = events.filter((e) => !isReply(e)).sort(byNewest).slice(0, FEED_LIMIT)
   if (!reposted) return judgeAll(roots, ctx, settings)
   const refs = (await reposted).filter((r) => !ctx.muted.has(r.reposter))

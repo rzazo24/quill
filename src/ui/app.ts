@@ -98,6 +98,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let relays = parseRelays(safeGet(kv, 'relays')) ?? defaultRelays
   let font: FontSize = parseFont(safeGet(kv, 'font'))
   let showReposts = parseReposts(safeGet(kv, 'reposts'))
+  let readOutbox = parseReposts(safeGet(kv, 'outbox')) // on unless turned off ('0'), like reposts
   let autoImages = safeGet(kv, 'autoImages') === '1' // off unless chosen: a picture tells its site the reader's IP address
   let profileMode: 'notes' | 'replies' = 'notes' // what an account's page shows
   let avatarStyle: AvatarStyle = parseAvatars(safeGet(kv, 'avatars'))
@@ -529,7 +530,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         content = await peopleView(route.list, alive)
         if (!alive()) return null
       } else if (route.name === 'user') {
-        const { info, notes, own } = await loadProfile(fetcher, route.pubkey, session!, ctx(), settings)
+        const { info, notes, own } = await loadProfile(fetcher, route.pubkey, session!, ctx(), settings, readOutbox ? relays : undefined, () => topUp(route, alive))
         if (!alive()) return null
         askTrust(route.pubkey, own)
         await nameThem(notes, [info.pubkey, ...info.via.slice(0, 3)]); content = profileView(info, notes)
@@ -539,7 +540,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
           if (seenAt === null) loadSeen()
           const opts = activityOptions(); act = await loadActivity(fetcher, ctx(), settings, opts); afterActivity(act, !!opts.verifyKnown)
         }
-        const items = act ? act.notes : route.name === 'me' ? (await Promise.all([loadMine(fetcher, ctx(), settings), loadMyProfile()]))[0] : (feedMode === 'network' ? await loadNetwork(fetcher, session!, ctx(), settings) : feedMode === 'popular' ? await loadPopular(fetcher, ctx(), nowSec(), settings) : await loadFollowing(fetcher, ctx(), settings, { reposts: showReposts }))
+        const items = act ? act.notes : route.name === 'me' ? (await Promise.all([loadMine(fetcher, ctx(), settings), loadMyProfile()]))[0] : (feedMode === 'network' ? await loadNetwork(fetcher, session!, ctx(), settings) : feedMode === 'popular' ? await loadPopular(fetcher, ctx(), nowSec(), settings) : await loadFollowing(fetcher, ctx(), settings, { reposts: showReposts, ...(readOutbox ? { outbox: relays, onLate: () => topUp(route, alive) } : {}) }))
         if (!alive()) return null
         // the first visit to Mentions ever takes the followers of today as its starting point (nothing is "new" yet); later, the ones not seen before are
         const baseline = act ? (loadKnown() ?? new Set(act.followers)) : null
@@ -648,6 +649,16 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (route.name !== 'mentions') void poll()
   }
 
+  /** Notes from people's own relays arrived after the page was drawn: draw it again with them (the answers are remembered, so it is quick),
+   *  but only while the reader is still on that page and near its top: nothing moves under someone who is reading. */
+  function topUp(route: Route, alive: () => boolean): void {
+    setTimeout(() => void (async () => {
+      if (!alive() || wide() || (root.querySelector('main.view')?.scrollTop ?? 0) > 200) return
+      const content = await buildContent(route, alive)
+      if (content && alive() && (root.querySelector('main.view')?.scrollTop ?? 0) <= 200) { body = content; draw() }
+    })(), 0)
+  }
+
   /** Looks for what is new around my notes since the last visit to Mentions and shows how many things the filter lets through as a number on the tab. */
   async function poll(): Promise<void> {
     if (!me || !session || parseRoute(deps.location.hash).name === 'mentions') return
@@ -733,6 +744,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   function changeAvatars(a: AvatarStyle): void { avatarStyle = a; safeSet(kv, 'avatars', a === 'initials' ? null : a); void load() } // the cards are built once and kept: they are rebuilt with the new pictures
   function changeAutoImages(on: boolean): void { autoImages = on; safeSet(kv, 'autoImages', on ? '1' : null); draw() }
   function changeReposts(on: boolean): void { showReposts = on; safeSet(kv, 'reposts', on ? null : '0'); void load() }
+  function changeOutbox(on: boolean): void { readOutbox = on; safeSet(kv, 'outbox', on ? null : '0'); void load() }
   function changeScheme(x: Scheme): void { scheme = x; safeSet(kv, 'scheme', x === 'dark' ? null : x); applyTheme(); draw() }
   function changeTheme(on: boolean): void { themeChoice = on ? 'halloween' : 'default'; safeSet(kv, 'theme', themeChoice); applyTheme(); draw() } // an explicit choice, kept, wins over the season
   function changeFont(f: FontSize): void { font = f; safeSet(kv, 'font', f); applyFont(); draw() }
@@ -1183,7 +1195,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const helpPage = renderHelp(view(), helpOpen, (id, isOpen) => { if (isOpen) helpOpen.add(id); else helpOpen.delete(id) })
     const content: (HTMLElement | null)[] = route.name === 'help' ? [signArea, helpPage]
       : !me ? [...(route.name === 'note' && guestBody ? [guestBody] : []), loginForm, signArea]
-      : route.name === 'settings' ? [signArea, renderPrefs({ font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, scheme, onScheme: changeScheme, halloween: halloween(), onHalloween: changeTheme, autoImages, onAutoImages: changeAutoImages, interests, onInterests: changeInterests, reposts: showReposts, onReposts: changeReposts, relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
+      : route.name === 'settings' ? [signArea, renderPrefs({ font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, scheme, onScheme: changeScheme, halloween: halloween(), onHalloween: changeTheme, autoImages, onAutoImages: changeAutoImages, interests, onInterests: changeInterests, reposts: showReposts, onReposts: changeReposts, outbox: readOutbox, onOutbox: changeOutbox, relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
         onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
       : isWide ? [wideView(route, signArea, signOut)]

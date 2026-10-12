@@ -7,6 +7,8 @@ import type { Fetcher } from '../net/fetcher.js'
 import { nameOf, newestPerAuthor } from './lists.js'
 import type { Session } from './session.js'
 
+import { fromOutbox, withinPatience } from './outbox.js'
+
 export const PROFILE_NOTES = 200
 const HEX64 = /^[0-9a-f]{64}$/
 
@@ -43,12 +45,16 @@ export function followedVia(s: Pick<Session, 'follows' | 'graphInfo'>, pubkey: s
   return out.sort((a, b) => (a < b ? -1 : 1))
 }
 
-export async function loadProfile(f: Fetcher, pubkey: string, s: Session, ctx: Context, settings: Settings = DEFAULT_SETTINGS): Promise<{ info: ProfileInfo; notes: Judged[]; own: Event[] }> {
-  const [meta, notes] = await Promise.all([f.query({ kinds: [0, 3], authors: [pubkey], limit: 20 }), f.query({ kinds: [1], authors: [pubkey], limit: PROFILE_NOTES })])
+/** `outbox`: the reader's relays; when given, the account is also read on the relays it says it writes to, if none of them is the reader's. */
+export async function loadProfile(f: Fetcher, pubkey: string, s: Session, ctx: Context, settings: Settings = DEFAULT_SETTINGS, outbox?: string[], onLate?: (events: Event[]) => void): Promise<{ info: ProfileInfo; notes: Judged[]; own: Event[] }> {
+  const ownQ = Promise.all([f.query({ kinds: [0, 3], authors: [pubkey], limit: 20 }), f.query({ kinds: [1], authors: [pubkey], limit: PROFILE_NOTES })])
+  const [[meta, here1], there] = outbox ? await withinPatience(ownQ, fromOutbox(f, { kinds: [1], limit: PROFILE_NOTES }, [pubkey], outbox), undefined, onLate) : [await ownQ, [] as Event[]]
+  const seenIds = new Set<string>()
+  const notes = [...here1, ...there].filter((e) => !seenIds.has(e.id) && seenIds.add(e.id))
   const newest = (kind: number) => newestPerAuthor(meta.filter((e) => e.kind === kind && e.pubkey === pubkey)).get(pubkey)
   const info: ProfileInfo = { pubkey, ...profileFields(newest(0)), following: followingCount(newest(3)), via: followedVia(s, pubkey) }
   // you opened this account on purpose: "outside your network" would only hide everything it wrote; the other rules (muted, bursts, repeats, links) still apply
   const here: Settings = { ...settings, rules: { ...settings.rules, outsideNetwork: false } }
-  const mine = notes.filter((e) => e.kind === 1 && e.pubkey === pubkey).sort((a, b) => b.created_at - a.created_at || (a.id < b.id ? -1 : 1))
+  const mine = notes.filter((e) => e.kind === 1 && e.pubkey === pubkey).sort((a, b) => b.created_at - a.created_at || (a.id < b.id ? -1 : 1)).slice(0, PROFILE_NOTES)
   return { info, notes: judgeAll(mine, ctx, here), own: [...meta.filter((e) => e.pubkey === pubkey), ...mine] }
 }

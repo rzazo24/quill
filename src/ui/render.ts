@@ -406,7 +406,7 @@ export function renderHelp(v: View, open: ReadonlySet<string>, onToggle: (id: st
 export const SOURCE_URL = 'https://github.com/rzazo24/quill'
 
 export interface PrefsProps {
-  font: FontSize; avatars: AvatarStyle; sampleKey: string; onAvatars: (s: AvatarStyle) => void; reposts: boolean; onReposts: (on: boolean) => void; interests: string[]; onInterests: (text: string) => void; autoImages: boolean; onAutoImages: (on: boolean) => void; scheme: Scheme; onScheme: (s: Scheme) => void; halloween: boolean; onHalloween: (on: boolean) => void; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
+  font: FontSize; avatars: AvatarStyle; sampleKey: string; onAvatars: (s: AvatarStyle) => void; reposts: boolean; onReposts: (on: boolean) => void; outbox: boolean; onOutbox: (on: boolean) => void; interests: string[]; onInterests: (text: string) => void; autoImages: boolean; onAutoImages: (on: boolean) => void; scheme: Scheme; onScheme: (s: Scheme) => void; halloween: boolean; onHalloween: (on: boolean) => void; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
   /** The list published on Nostr compared with this one, and what can be done about it. */
   list: { state: ListState; publishedCount: number; canSign: boolean; confirming: boolean }
   onAskPublish: () => void; onCancelPublish: () => void; onPublish: () => void; onUsePublished: () => void
@@ -441,7 +441,8 @@ export function renderPrefs(p: PrefsProps, v: View): HTMLElement {
     h('form', { class: 'relay-add', onSubmit: (e: Event) => { e.preventDefault(); p.onAdd(input.value) } }, input, ' ', h('button', { type: 'submit' }, t(v.lang, 'relayAdd'))),
     p.error ? h('p', { class: 'error', role: 'alert' }, p.error) : null,
     p.isDefault ? null : h('p', {}, h('button', { type: 'button', class: 'link', onClick: p.onReset }, t(v.lang, 'relayReset'))),
-    renderRelayListSync(p, v))
+    renderRelayListSync(p, v),
+    h('label', { class: 'check' }, h('span', {}, t(v.lang, 'outbox')), h('input', { type: 'checkbox', role: 'switch', ...(p.outbox ? { checked: true } : {}), onChange: (e: Event) => p.onOutbox((e.target as HTMLInputElement).checked) })), h('p', { class: 'meta' }, t(v.lang, 'outboxHelp')))
 }
 
 function interestsArea(p: PrefsProps): HTMLElement {
