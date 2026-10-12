@@ -37,6 +37,8 @@ const PATHS = {
   star: ['M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9L12 3Z'],
   /** a page of text: an article */
   article: ['M6 3h9l4 4v14H6V3Z', 'M14 3v5h5', 'M9 12h7', 'M9 16h7'],
+  /** a lightning bolt: a zap */
+  zap: ['M13 2 4 14h7l-1 8 9-12h-7l1-8Z'],
   refresh: ['M20 11a8 8 0 0 0-14.7-3', 'M4 4v4h4', 'M4 13a8 8 0 0 0 14.7 3', 'M20 20v-4h-4'],
 } as const
 

@@ -1,6 +1,7 @@
 // Turning judged notes into DOM. Pure of state: give it data, get elements. Nothing here loads anything external.
 import { nip19 } from 'nostr-tools'
 import { interestsIn } from '../core/interests.js'
+import { formatSats } from '../core/zap.js'
 import { markdownBlocks } from '../core/markdown.js'
 import type { ArticleInfo } from '../data/article.js'
 import type { Child } from './dom.js'
@@ -169,8 +170,9 @@ export function reachLine(r: Reach | undefined, v: View, noteId?: string): HTMLE
   if (!hasReach(r)) return null
   const top = [...r.reactions].slice(0, 3), rest = reactionTotal(r) - top.reduce((a, [, n]) => a + n, 0), item = (...c: Child[]) => h('span', { class: 'reach-item' }, ...c)
   const many = (n: number, one: 'reachReactionsOne' | 'reachRepostsOne' | 'reachRepliesOne', other: 'reachReactions' | 'reachReposts' | 'reachReplies') => (n === 0 ? '' : n === 1 ? t(v.lang, one) : t(v.lang, other, { n }))
-  const said = [many(reactionTotal(r), 'reachReactionsOne', 'reachReactions'), many(r.reposts, 'reachRepostsOne', 'reachReposts'), many(r.replies, 'reachRepliesOne', 'reachReplies')].filter(Boolean).join(', ')
-  const items = [...top.map(([emoji, n]) => item(emoji, ' ', String(n))), rest > 0 ? item(`+${rest}`) : null, r.reposts ? item(icon('repost', 14), ' ', String(r.reposts)) : null, r.replies ? item(icon('thread', 14), ' ', String(r.replies)) : null]
+  const zapsSaid = r.zaps ? t(v.lang, r.zaps.count === 1 ? 'reachZapsOne' : 'reachZaps', { n: r.zaps.count, sats: formatSats(r.zaps.sats, v.lang) }) : ''
+  const said = [many(reactionTotal(r), 'reachReactionsOne', 'reachReactions'), many(r.reposts, 'reachRepostsOne', 'reachReposts'), many(r.replies, 'reachRepliesOne', 'reachReplies'), zapsSaid].filter(Boolean).join(', ')
+  const items = [...top.map(([emoji, n]) => item(emoji, ' ', String(n))), rest > 0 ? item(`+${rest}`) : null, r.reposts ? item(icon('repost', 14), ' ', String(r.reposts)) : null, r.replies ? item(icon('thread', 14), ' ', String(r.replies)) : null, r.zaps ? item(icon('zap', 14), ' ', formatSats(r.zaps.sats, v.lang)) : null]
   if (!r.who) return h('div', { class: 'reach', role: 'group', 'aria-label': said, title: said }, ...items)
   // a tap shows who: the people of each emoji and the reposters, each a link to the account; the replies are in the conversation
   const who = r.who
@@ -178,6 +180,7 @@ export function reachLine(r: Reach | undefined, v: View, noteId?: string): HTMLE
   const panel = h('div', { class: 'reach-who', hidden: true },
     ...who.reactions.map(([emoji, keys]) => h('p', {}, h('span', { class: 'reach-mark' }, emoji), people(keys))),
     who.reposts.length ? h('p', {}, h('span', { class: 'reach-mark' }, icon('repost', 14)), people(who.reposts)) : null,
+    ...(who.zaps ?? []).map(([sender, sats]) => h('p', {}, h('span', { class: 'reach-mark' }, icon('zap', 14)), h('span', { class: 'reach-people' }, sender ? h('a', { href: userHref(sender) }, nameOf(v, sender)) : t(v.lang, 'zapNoName'), ` · ${t(v.lang, 'zapSats', { sats: formatSats(sats, v.lang) })}`))),
     r.replies && noteId ? h('p', {}, h('span', { class: 'reach-mark' }, icon('thread', 14)), h('a', { href: `#/note/${noteId}` }, t(v.lang, r.replies === 1 ? 'reachRepliesOne' : 'reachReplies', { n: r.replies }))) : null)
   const toggle = h('button', { type: 'button', class: 'reach', 'aria-expanded': 'false', 'aria-label': said, title: said, onClick: () => { panel.hidden = !panel.hidden; toggle.setAttribute('aria-expanded', String(!panel.hidden)) } }, ...items)
   return h('div', { class: 'reach-box' }, toggle, panel)

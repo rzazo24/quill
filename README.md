@@ -39,6 +39,7 @@ Principles: behaviour is evidence, **missing data is not** (a key without a prof
 - **In-app notifications**: a number on *Mentions*, new notes marked, a list of who reacted to or reposted your notes and of your new followers (accounts not seen following you on an earlier visit; a follower is whoever's newest follow list names you, and people who stop following you are noticed). Me shows how many you follow (exact) and about how many follow you (~: there is no official count, and every app counts its own way).
 - **What your notes got**: in Me, under each note of yours, small numbers for the reactions, reposts and replies it received (nobody counts twice; you and your muted accounts do not count).
 - **Drafts**: what you write is kept on the device as you type, and comes back when you open the same box again.
+- **Zaps** your notes got (⚡ sats, and who sent them) in the numbers under each note in Me.
 - **Save notes for later** from their …, kept whole on the device (Me › “N saved”).
 - **Mentions while writing**: type @ and the start of a name to pick the account (people you follow first).
 - **Comments** (NIP-22, kind 1111) show in threads, Mentions and your notes' numbers, next to classic replies.

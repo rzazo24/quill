@@ -39,6 +39,7 @@ Principios: la conducta es una prueba, **la falta de datos no lo es** (una clave
 - **Notificaciones dentro de la app**: un número en *Menciones*, las notas nuevas marcadas, una lista de quién reaccionó a tus notas o las compartió y de tus seguidores nuevos (cuentas que no se habían visto siguiéndote en una visita anterior; es seguidor quien tiene tu nombre en su lista de seguidos más reciente, y se nota quién deja de seguirte). Yo muestra a cuántos sigues (exacto) y aproximadamente cuántos te siguen (~: no hay un contador oficial y cada app cuenta a su manera).
 - **Lo que recibieron tus notas**: en Yo, bajo cada nota tuya, números pequeños con las reacciones, reposts y respuestas que recibió (nadie cuenta dos veces; ni tú ni tus cuentas silenciadas cuentáis).
 - **Borradores**: lo que escribes se guarda en el dispositivo mientras escribes y vuelve al abrir el mismo cuadro.
+- **Zaps** que reciben tus notas (⚡ sats, y quién los mandó) en los números bajo cada nota en Yo.
 - **Guardar notas para luego** desde sus …, enteras en el dispositivo (Yo › «N guardadas»).
 - **Menciones al escribir**: escribe @ y el principio de un nombre para elegir la cuenta (primero la gente que sigues).
 - **Comentarios** (NIP-22, kind 1111): se ven en los hilos, en Menciones y en los números de tus notas, junto a las respuestas clásicas.

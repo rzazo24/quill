@@ -337,7 +337,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const who = me, s = session
     setTimeout(() => {
       if (!who || me !== who || session !== s) return
-      void loadReach(fetcher, todo, ctx()).then(async (found) => {
+      void loadReach(fetcher, todo, ctx(), deps.verify).then(async (found) => {
         if (me !== who || session !== s) return
         for (const [id, r] of found) reachMap.set(id, r)
         if (!found.size) return

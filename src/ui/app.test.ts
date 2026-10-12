@@ -1249,3 +1249,16 @@ describe('notes saved for later', () => {
     expect(a.text()).not.toContain('tampered'); expect(a.text()).toContain('No saved notes yet')
   })
 })
+
+describe('zaps under your notes', () => {
+  it('Me shows the sats your note got (⚡) and, on a tap, who sent how much', async () => {
+    const mine = ev(me, 'zap me', { created_at: 9000 })
+    const req = { kind: 9734, pubkey: friend, id: 'r'.repeat(64), sig: '', created_at: 1, content: '', tags: [['e', mine.id], ['p', me], ['amount', '1000000']] }
+    const receipt = ev(pk('f'), '', { kind: 9735, created_at: 9100, tags: [['e', mine.id], ['p', me], ['bolt11', 'lnbc10u1abc'], ['description', JSON.stringify(req)]] })
+    const a = boot({ events: [...world, mine, receipt, ev(friend, JSON.stringify({ name: 'Ana' }), { kind: 0 })], stored: { me } }); await tick(200)
+    await a.go('#/me'); await tick(900)
+    const card = [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('zap me'))!
+    const reach = card.querySelector('.reach') as HTMLElement; expect(reach.textContent).toContain('1,000'); expect(reach.getAttribute('aria-label')).toContain('1 zap (1,000 sats)')
+    reach.click(); expect(card.querySelector('.reach-who')!.textContent).toContain('Ana · 1,000 sats')
+  })
+})
