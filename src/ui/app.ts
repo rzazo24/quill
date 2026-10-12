@@ -427,7 +427,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       const net = searchNet?.query === q && searchNet.state === 'done' && (!searchNet.kind || searchNet.kind === 'all' || searchNet.kind === searchKind) ? searchNet : null
       if (net && searchShowNet) {
         const people = wantPeople ? net.people : [], notes = wantNotes ? net.notes : []
-        parts.push(h('div', { class: 'search-net-head' }, h('h2', { class: 'section' }, t(lang, 'searchNetFrom')), h('button', { type: 'button', class: 'link', onClick: () => { searchShowNet = false; drawSearch() } }, t(lang, 'searchBackLocal'))))
+        parts.push(h('div', { class: 'search-net-head' }, h('h2', { class: 'section' }, t(lang, 'searchNetFrom')), h('button', { type: 'button', class: 'thread-link search-back', 'aria-label': t(lang, 'searchBackLocal'), title: t(lang, 'searchBackLocal'), onClick: () => { searchShowNet = false; drawSearch() } }, icon('back', 14), t(lang, 'back'))))
         if (people.length) parts.push(peopleCard(t(lang, 'searchPeople'), people, v))
         if (notes.length) parts.push(h('h2', { class: 'section' }, `${t(lang, 'searchNotes')} · ${notes.length}`), renderList(notes, { ...v, seen: undefined })) // not "loaded": back on what was loaded, they do not show
         if (!people.length && !notes.length) parts.push(h('p', { class: 'empty' }, t(lang, 'searchNetNone')))
