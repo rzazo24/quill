@@ -31,8 +31,8 @@ export const FONT_SIZES: readonly FontSize[] = ['small', 'normal', 'large', 'xla
 export const parseFont = (raw: string | null): FontSize => (FONT_SIZES as readonly string[]).includes(raw ?? '') ? (raw as FontSize) : 'normal'
 
 /** What Following shows: the people you follow, or the wider network (the people they follow). */
-export type FeedMode = 'follows' | 'network' | 'popular'
-export const parseFeedMode = (raw: string | null): FeedMode => (raw === 'network' || raw === 'popular' ? raw : 'follows')
+export type FeedMode = 'follows' | 'network' | 'popular' | 'highlights'
+export const parseFeedMode = (raw: string | null): FeedMode => (raw === 'network' || raw === 'popular' || raw === 'highlights' ? raw : 'follows')
 
 /** What the round picture of an account is made of. Nothing is loaded in any of them. */
 export type AvatarStyle = 'initials' | 'robots' | 'pixels' | 'halloween'

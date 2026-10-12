@@ -151,7 +151,7 @@ export function judge(e: Event, ctx: Context, signals: Signals, settings: Settin
   return shown('default')
 }
 
-export interface Judged { event: Event; verdict: Verdict; /** Followed accounts that reposted this note (Following only). */ repostedBy?: string[]; /** Network view: the accounts you follow that follow this note's author. */ followedBy?: string[]; /** Popular view: the accounts you follow that reacted to or reposted this note. */ pickedBy?: string[] }
+export interface Judged { event: Event; verdict: Verdict; /** Followed accounts that reposted this note (Following only). */ repostedBy?: string[]; /** Network view: the accounts you follow that follow this note's author. */ followedBy?: string[]; /** Popular view: the accounts you follow that reacted to or reposted this note. */ pickedBy?: string[]; /** Highlights view: the accounts you follow that replied to or quoted this note. */ talkedBy?: string[] }
 
 /** Judges a whole batch (the signals are computed once). */
 export function judgeAll(events: Event[], ctx: Context, settings: Settings = DEFAULT_SETTINGS): Judged[] {

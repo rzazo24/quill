@@ -8,6 +8,7 @@ import { mentionedKeys, refs, shortNpub } from '../core/refs.js'
 import { isReply } from '../core/thread.js'
 import { judgeAll, tally, type Context, type Judged, type Settings } from '../core/verdict.js'
 import { loadNetwork } from '../data/network.js'
+import { loadHighlights } from '../data/highlights.js'
 import { loadPopular } from '../data/popular.js'
 import { articleInfo, loadArticle } from '../data/article.js'
 import { deletionTemplate } from '../core/deletion.js'
@@ -580,7 +581,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
           if (seenAt === null) loadSeen()
           const opts = activityOptions(); act = await loadActivity(fetcher, ctx(), settings, opts); afterActivity(act, !!opts.verifyKnown)
         }
-        const items = act ? act.notes : route.name === 'me' ? (await Promise.all([loadMine(fetcher, ctx(), settings), loadMyProfile()]))[0] : (feedMode === 'network' ? await loadNetwork(fetcher, session!, ctx(), settings) : feedMode === 'popular' ? await loadPopular(fetcher, ctx(), nowSec(), settings) : await loadFollowing(fetcher, ctx(), settings, { reposts: showReposts, ...(readOutbox ? { outbox: relays, onLate: (e) => topUp(route, alive, e), arrived: () => lateFor(route) } : {}) }))
+        const items = act ? act.notes : route.name === 'me' ? (await Promise.all([loadMine(fetcher, ctx(), settings), loadMyProfile()]))[0] : (feedMode === 'network' ? await loadNetwork(fetcher, session!, ctx(), settings) : feedMode === 'popular' ? await loadPopular(fetcher, ctx(), nowSec(), settings) : feedMode === 'highlights' ? await loadHighlights(fetcher, ctx(), nowSec(), settings, deps.verify) : await loadFollowing(fetcher, ctx(), settings, { reposts: showReposts, ...(readOutbox ? { outbox: relays, onLate: (e) => topUp(route, alive, e), arrived: () => lateFor(route) } : {}) }))
         if (!alive()) return null
         // the first visit to Mentions ever takes the followers of today as its starting point (nothing is "new" yet); later, the ones not seen before are
         const baseline = act ? (loadKnown() ?? new Set(act.followers)) : null
@@ -602,7 +603,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         else {
           // Following: the people you follow, or the network; in the network an empty list says why (no follow lists arrived, or just nothing new)
           const network = route.name === 'following' && feedMode === 'network'
-          const empty = network && !items.length ? h('p', { class: 'empty' }, t(lang, session!.graphInfo.answered === 0 ? 'networkNotLoaded' : 'networkEmpty')) : route.name === 'following' && feedMode === 'popular' && !items.length ? h('p', { class: 'empty' }, t(lang, 'popularEmpty')) : null
+          const empty = network && !items.length ? h('p', { class: 'empty' }, t(lang, session!.graphInfo.answered === 0 ? 'networkNotLoaded' : 'networkEmpty')) : route.name === 'following' && feedMode === 'popular' && !items.length ? h('p', { class: 'empty' }, t(lang, 'popularEmpty')) : route.name === 'following' && feedMode === 'highlights' && !items.length ? h('p', { class: 'empty' }, t(lang, 'highlightsEmpty')) : null
           if (route.name === 'following' && feedMode === 'follows' && items.length) saveFeedCache(items)
           content = h('div', { class: 'stack' }, route.name === 'following' ? renderFeedMode(feedMode, changeFeedMode, view()) : null, renderSummary(tally(items), view(), toggleSettings), empty ?? renderList(items, view()))
         }

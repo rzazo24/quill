@@ -467,7 +467,7 @@ describe('the Network view in Following', () => {
   const net = [...world.filter((e) => !(e.kind === 3 && e.pubkey === friend)), list(friend, 3, [['p', far]]), ev(far, 'a note from far, followed by my friend', { created_at: 1_900_000_000 })]
   it('has a switch Follows | Network on Following only, with Follows open by default', async () => {
     const a = boot({ events: net, stored: { me } }); await tick(150)
-    expect([...mode(a)!.querySelectorAll('button')].map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([['Follows', 'true'], ['Network', 'false'], ['Popular', 'false']])
+    expect([...mode(a)!.querySelectorAll('button')].map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([['Follows', 'true'], ['Network', 'false'], ['Popular', 'false'], ['Highlights', 'false']])
     expect(a.text()).toContain('a post from my friend'); expect(a.text()).not.toContain('a note from far')
     await a.go('#/mentions'); await tick(100); expect(mode(a)).toBeNull(); await a.go('#/me'); await tick(100); expect(mode(a)).toBeNull()
   })

@@ -207,6 +207,7 @@ function card(j: Judged, v: View, extra: Child[] = []): HTMLElement {
     h('div', { class: 'note-main' },
       j.followedBy?.length ? h('p', { class: 'reposted' }, icon('people', 14), j.followedBy.length > 1 ? t(v.lang, 'followedByMany', { who: nameOf(v, j.followedBy[0]!), n: j.followedBy.length - 1 }) : t(v.lang, 'followedByOne', { who: nameOf(v, j.followedBy[0]!) })) : null,
       hits.length ? h('p', { class: 'interest' }, icon('star', 14), t(v.lang, 'interestIn', { topics: hits.join(', ') })) : null,
+      j.talkedBy?.length ? h('p', { class: 'reposted' }, icon('thread', 14), j.talkedBy.length > 1 ? t(v.lang, 'talkedByMany', { who: nameOf(v, j.talkedBy[0]!), n: j.talkedBy.length - 1 }) : t(v.lang, 'talkedByOne', { who: nameOf(v, j.talkedBy[0]!) })) : null,
       j.pickedBy?.length ? h('p', { class: 'reposted' }, icon('people', 14), j.pickedBy.length > 1 ? t(v.lang, 'pickedByMany', { who: nameOf(v, j.pickedBy[0]!), n: j.pickedBy.length - 1 }) : t(v.lang, 'pickedByOne', { who: nameOf(v, j.pickedBy[0]!) })) : null,
       j.repostedBy?.length ? h('p', { class: 'reposted' }, icon('repost', 14), j.repostedBy.length > 1 ? t(v.lang, 'repostedMany', { who: nameOf(v, j.repostedBy[0]!), n: j.repostedBy.length - 1 }) : t(v.lang, 'repostedOne', { who: nameOf(v, j.repostedBy[0]!) })) : null,
       h('header', {},
@@ -400,7 +401,7 @@ export function renderPeople(people: Person[], v: View, o: { title: string; coun
 
 /** Following can show the people you follow or the wider network; two buttons, the open one is lit. */
 export function renderFeedMode(mode: FeedMode, onChange: (m: FeedMode) => void, v: View): HTMLElement {
-  return h('div', { class: 'seg feedmode', role: 'group', 'aria-label': t(v.lang, 'feedModeTitle') }, ...(['follows', 'network', 'popular'] as const).map((m) =>
+  return h('div', { class: 'seg feedmode', role: 'group', 'aria-label': t(v.lang, 'feedModeTitle') }, ...(['follows', 'network', 'popular', 'highlights'] as const).map((m) =>
     h('button', { type: 'button', 'aria-pressed': String(mode === m), onClick: () => { if (mode !== m) onChange(m) } }, t(v.lang, `feedMode_${m}` as Parameters<typeof t>[1]))))
 }
 

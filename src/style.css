@@ -225,7 +225,8 @@ button.icon.on { color: var(--accent); border-color: var(--accent); background: 
 .prefs .seg + .check { margin-top: 12px }
 
 /* Following: Follows | Network */
-.seg.feedmode { display: flex; gap: 8px } .seg.feedmode button { flex: 1; max-width: 200px }
+.seg.feedmode { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; max-width: 800px } .seg.feedmode button { min-width: 0; white-space: nowrap }
+@media (max-width: 560px) { .seg.feedmode { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px } .seg.feedmode button { min-height: 40px; padding-top: 6px; padding-bottom: 6px } }
 
 /* "Loading…" is read out by screen readers but not drawn: it only made the page flicker */
 .top .status.loading { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; pointer-events: none }
