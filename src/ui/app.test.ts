@@ -1161,3 +1161,12 @@ describe('the npub on an account page', () => {
     b.click(); expect(copied).toEqual([nip19.npubEncode(friend)]); expect(b.textContent).toBe('Copied')
   })
 })
+
+describe('your own npub in Me', () => {
+  it('a tap copies it too', async () => {
+    const copied: string[] = []
+    const a = boot({ events: world, stored: { me }, copy: (x: string) => copied.push(x) }); await tick(200)
+    await a.go('#/me'); await tick(300)
+    ;(a.root.querySelector('.account button.npub-copy') as HTMLButtonElement).click(); expect(copied).toEqual([nip19.npubEncode(me)])
+  })
+})

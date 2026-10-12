@@ -279,7 +279,7 @@ export function renderRepostGroups(groups: ReactionGroup[], v: View): HTMLElemen
 /** The head of an account's page: who it is, as text. */
 /** `follow`: the Follow / Unfollow button (only offered with a signer connected, never for yourself). */
 /** The account's npub, short; a tap copies the whole of it and says so for a moment. Without a way to copy, just the text. */
-function npubEl(pubkey: string, v: View): HTMLElement {
+export function npubEl(pubkey: string, v: View): HTMLElement {
   const short = shortNpub(pubkey)
   if (!v.copy) return h('div', { class: 'meta' }, short)
   const b = h('button', { type: 'button', class: 'npub-copy meta', title: t(v.lang, 'copyNpub'), 'aria-label': `${t(v.lang, 'copyNpub')}: ${short}`, onClick: () => { v.copy!(nip19.npubEncode(pubkey)); b.textContent = t(v.lang, 'copied'); setTimeout(() => { b.textContent = short }, 1200) } }, short)
