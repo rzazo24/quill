@@ -364,7 +364,7 @@ export function renderArticle(e: Judged['event'], info: ArticleInfo, verdict: Ju
 
 /** Notes | Replies on an account's page. */
 export function renderProfileMode(mode: 'notes' | 'replies', onChange: (m: 'notes' | 'replies') => void, v: View): HTMLElement {
-  return h('div', { class: 'seg feedmode', role: 'group', 'aria-label': t(v.lang, 'feedModeTitle') }, ...(['notes', 'replies'] as const).map((m) =>
+  return h('div', { class: 'seg feedmode two', role: 'group', 'aria-label': t(v.lang, 'feedModeTitle') }, ...(['notes', 'replies'] as const).map((m) =>
     h('button', { type: 'button', 'aria-pressed': String(mode === m), onClick: () => { if (mode !== m) onChange(m) } }, t(v.lang, m === 'notes' ? 'profileNotes' : 'profileReplies'))))
 }
 
@@ -401,8 +401,9 @@ export function renderPeople(people: Person[], v: View, o: { title: string; coun
 
 /** Following can show the people you follow or the wider network; two buttons, the open one is lit. */
 export function renderFeedMode(mode: FeedMode, onChange: (m: FeedMode) => void, v: View): HTMLElement {
-  return h('div', { class: 'seg feedmode', role: 'group', 'aria-label': t(v.lang, 'feedModeTitle') }, ...(['follows', 'network', 'popular', 'highlights'] as const).map((m) =>
-    h('button', { type: 'button', 'aria-pressed': String(mode === m), onClick: () => { if (mode !== m) onChange(m) } }, t(v.lang, `feedMode_${m}` as Parameters<typeof t>[1]))))
+  // the box measures the room it has (a phone, or a narrow column on a wide screen): four in a row when they fit, two by two when they do not
+  return h('div', { class: 'feedmode-box' }, h('div', { class: 'seg feedmode', role: 'group', 'aria-label': t(v.lang, 'feedModeTitle') }, ...(['follows', 'network', 'popular', 'highlights'] as const).map((m) =>
+    h('button', { type: 'button', 'aria-pressed': String(mode === m), onClick: () => { if (mode !== m) onChange(m) } }, t(v.lang, `feedMode_${m}` as Parameters<typeof t>[1])))))
 }
 
 /** The Help page: sections that fold, built from text only. What is open is kept by the caller, because the page is rebuilt on every redraw. */

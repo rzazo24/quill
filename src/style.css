@@ -226,7 +226,8 @@ button.icon.on { color: var(--accent); border-color: var(--accent); background: 
 
 /* Following: Follows | Network */
 .seg.feedmode { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; max-width: 800px } .seg.feedmode button { min-width: 0; white-space: nowrap; padding-left: 6px; padding-right: 6px; text-align: center }
-@media (max-width: 560px) { .seg.feedmode { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px } .seg.feedmode button { min-height: 40px; padding-top: 6px; padding-bottom: 6px } }
+.feedmode-box { container-type: inline-size }
+@container (max-width: 520px) { .seg.feedmode { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px } .seg.feedmode button { min-height: 40px; padding-top: 6px; padding-bottom: 6px } }
 
 /* "Loading…" is read out by screen readers but not drawn: it only made the page flicker */
 .top .status.loading { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; pointer-events: none }
@@ -427,3 +428,4 @@ textarea.interests { width: 100%; box-sizing: border-box; font: inherit; padding
 .late-wrap { position: sticky; top: 8px; height: 0; z-index: 5; display: flex; justify-content: center; align-items: flex-start; overflow: visible; pointer-events: none }
 .late-notes { pointer-events: auto; min-height: 0; height: auto; line-height: 1.3; padding: 7px 16px; border-radius: 999px; font-size: .9rem; white-space: nowrap; background: var(--accent); color: var(--bg, #0b0f16); border: none; box-shadow: 0 2px 12px rgba(0,0,0,.35) }
 .avatar.photo { overflow: hidden; padding: 0; background: var(--border) } .avatar.photo img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; display: block }
+.seg.feedmode.two { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 420px }
