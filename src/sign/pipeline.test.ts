@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { ev, pk } from '../core/testutil.js'
 import type { Publisher } from '../net/publisher.js'
 import { PipelineError, signAndPublish, type SignerApi, type Step } from './pipeline.js'
-import { MAX_SIGNATURES_PER_HOUR } from './policy.js'
+import { MAX_REACTIONS_PER_HOUR, MAX_SIGNATURES_PER_HOUR } from './policy.js'
 
 const NOW = 1_700_000_000_000
 const note = { kind: 1, content: 'hi', tags: [] as string[][], created_at: NOW / 1000 }
@@ -60,6 +60,17 @@ describe('signAndPublish', () => {
     expect(calls).toEqual([])
     store.m.set('signed', JSON.stringify(Array.from({ length: MAX_SIGNATURES_PER_HOUR }, () => NOW / 1000 - 4000))) // an hour ago: free again
     await run({ signer, publisher: publisher(), kv: store.kv })
+    expect(JSON.parse(store.m.get('signed')!)).toHaveLength(1)
+  })
+  it('reactions have their own allowance: twenty other signatures do not stop a like, and forty likes do not stop a note', async () => {
+    const like = { kind: 7, content: '+', tags: [['e', 'a'.repeat(64)], ['p', 'b'.repeat(64)]], created_at: NOW / 1000 }
+    const store = mem(); store.m.set('signed', JSON.stringify(Array.from({ length: MAX_SIGNATURES_PER_HOUR }, () => NOW / 1000 - 60)))
+    const { signer } = fakeSigner()
+    await signAndPublish({ now: () => NOW, signer, publisher: publisher(), kv: store.kv }, like) // the general allowance is spent, a like still goes
+    expect(JSON.parse(store.m.get('signedReactions')!)).toHaveLength(1)
+    store.m.set('signed', '[]'); store.m.set('signedReactions', JSON.stringify(Array.from({ length: MAX_REACTIONS_PER_HOUR }, () => NOW / 1000 - 60)))
+    await expect(signAndPublish({ now: () => NOW, signer, publisher: publisher(), kv: store.kv }, like)).rejects.toMatchObject({ code: 'rate' })
+    await run({ signer, publisher: publisher(), kv: store.kv }) // but a note does
     expect(JSON.parse(store.m.get('signed')!)).toHaveLength(1)
   })
   it('junk in storage does not break it', async () => {

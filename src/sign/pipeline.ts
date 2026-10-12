@@ -3,7 +3,7 @@
 import type { Event } from 'nostr-tools'
 import type { Publisher, Outcome } from '../net/publisher.js'
 import { safeGet, safeSet, type KV } from '../ui/store.js'
-import { canSign, recentSignatures, type Template } from './policy.js'
+import { allowanceOf, canSign, recentSignatures, type Template } from './policy.js'
 import type { Signer } from './signer.js'
 
 export type SignerApi = Pick<Signer, 'state' | 'pubkey' | 'lastError' | 'authUrl' | 'onChange' | 'startConnect' | 'connectBunker' | 'resume' | 'sign' | 'disconnect' | 'hasSavedSession'>
@@ -22,12 +22,13 @@ export class PipelineError extends Error {
 export interface PipelineDeps { signer: SignerApi; publisher: Publisher; kv?: KV; now?: () => number; signTimeoutMs?: number; signal?: AbortSignal; followBase?: Event | null; profileBase?: Event; deleteTarget?: Event }
 export interface Published { event: Event; outcomes: Record<string, Outcome> }
 
-const stampsOf = (kv: KV | undefined): number[] => { try { const v = JSON.parse(safeGet(kv, 'signed') ?? '[]') as unknown; return Array.isArray(v) ? v.filter((x): x is number => typeof x === 'number') : [] } catch { return [] } }
+const stampsOf = (kv: KV | undefined, key = 'signed'): number[] => { try { const v = JSON.parse(safeGet(kv, key) ?? '[]') as unknown; return Array.isArray(v) ? v.filter((x): x is number => typeof x === 'number') : [] } catch { return [] } }
 
 export async function signAndPublish(d: PipelineDeps, t: Template, onStep: (s: Step) => void = () => {}): Promise<Published> {
   const nowSec = () => Math.floor((d.now ?? Date.now)() / 1000)
   if (d.signer.state !== 'connected') throw new PipelineError('no-signer', 'no signer is connected')
-  if (!canSign(stampsOf(d.kv), nowSec())) throw new PipelineError('rate', 'too many signatures in the last hour')
+  const allow = allowanceOf(t.kind)
+  if (!canSign(stampsOf(d.kv, allow.key), nowSec(), allow.max)) throw new PipelineError('rate', 'too many signatures in the last hour')
   // One request, one notification: no "are you awake?" check first. A signer set to approve by itself may answer even from the background, which a
   // preliminary ping would never find out; a sleeping one just leaves the request waiting (with a Cancel button) until it is opened or the time runs out.
   onStep('waiting')
@@ -36,7 +37,7 @@ export async function signAndPublish(d: PipelineDeps, t: Template, onStep: (s: S
     const msg = e instanceof Error ? e.message : String(e)
     throw new PipelineError(d.signal?.aborted || msg === 'cancelled' ? 'cancelled' : 'not-signed', msg)
   }
-  safeSet(d.kv, 'signed', JSON.stringify([...recentSignatures(stampsOf(d.kv), nowSec()), nowSec()])) // counted when a signature was made, published or not
+  safeSet(d.kv, allow.key, JSON.stringify([...recentSignatures(stampsOf(d.kv, allow.key), nowSec()), nowSec()])) // counted when a signature was made, published or not
   onStep('sending')
   return { event, outcomes: await d.publisher.publish(event) }
 }
@@ -45,12 +46,13 @@ export async function signAndPublish(d: PipelineDeps, t: Template, onStep: (s: S
 export async function signOnly(d: Pick<PipelineDeps, 'signer' | 'kv' | 'now' | 'signTimeoutMs' | 'signal'>, t: Template): Promise<Event> {
   const nowSec = () => Math.floor((d.now ?? Date.now)() / 1000)
   if (d.signer.state !== 'connected') throw new PipelineError('no-signer', 'no signer is connected')
-  if (!canSign(stampsOf(d.kv), nowSec())) throw new PipelineError('rate', 'too many signatures in the last hour')
+  const allow = allowanceOf(t.kind)
+  if (!canSign(stampsOf(d.kv, allow.key), nowSec(), allow.max)) throw new PipelineError('rate', 'too many signatures in the last hour')
   let event: Event
   try { ({ event } = await d.signer.sign(t, d.signTimeoutMs ?? SIGN_WAIT_MS, d.signal)) } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     throw new PipelineError(d.signal?.aborted || msg === 'cancelled' ? 'cancelled' : 'not-signed', msg)
   }
-  safeSet(d.kv, 'signed', JSON.stringify([...recentSignatures(stampsOf(d.kv), nowSec()), nowSec()]))
+  safeSet(d.kv, allow.key, JSON.stringify([...recentSignatures(stampsOf(d.kv, allow.key), nowSec()), nowSec()]))
   return event
 }

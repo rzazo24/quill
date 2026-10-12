@@ -15,6 +15,8 @@ export const RELAY_LIST_KIND = 10002
 export const ALLOWED_KINDS = [PROFILE_KIND, 1, FOLLOW_LIST_KIND, DELETION_KIND, REPOST_KIND, 7, MUTE_LIST_KIND, RELAY_LIST_KIND, ZAP_REQUEST_KIND] as const
 export const MAX_NOTE_CHARS = 1000
 export const MAX_SIGNATURES_PER_HOUR = 20
+/** Reactions have their own allowance: a run of likes never stops a note, and a like is the least that can be signed. */
+export const MAX_REACTIONS_PER_HOUR = 40
 
 export interface Template { kind: number; content: string; tags: string[][]; created_at: number }
 
@@ -70,7 +72,9 @@ export function recentSignatures(stamps: number[], nowSec: number): number[] {
   return stamps.filter((s) => Number.isFinite(s) && nowSec - s < 3600 && s <= nowSec + 60)
 }
 
-export const canSign = (stamps: number[], nowSec: number): boolean => recentSignatures(stamps, nowSec).length < MAX_SIGNATURES_PER_HOUR
+export const canSign = (stamps: number[], nowSec: number, max = MAX_SIGNATURES_PER_HOUR): boolean => recentSignatures(stamps, nowSec).length < max
+/** Where a template's signature is counted, and how many an hour that count allows. */
+export const allowanceOf = (kind: number): { key: string; max: number } => (kind === 7 ? { key: 'signedReactions', max: MAX_REACTIONS_PER_HOUR } : { key: 'signed', max: MAX_SIGNATURES_PER_HOUR })
 
 /** The same tags, whatever order the signer returns them in? No: order is part of the event. Exact comparison. */
 export const sameTags = (a: string[][], b: string[][]): boolean => a.length === b.length && a.every((t, i) => t.length === b[i]!.length && t.every((v, j) => v === b[i]![j]))
