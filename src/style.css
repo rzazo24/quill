@@ -406,3 +406,4 @@ textarea.interests { width: 100%; box-sizing: border-box; font: inherit; padding
 /* a draft came back into the composer */
 .draft-line { margin: 0 0 6px; display: flex; align-items: center; gap: 8px } .draft-line button.link { min-height: 0; padding: 0 }
 .trust-pts.minus { color: var(--red) }
+.search-form .search-kind { margin-left: 30px; gap: 6px } .search-kind button { flex: none; min-height: 0; padding: 3px 12px; font-size: .85rem; line-height: 1.5; border-radius: 999px }

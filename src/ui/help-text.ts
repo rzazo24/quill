@@ -47,7 +47,7 @@ The summary at the top says how many notes are hidden and why. Every rule can be
 • After signing, the result is shown relay by relay, with a retry for the ones that failed that needs no new signature.` },
   { id: 'marks', title: 'What you already did', body: `• A reaction you already gave is lit under the note (also ones you gave from other apps). Tapping it again does nothing: it would only be a duplicate.
 • A note you already replied to says Replied, with a tick.` },
-  { id: 'search', title: 'Search', body: `The round button with a magnifying glass, bottom left, opens the search (on a wide screen it is in the header, and the search takes the place of the Me column). What it looks in depends on what you type:
+  { id: 'search', title: 'Search', body: `The round button with a magnifying glass, bottom left, opens the search (on a wide screen it is in the header, and the search takes the place of the Me column). Under the box, All | People | Notes chooses what to show (and what a network search asks for). What it looks in depends on what you type:
 
 • Plain text (“relay”): only what Quill has already loaded in this visit — the notes it showed you (feeds, mentions, your notes, threads) and the names it knows. It happens on your device as you type; nothing is sent anywhere. So it finds what you have seen, not all of Nostr.
 • A single #tag (“#nostr”): what is loaded, and your own relays are also asked for the latest notes with that tag, from anyone (they already see what you read). A #tag with more words only looks in what is loaded.
@@ -124,7 +124,7 @@ El resumen de arriba dice cuántas notas se ocultan y por qué. Cada regla se pu
 • Tras firmar, el resultado se muestra relé por relé, con un reintento para los que fallaron que no necesita una firma nueva.` },
   { id: 'marks', title: 'Lo que ya has hecho', body: `• Una reacción que ya diste queda encendida bajo la nota (también las que diste desde otras apps). Tocarla otra vez no hace nada: solo sería un duplicado.
 • Una nota que ya respondiste dice Respondida, con un check.` },
-  { id: 'search', title: 'Buscar', body: `El botón redondo con una lupa, abajo a la izquierda, abre el buscador (en pantalla ancha está en la cabecera, y el buscador ocupa el sitio de la columna Yo). Dónde busca depende de lo que escribas:
+  { id: 'search', title: 'Buscar', body: `El botón redondo con una lupa, abajo a la izquierda, abre el buscador (en pantalla ancha está en la cabecera, y el buscador ocupa el sitio de la columna Yo). Bajo la caja, Todo | Personas | Notas elige qué mostrar (y por qué pregunta una búsqueda en la red). Dónde busca depende de lo que escribas:
 
 • Texto normal («relay»): solo en lo que Quill ya ha cargado en esta visita — las notas que te ha enseñado (feeds, menciones, tus notas, hilos) y los nombres que conoce. Ocurre en tu dispositivo mientras escribes; no se envía nada. Así que encuentra lo que has visto, no todo Nostr.
 • Una sola #etiqueta («#nostr»): en lo cargado, y además se pregunta a tus relés por las últimas notas con esa etiqueta, de cualquiera (ya ven lo que lees). Una #etiqueta con más palabras solo busca en lo cargado.

@@ -1262,3 +1262,20 @@ describe('zaps under your notes', () => {
     reach.click(); expect(card.querySelector('.reach-who')!.textContent).toContain('Ana · 1,000 sats')
   })
 })
+
+describe('searching only people or only notes', () => {
+  it('All | People | Notes under the box limits the results, and the network search asks only for that', async () => {
+    const a = boot({ events: [...world, ev(friend, 'about quillish things', { created_at: 8000 }), ev(friend, JSON.stringify({ name: 'Quillfan' }), { kind: 0 })], stored: { me }, searchable: [ev(far, 'a far quillish note', { created_at: 7000 }), ev(far, JSON.stringify({ name: 'Quill far' }), { kind: 0 })] }); await tick(300)
+    await a.go('#/search'); await tick(50)
+    const box = a.root.querySelector('input.search-box') as HTMLInputElement; box.value = 'quill'; box.dispatchEvent(new Event('input')); await tick(20)
+    const kind = (label: string) => [...a.root.querySelectorAll('.search-kind button')].find((b) => b.textContent === label) as HTMLButtonElement
+    expect(kind('All').getAttribute('aria-pressed')).toBe('true'); expect(a.root.querySelector('.search-people')).not.toBeNull(); expect(a.root.querySelector('.search-results article.note')).not.toBeNull()
+    kind('People').click(); await tick(20)
+    expect(a.root.querySelector('.search-results article.note')).toBeNull(); expect(a.root.querySelector('.search-people')!.textContent).toContain('Quillfan')
+    kind('Notes').click(); await tick(20)
+    expect(a.root.querySelector('.search-people')).toBeNull(); expect(a.root.querySelector('.search-results article.note')!.textContent).toContain('about quillish things')
+    ;([...a.root.querySelectorAll('.search-net button')].find((b) => b.textContent!.includes('Search the network too')) as HTMLButtonElement).click(); await tick(200)
+    expect(a.text()).toContain('a far quillish note'); expect(a.text()).not.toContain('Quill far') // notes only: no people asked for
+    expect(document.activeElement === box || box.isConnected).toBe(true)
+  })
+})

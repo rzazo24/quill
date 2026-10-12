@@ -13,7 +13,7 @@ import { articleInfo, loadArticle } from '../data/article.js'
 import { deletionTemplate } from '../core/deletion.js'
 import { aboutOf, aboutTemplate, MAX_ABOUT_CHARS, PROFILE_KIND } from '../core/profileedit.js'
 import { loadTrust, type TrustScore } from '../data/trust.js'
-import { fold, matchNotes, matchPeople, MIN_QUERY, parseTarget, searchNetwork, searchTag, SEARCH_RELAYS, tagOf, type Found } from '../data/search.js'
+import { fold, matchNotes, matchPeople, MIN_QUERY, parseTarget, searchNetwork, searchTag, SEARCH_RELAYS, tagOf, type Found, type SearchKind } from '../data/search.js'
 import { loadProfile, type ProfileInfo } from '../data/profile.js'
 import { followPubkeys, followTemplate, listKindOf, MUTE_LIST_KIND, type FollowAction } from '../core/follow.js'
 import { addBackup, checkBase, loadFollowList, nextKnown, parseBackups } from '../data/followlist.js'
@@ -368,7 +368,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     while (knownNotes.size > 5000) knownNotes.delete(knownNotes.keys().next().value!)
   }
   let searchQuery = ''
-  let searchNet: { query: string; state: 'loading' } | { query: string; state: 'failed' } | { query: string; state: 'done'; notes: Judged[]; people: Found[] } | null = null
+  let searchKind: SearchKind = 'all' // All | People | Notes, under the box
+  let searchNet: { query: string; state: 'loading' } | { query: string; state: 'failed' } | { query: string; state: 'done'; notes: Judged[]; people: Found[]; kind?: SearchKind } | null = null
   let searchInput: HTMLInputElement | null = null
   // a single #tag is also asked of the reader's own relays (they all filter by tag), a moment after typing stops
   let tagSearch: { tag: string; state: 'loading' | 'failed' | 'done'; notes: Judged[] } | null = null
@@ -399,11 +400,19 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     searchInput.addEventListener('input', () => { searchQuery = searchInput!.value; drawSearch() })
     searchResults = h('div', { class: 'stack search-results' })
     const form = h('form', { class: 'card search-form', role: 'search', onSubmit: (e: Event) => { e.preventDefault(); const target = parseTarget(searchQuery); if (target) deps.setHash(target.kind === 'user' ? `#/user/${target.pubkey}` : `#/note/${target.id}`); else searchInput?.blur() } },
-      h('label', { class: 'search-row' }, icon('search', 20), searchInput), h('p', { class: 'meta search-note' }, t(lang, 'searchHint')), searchTip = h('p', { class: 'meta search-note', hidden: true }, t(lang, 'searchType')))
+      h('label', { class: 'search-row' }, icon('search', 20), searchInput), kindSwitch(), h('p', { class: 'meta search-note' }, t(lang, 'searchHint')), searchTip = h('p', { class: 'meta search-note', hidden: true }, t(lang, 'searchType')))
     searchPageEl = h('div', { class: 'stack search' }, form, searchResults)
     drawSearch()
     setTimeout(() => { if (searchInput?.isConnected && !searchQuery) searchInput.focus() }, 0) // opened to type: the box is ready
     return searchPageEl
+  }
+  /** All | People | Notes: what the results (and a network search) are about. Its buttons are lit in place: the box keeps its cursor. */
+  function kindSwitch(): HTMLElement {
+    const box = h('div', { class: 'seg search-kind', role: 'group', 'aria-label': t(lang, 'searchKind') })
+    const paint = () => { for (const b of box.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.kind === searchKind)) }
+    for (const k of ['all', 'people', 'notes'] as const) box.append(h('button', { type: 'button', 'data-kind': k, onClick: () => { searchKind = k; paint(); drawSearch() } }, t(lang, `searchKind_${k}` as Key)))
+    paint()
+    return box
   }
   function drawSearch(): void {
     if (!searchResults || !session) return
@@ -412,9 +421,10 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (target) parts.push(h('p', {}, h('a', { class: 'button primary', href: target.kind === 'user' ? `#/user/${target.pubkey}` : `#/note/${target.id}` }, t(lang, target.kind === 'user' ? 'searchOpenAccount' : 'searchOpenNote'))))
     else if (q.length < MIN_QUERY) { /* the tip under the box says what to type */ }
     else {
-      const tag = tagOf(q)
+      const wantPeople = searchKind !== 'notes', wantNotes = searchKind !== 'people'
+      const tag = wantNotes ? tagOf(q) : null
       if (tag) askTag(tag); else { clearTimeout(tagTimer); tagSearch = null }
-      const people = matchPeople(names, q, ctx()), local = matchNotes(knownNotes.values(), q)
+      const people = wantPeople ? matchPeople(names, q, ctx()) : [], local = wantNotes ? matchNotes(knownNotes.values(), q) : []
       const fromTag = tagSearch?.tag === tag && tagSearch.state === 'done' ? tagSearch.notes.filter((j) => !local.some((l) => l.event.id === j.event.id)) : []
       const notes = [...local, ...fromTag].sort((a, b) => b.event.created_at - a.event.created_at)
       if (tag && tagSearch?.tag === tag && tagSearch.state !== 'done') parts.push(h('p', { class: tagSearch.state === 'loading' ? 'status loading' : 'meta', role: 'status' }, h('span', {}, t(lang, tagSearch.state === 'loading' ? 'searchTagLoading' : 'searchTagFailed', { tag: '#' + tag }))))
@@ -432,11 +442,11 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
   function netSection(q: string, v: View, havePeople: Set<string>, haveNotes: Set<string>): HTMLElement | null {
     if (!deps.searchFetcher) return null
-    const net = searchNet?.query === q ? searchNet : null
+    const net = searchNet?.query === q && (searchNet.state !== 'done' || !searchNet.kind || searchNet.kind === 'all' || searchNet.kind === searchKind) ? searchNet : null // asked for people only, the notes were not asked for
     if (!net) return h('div', { class: 'search-net' }, h('button', { type: 'button', onClick: () => void runNetSearch(q) }, icon('search', 16), t(lang, 'searchNet')), h('p', { class: 'meta' }, t(lang, 'searchNetHint', { relays: SEARCH_RELAYS.map((r) => r.replace(/^wss:\/\//, '')).join(' · ') })))
     if (net.state === 'loading') return h('p', { class: 'status loading', role: 'status' }, h('span', {}, t(lang, 'searchNetLoading')))
     if (net.state === 'failed') return h('div', { class: 'search-net' }, h('p', { class: 'error' }, t(lang, 'searchNetFailed')), h('button', { type: 'button', onClick: () => void runNetSearch(q) }, t(lang, 'searchRetry')))
-    const people = net.people.filter((p) => !havePeople.has(p.pubkey)), notes = net.notes.filter((n) => !haveNotes.has(n.event.id))
+    const people = searchKind === 'notes' ? [] : net.people.filter((p) => !havePeople.has(p.pubkey)), notes = searchKind === 'people' ? [] : net.notes.filter((n) => !haveNotes.has(n.event.id))
     return h('div', { class: 'stack search-net' }, h('h2', { class: 'section' }, t(lang, 'searchNetFrom')),
       people.length ? peopleCard(t(lang, 'searchPeople'), people, v) : null,
       notes.length ? h('h2', { class: 'section' }, `${t(lang, 'searchNotes')} · ${notes.length}`) : null, notes.length ? renderList(notes, v) : null,
@@ -447,12 +457,13 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const who = me
     searchNet = { query: q, state: 'loading' }; drawSearch()
     try {
-      const found = await searchNetwork(deps.searchFetcher, q, ctx(), settings)
+      const kind = searchKind
+      const found = await searchNetwork(deps.searchFetcher, q, ctx(), settings, kind)
       if (me !== who) return
       for (const p of found.people) if (!names.has(p.pubkey)) names.set(p.pubkey, p.name)
       await nameThem(found.notes.slice(0, PAGE)).catch(() => {})
       if (me !== who || searchNet?.query !== q) return
-      searchNet = { query: q, state: 'done', notes: found.notes, people: found.people }
+      searchNet = { query: q, state: 'done', notes: found.notes, people: found.people, kind }
     } catch { if (searchNet?.query === q) searchNet = { query: q, state: 'failed' } }
     drawSearch()
   }

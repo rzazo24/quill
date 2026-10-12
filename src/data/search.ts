@@ -59,8 +59,10 @@ export const relationOf = (pubkey: string, ctx: Context): Relation => (ctx.follo
 export const sortPeople = (list: Found[]): Found[] => list.sort((a, b) => RANK[a.relation] - RANK[b.relation] || a.name.localeCompare(b.name))
 
 /** Asks the search relays. Notes are judged like any other (the "outside your network" rule off: searching is reaching out); people come from their profiles. */
-export async function searchNetwork(f: Fetcher, query: string, ctx: Context, settings: Settings): Promise<{ notes: Judged[]; people: Found[] }> {
-  const [notes, profiles] = await Promise.all([f.query({ kinds: [1], search: query, limit: 40 } as never), f.query({ kinds: [0], search: query.replace(/^@/, ''), limit: 20 } as never)])
+export type SearchKind = 'all' | 'people' | 'notes'
+export async function searchNetwork(f: Fetcher, query: string, ctx: Context, settings: Settings, kind: SearchKind = 'all'): Promise<{ notes: Judged[]; people: Found[] }> {
+  // only what was asked for: a people search does not ask the search relays for notes, and the other way round
+  const [notes, profiles] = await Promise.all([kind === 'people' ? Promise.resolve([]) : f.query({ kinds: [1], search: query, limit: 40 } as never), kind === 'notes' ? Promise.resolve([]) : f.query({ kinds: [0], search: query.replace(/^@/, ''), limit: 20 } as never)])
   const here: Settings = { ...settings, rules: { ...settings.rules, outsideNetwork: false } }
   const seen = new Set<string>()
   const judged = judgeAll(notes.filter((e) => e.kind === 1 && !seen.has(e.id) && seen.add(e.id)), ctx, here).sort((a, b) => b.event.created_at - a.event.created_at)
