@@ -785,3 +785,38 @@ describe('deleting your own note', () => {
     const items = menu(card); expect(items).not.toContain('Delete note'); expect(items.some((x) => x!.startsWith('Mute'))).toBe(true)
   })
 })
+
+describe('mentioning someone while writing', () => {
+  it('"@an" offers the accounts named like that (people you follow first); a tap puts nostr:npub… in its place, and the note tags them', async () => {
+    const sg = fakeSigner(); const a = boot({ events: [...world, ev(friend, JSON.stringify({ name: 'Ana' }), { kind: 0 }), ev(other, JSON.stringify({ name: 'Andrés' }), { kind: 0 }), ev(friend, 'hi', { created_at: 8000 }), ev(other, 'yo', { created_at: 8100 })], signer: sg, stored: { me, settings: JSON.stringify({ rules: { repeatedText: true, burst: true, linkOnly: true, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 }) } }); await tick(100); await connectClave(a, sg); await tick(400)
+    a.root.querySelector<HTMLElement>('button.fab')!.click(); await tick(60)
+    const area = a.root.querySelector('.composer textarea') as HTMLTextAreaElement
+    area.value = 'hello @an'; area.selectionStart = area.selectionEnd = area.value.length; area.dispatchEvent(new Event('input'))
+    const box = a.root.querySelector('.mention-suggest') as HTMLElement; expect(box.hidden).toBe(false)
+    const options = [...box.querySelectorAll('button')]; expect(options.map((b) => b.querySelector('.mention-name')!.textContent)).toEqual(['Ana']); expect(options[0]!.textContent).toContain('you follow') // only names Quill already knows
+    options[0]!.click()
+    expect(area.value).toBe(`hello nostr:${nip19.npubEncode(friend)} `); expect(box.hidden).toBe(true)
+    area.value += 'how are you?'; area.dispatchEvent(new Event('input'))
+    await click(a.root, 'Review'); await tick(60); await click(a.root, 'Publish'); await tick(400)
+    expect(a.pub.sent[0]!.event.tags).toContainEqual(['p', friend])
+  })
+  it('nothing is offered for a plain @ or an email address', async () => {
+    const sg = fakeSigner(); const a = boot({ events: [...world, ev(friend, JSON.stringify({ name: 'Ana' }), { kind: 0 })], signer: sg, stored: { me } }); await tick(100); await connectClave(a, sg); await tick(300)
+    a.root.querySelector<HTMLElement>('button.fab')!.click(); await tick(60)
+    const area = a.root.querySelector('.composer textarea') as HTMLTextAreaElement
+    for (const text of ['write to me@ana', '@']) { area.value = text; area.selectionStart = area.selectionEnd = text.length; area.dispatchEvent(new Event('input')); expect((a.root.querySelector('.mention-suggest') as HTMLElement).hidden, text).toBe(true) }
+  })
+})
+
+describe('mention suggestions match the start of a word', () => {
+  it('"@der" offers Derek, not Wilder', async () => {
+    const d = pk('d'), w = pk('e')
+    const sg = fakeSigner(); const a = boot({ events: [list(me, 3, [['p', d], ['p', w]]), ev(d, JSON.stringify({ name: 'Derek Ross' }), { kind: 0 }), ev(w, JSON.stringify({ name: 'Wilder' }), { kind: 0 }), ev(d, 'x', { created_at: 8000 }), ev(w, 'y', { created_at: 8100 })], signer: sg, stored: { me } }); await tick(100); await connectClave(a, sg); await tick(400)
+    a.root.querySelector<HTMLElement>('button.fab')!.click(); await tick(300)
+    const area = a.root.querySelector('.composer textarea') as HTMLTextAreaElement
+    area.value = '@der'; area.selectionStart = area.selectionEnd = 4; area.dispatchEvent(new Event('input'))
+    expect([...a.root.querySelectorAll('.mention-suggest .mention-name')].map((x) => x.textContent)).toEqual(['Derek Ross'])
+    area.value = '@ros'; area.selectionStart = area.selectionEnd = 4; area.dispatchEvent(new Event('input'))
+    expect([...a.root.querySelectorAll('.mention-suggest .mention-name')].map((x) => x.textContent)).toEqual(['Derek Ross']) // any word of the name
+  })
+})

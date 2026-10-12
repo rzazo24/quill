@@ -12,7 +12,7 @@ import { MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
 import { t } from './i18n.js'
 import { icon } from './icons.js'
-import { nameOf, type View } from './render.js'
+import { avatarEl, nameOf, type View } from './render.js'
 import { normReaction, type Mine } from '../data/engaged.js'
 
 export const REACTIONS = ['+', '❤️', '🤙', '😂', '🙏', '🔥', '😮', '😢', '🎉', '💯']
@@ -134,6 +134,27 @@ function renderComposer(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElemen
   const area = h('textarea', { rows: '4', placeholder: t(v.lang, c.mode === 'quote' ? 'quotePlaceholder' : 'newNote'), 'aria-label': t(v.lang, c.mode === 'reply' ? 'reply' : c.mode === 'quote' ? 'quoteButton' : 'newNote'), onInput: (e: Event) => { hd.edit((e.target as HTMLTextAreaElement).value); count.textContent = t(v.lang, 'chars', { n: [...(e.target as HTMLTextAreaElement).value].length, max }) } })
   area.value = c.text
   const count = h('small', {}, t(v.lang, 'chars', { n: [...c.text].length, max }))
+  // "@ana": the accounts whose name starts like that (people you follow first) are offered under the box; a tap puts the standard reference (nostr:npub…)
+  // in place of "@ana", which every app shows as a mention and which notifies that person
+  const suggest = v.suggestPeople ? h('div', { class: 'mention-suggest', role: 'listbox', 'aria-label': t(v.lang, 'mentionSuggest'), hidden: true }) : null
+  const typed = (): { at: number; word: string } | null => {
+    const caret = area.selectionStart ?? area.value.length
+    const m = /(^|\s)@([\p{L}\p{N}_.-]{1,30})$/u.exec(area.value.slice(0, caret))
+    return m ? { at: caret - m[2]!.length - 1, word: m[2]! } : null
+  }
+  const offer = () => {
+    if (!suggest || !v.suggestPeople) return
+    const tk = typed(), people = tk ? v.suggestPeople(tk.word) : []
+    suggest.hidden = !people.length
+    suggest.replaceChildren(...people.map((p) => h('button', { type: 'button', role: 'option', onClick: () => {
+      const now = typed(); if (!now) return
+      const caret = area.selectionStart ?? area.value.length, ref = `nostr:${nip19.npubEncode(p.pubkey)} `
+      area.value = area.value.slice(0, now.at) + ref + area.value.slice(caret)
+      area.selectionStart = area.selectionEnd = now.at + ref.length
+      area.dispatchEvent(new Event('input')); area.focus(); suggest.hidden = true
+    } }, avatarEl(p.pubkey, v), h('span', { class: 'mention-name' }, p.name), p.relation === 'none' ? null : h('small', { class: 'meta' }, t(v.lang, p.relation === 'follow' ? 'relFollow' : 'relNetwork')))))
+  }
+  area.addEventListener('input', offer); area.addEventListener('click', offer); area.addEventListener('keyup', (e) => { if (e.key.startsWith('Arrow')) offer() })
   // the emoji picker (wide screens): a button that opens a grid; a tap puts the emoji where the cursor is
   const insert = (emoji: string) => {
     const at = area.selectionStart ?? area.value.length, to = area.selectionEnd ?? at
@@ -145,7 +166,7 @@ function renderComposer(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElemen
   const toggle = picker ? h('button', { type: 'button', class: 'emoji-toggle', 'aria-label': t(v.lang, 'emojis'), title: t(v.lang, 'emojis'), 'aria-expanded': 'false', onClick: () => { picker.hidden = !picker.hidden; toggle!.setAttribute('aria-expanded', String(!picker.hidden)) } }, '🙂') : null
   return h('div', { class: 'composer' },
     (c.mode === 'reply' || c.mode === 'quote') && c.target ? h('p', { class: 'replying' }, t(v.lang, c.mode === 'quote' ? 'quotingTo' : 'replyingTo', { who: nameOf(v, c.target.pubkey) }), ': ', h('q', {}, excerpt(c.target))) : null,
-    area, picker, h('p', { class: 'composer-buttons' }, count, ' ', toggle, toggle ? ' ' : null, h('button', { type: 'button', onClick: hd.review }, t(v.lang, 'review')), ' ', h('button', { type: 'button', onClick: hd.cancelComposer }, t(v.lang, 'cancel'))),
+    area, suggest, picker, h('p', { class: 'composer-buttons' }, count, ' ', toggle, toggle ? ' ' : null, h('button', { type: 'button', onClick: hd.review }, t(v.lang, 'review')), ' ', h('button', { type: 'button', onClick: hd.cancelComposer }, t(v.lang, 'cancel'))),
   )
 }
 

@@ -13,7 +13,7 @@ import { articleInfo, loadArticle } from '../data/article.js'
 import { deletionTemplate } from '../core/deletion.js'
 import { aboutOf, aboutTemplate, MAX_ABOUT_CHARS, PROFILE_KIND } from '../core/profileedit.js'
 import { loadTrust, type TrustScore } from '../data/trust.js'
-import { matchNotes, matchPeople, MIN_QUERY, parseTarget, searchNetwork, searchTag, SEARCH_RELAYS, tagOf, type Found } from '../data/search.js'
+import { fold, matchNotes, matchPeople, MIN_QUERY, parseTarget, searchNetwork, searchTag, SEARCH_RELAYS, tagOf, type Found } from '../data/search.js'
 import { loadProfile, type ProfileInfo } from '../data/profile.js'
 import { followPubkeys, followTemplate, listKindOf, MUTE_LIST_KIND, type FollowAction } from '../core/follow.js'
 import { addBackup, checkBase, loadFollowList, nextKnown, parseBackups } from '../data/followlist.js'
@@ -121,6 +121,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let myProfile: NostrEvent | null | undefined // undefined: not read yet; null: none found
   let aboutEdit: { text: string; busy: boolean; note: string | null } | null = null
   let aboutBox: HTMLTextAreaElement | null = null // kept across redraws while editing, so what is typed and the cursor stay
+  let followNamesAsked: string | null = null // whose follows' names were asked for (once, when the composer first opens)
   let deletedCache: { who: string | null; ids: Set<string> } = { who: null, ids: new Set() } // the notes the reader deleted (see deletedIds); up here because the first draw already reads it
   const articleShown = new Set<string>() // articles the reader chose to read although the filter would hide their author
   let deleteConfirm: NostrEvent | null = null // one of the reader's notes about to be deleted (asks first: it cannot be undone)
@@ -272,7 +273,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
   /** The lists are built once and reused between redraws, so a bar already on screen keeps what it showed: redo the bar(s) of this note in place. */
   const rebar = (e: NostrEvent) => { for (const old of root.querySelectorAll(`article.note[data-id="${e.id}"] .actions`)) old.replaceWith(barFor(e)) }
-  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), quoted: (id: string) => quotedMap.get(id), wantQuote, articleTitle: (pk: string, d: string) => (articleTitles.has(`${pk}:${d}`) ? articleTitles.get(`${pk}:${d}`) ?? null : undefined), wantArticle, seen: rememberNotes, interests, deleted: deletedIds(), ...(me ? { self: me } : {}), ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk), deleteNote: (e: NostrEvent) => { if (e.pubkey === me && e.kind === 1) { deleteConfirm = e; draw() } } } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
+  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), quoted: (id: string) => quotedMap.get(id), wantQuote, suggestPeople: (word: string) => (session ? matchPeople(names, word, ctx(), 50).filter((p) => fold(p.name).split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(fold(word)))).slice(0, 5) : []), articleTitle: (pk: string, d: string) => (articleTitles.has(`${pk}:${d}`) ? articleTitles.get(`${pk}:${d}`) ?? null : undefined), wantArticle, seen: rememberNotes, interests, deleted: deletedIds(), ...(me ? { self: me } : {}), ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk), deleteNote: (e: NostrEvent) => { if (e.pubkey === me && e.kind === 1) { deleteConfirm = e; draw() } } } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
   const ctx = () => contextOf(session!, { mutedWords: words, mutedKeys: [] })
   const who = () => (signer?.pubkey ? nameOf(view(), signer.pubkey) : '')
 
@@ -808,10 +809,16 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     return { kind: 1, content: text, tags: target ? mergeTags(replyTags(target), auto) : auto, created_at }
   }
 
-  function startReply(target: NostrEvent): void { composer = { mode: 'reply', target, text: '' }; review = null; result = null; flash = null; draw(); root.querySelector('textarea')?.focus() }
+  /** The names of everyone the reader follows, asked for once when they first open the composer: "@ana" can then be offered even if Ana's notes are not on screen. */
+  function knowFollowNames(): void {
+    if (!session || !me || followNamesAsked === me) return
+    followNamesAsked = me
+    void nameKeys([...session.follows]).catch(() => { followNamesAsked = null })
+  }
+  function startReply(target: NostrEvent): void { knowFollowNames(); composer = { mode: 'reply', target, text: '' }; review = null; result = null; flash = null; draw(); root.querySelector('textarea')?.focus() }
   /** From the share panel: a quote asks for the reader's comment first. */
-  function startQuote(target: NostrEvent): void { shareConfirm = null; composer = { mode: 'quote', target, text: '' }; review = null; result = null; flash = null; draw(); root.querySelector('textarea')?.focus() }
-  function startNote(): void { composer = { mode: 'note', text: '' }; draw(); root.querySelector('textarea')?.focus() }
+  function startQuote(target: NostrEvent): void { knowFollowNames(); shareConfirm = null; composer = { mode: 'quote', target, text: '' }; review = null; result = null; flash = null; draw(); root.querySelector('textarea')?.focus() }
+  function startNote(): void { knowFollowNames(); composer = { mode: 'note', text: '' }; draw(); root.querySelector('textarea')?.focus() }
   function doReview(): void {
     if (!composer) return
     let template: Template
