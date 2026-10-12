@@ -383,3 +383,6 @@ button.npub-copy { display: block; min-height: 0; padding: 0; background: none; 
 .interest { display: flex; align-items: center; gap: 5px; margin: 0 0 2px; font-size: .82rem; color: var(--accent) } .interest .icon { flex: none }
 textarea.interests { width: 100%; box-sizing: border-box; font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text) }
 .prefs label.check + label.check { margin-top: 12px }
+
+/* a note the reader deleted: just a line that says so */
+.note.deleted { display: block; padding: 10px 12px; border-style: dashed } .note.deleted p { margin: 0 }

@@ -188,12 +188,14 @@ export class Signer {
    * Asks the signer to sign `t`, and checks what comes back: a valid signature, by the connected key, and exactly the kind, content and tags that
    * were asked for (a compromised or confused signer could return something else). Also refuses anything Quill's own policy does not allow.
    */
-  async sign(t: Template, timeoutMs: number, signal?: AbortSignal, opts: { followBase?: NostrEvent | null; profileBase?: NostrEvent } = {}): Promise<{ event: VerifiedEvent; ms: number }> {
+  async sign(t: Template, timeoutMs: number, signal?: AbortSignal, opts: { followBase?: NostrEvent | null; profileBase?: NostrEvent; deleteTarget?: NostrEvent } = {}): Promise<{ event: VerifiedEvent; ms: number }> {
     const problem = checkTemplate(t, { ...opts, me: this.pubkey ?? undefined }) // a first mute list may not name the reader
     if (problem) throw new Error(`Quill will not sign this (${problem})`)
     if (this.state !== 'connected' || !this.bunker || !this.pubkey) throw new Error('no signer is connected')
     // a follow-list change is built from the reader's OWN list, validly signed: anything else is refused whatever the template says
     if (t.kind === 3 && !(opts.followBase && opts.followBase.pubkey === this.pubkey && verifyEvent(opts.followBase))) throw new Error('Quill will not sign this (follow)')
+    // a deletion only of a note the reader really wrote (its signature checked here, whatever the page says)
+    if (t.kind === 5 && !(opts.deleteTarget && opts.deleteTarget.pubkey === this.pubkey && verifyEvent(opts.deleteTarget))) throw new Error('Quill will not sign this (delete)')
     // a profile change too: from the reader's own profile, validly signed
     if (t.kind === 0 && !(opts.profileBase && opts.profileBase.pubkey === this.pubkey && verifyEvent(opts.profileBase))) throw new Error('Quill will not sign this (profile)')
     // a mute-list change too: from the reader's own list, or from none at all (a first list holding one account, checked above)

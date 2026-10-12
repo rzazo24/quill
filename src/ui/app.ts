@@ -9,6 +9,7 @@ import { isReply } from '../core/thread.js'
 import { judgeAll, tally, type Context, type Judged, type Settings } from '../core/verdict.js'
 import { loadNetwork } from '../data/network.js'
 import { loadPopular } from '../data/popular.js'
+import { deletionTemplate } from '../core/deletion.js'
 import { aboutOf, aboutTemplate, MAX_ABOUT_CHARS, PROFILE_KIND } from '../core/profileedit.js'
 import { loadTrust, type TrustScore } from '../data/trust.js'
 import { matchNotes, matchPeople, MIN_QUERY, parseTarget, searchNetwork, searchTag, SEARCH_RELAYS, tagOf, type Found } from '../data/search.js'
@@ -117,6 +118,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let myProfile: NostrEvent | null | undefined // undefined: not read yet; null: none found
   let aboutEdit: { text: string; busy: boolean; note: string | null } | null = null
   let aboutBox: HTMLTextAreaElement | null = null // kept across redraws while editing, so what is typed and the cursor stay
+  let deletedCache: { who: string | null; ids: Set<string> } = { who: null, ids: new Set() } // the notes the reader deleted (see deletedIds); up here because the first draw already reads it
+  let deleteConfirm: NostrEvent | null = null // one of the reader's notes about to be deleted (asks first: it cannot be undone)
   let shareConfirm: NostrEvent | null = null // the note about to be shared (sharing asks first: it is public)
   const shareable = new Set<string>() // ids of the notes whose bar offers Share (visible to the filter, shareable)
   const helpOpen = new Set<string>(['about']) // which Help sections are unfolded
@@ -251,7 +254,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
   /** The lists are built once and reused between redraws, so a bar already on screen keeps what it showed: redo the bar(s) of this note in place. */
   const rebar = (e: NostrEvent) => { for (const old of root.querySelectorAll(`article.note[data-id="${e.id}"] .actions`)) old.replaceWith(barFor(e)) }
-  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), quoted: (id: string) => quotedMap.get(id), wantQuote, seen: rememberNotes, interests, ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk) } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
+  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), quoted: (id: string) => quotedMap.get(id), wantQuote, seen: rememberNotes, interests, deleted: deletedIds(), ...(me ? { self: me } : {}), ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk), deleteNote: (e: NostrEvent) => { if (e.pubkey === me && e.kind === 1) { deleteConfirm = e; draw() } } } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
   const ctx = () => contextOf(session!, { mutedWords: words, mutedKeys: [] })
   const who = () => (signer?.pubkey ? nameOf(view(), signer.pubkey) : '')
 
@@ -750,7 +753,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     else say('error', t(lang, 'e_not_signed', { why: (e instanceof Error ? e.message : String(e)).trim() || t(lang, 'noReason') }))
   }
 
-  async function send(template: Template, opts: { followBase?: NostrEvent | null; me?: string; profileBase?: NostrEvent } = {}): Promise<boolean> {
+  async function send(template: Template, opts: { followBase?: NostrEvent | null; me?: string; profileBase?: NostrEvent; deleteTarget?: NostrEvent } = {}): Promise<boolean> {
     if (!signer || !publisher) return false
     // Still waiting for the signer to answer an earlier tap (e.g. Clave was closed): a new tap replaces it, so opening Clave and tapping again works.
     // Once the signature is made and the event is being sent, a second tap is ignored (no double posts).
@@ -758,7 +761,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     busy = true; flash = null; result = null; const mine = signing = new AbortController(); draw()
     current = (async () => {
       try {
-        result = await signAndPublish({ signer, publisher, kv, now: deps.nowMs, signal: mine.signal, followBase: opts.followBase, ...(opts.profileBase ? { profileBase: opts.profileBase } : {}) }, template, (s) => { step = s; draw() })
+        result = await signAndPublish({ signer, publisher, kv, now: deps.nowMs, signal: mine.signal, followBase: opts.followBase, ...(opts.profileBase ? { profileBase: opts.profileBase } : {}), ...(opts.deleteTarget ? { deleteTarget: opts.deleteTarget } : {}) }, template, (s) => { step = s; draw() })
         step = null; fetcher.clear()
         return true
       } catch (e) { step = null; if (!(mine.signal.aborted && signing !== mine)) sayPipelineError(e); return false } finally { if (signing === mine) { busy = false; signing = null } draw() }
@@ -867,6 +870,25 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     draw()
   }
 
+  // Notes the reader deleted from here, remembered on the device: a relay that ignores the request (some do) must not bring them back into view.
+  const deletedKey = () => `deleted:${me}`
+  function deletedIds(): Set<string> {
+    if (deletedCache.who !== me) { let ids: string[] = []; try { const v = JSON.parse(safeGet(kv, deletedKey()) ?? '[]') as unknown; if (Array.isArray(v)) ids = v.filter((x): x is string => typeof x === 'string' && /^[0-9a-f]{64}$/.test(x)) } catch { /* none */ } deletedCache = { who: me, ids: new Set(ids) } }
+    return deletedCache.ids
+  }
+  async function deleteNote(): Promise<void> {
+    const target = deleteConfirm; deleteConfirm = null
+    if (!target || !me || target.pubkey !== me || !signer || signer.state !== 'connected') return draw()
+    const template = deletionTemplate(target, nowSec())
+    const problem = checkTemplate(template, { deleteTarget: target })
+    if (problem) { say('error', problemText(lang, problem)); return draw() }
+    if (await send(template, { deleteTarget: target })) {
+      const ids = deletedIds(); ids.add(target.id); safeSet(kv, deletedKey(), JSON.stringify([...ids].slice(-500)))
+      if (result && !failedRelays(result.outcomes).length) { result = null; say('info', t(lang, 'deleteDone')) }
+      void load()
+    }
+    draw()
+  }
   /** Sharing is public: first a confirmation that shows the note, then the signature. */
   function startShare(target: NostrEvent): void {
     if (engagement.of(target.id).reposted) { say('info', t(lang, 'alreadyShared')); return draw() }
@@ -1009,6 +1031,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (confirmingDisconnect && ((route.name !== 'me' && !isWide) || signer?.state !== 'connected')) confirmingDisconnect = false // a question left behind is forgotten
     if (confirmingSignOut && ((route.name !== 'me' && !isWide) || !me)) confirmingSignOut = false
     if (shareConfirm && signer?.state !== 'connected') shareConfirm = null
+    if (deleteConfirm && signer?.state !== 'connected') deleteConfirm = null
     if (followFlow && signer?.state !== 'connected') followFlow = null
     const tab = (name: 'following' | 'mentions' | 'me', href: string) => h('a', { href, class: route.name === name ? 'tab on' : 'tab', 'data-tab': name, ...(route.name === name ? { 'aria-current': 'page' } : {}), onClick: (e: Event) => { if (route.name === name) { e.preventDefault(); refresh() } } }, icon(name === 'following' ? 'people' : name === 'mentions' ? 'at' : 'person', 18), t(lang, name), name === 'mentions' && badge > 0 ? h('span', { class: 'badge', role: 'status', 'aria-label': t(lang, 'newItems', { n: badge }) }, badge > 9 ? '9+' : String(badge)) : null)
     const input = h('input', { type: 'text', placeholder: t(lang, 'loginPlaceholder'), autocomplete: 'off', spellcheck: 'false', 'aria-label': t(lang, 'loginTitle') })
@@ -1016,9 +1039,9 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       h('p', { class: 'tagline' }, t(lang, 'tagline')), h('h2', {}, t(lang, 'loginTitle')), h('p', {}, t(lang, 'loginHelp')), input, ' ', h('button', { type: 'submit', class: 'primary' }, t(lang, 'loginButton')),
       loginError ? h('p', { class: 'error', role: 'alert' }, loginError) : null)
     const signArea = signer ? renderSignArea({
-      emojiPicker: isWide, signer: signer.state, who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, flash, composer, review, step, result, relays, bunkerText, linkOpen, confirmDisconnect: confirmingDisconnect, shareConfirm, followPanel: followPanel(),
+      emojiPicker: isWide, signer: signer.state, who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, flash, composer, review, step, result, relays, bunkerText, linkOpen, confirmDisconnect: confirmingDisconnect, shareConfirm, deleteConfirm, followPanel: followPanel(),
     }, {
-      openConnect, startLink, pasteBunker: () => void pasteBunker(), cancelConnect, bunker: (x) => void bunker(x), dismissFlash: () => { flash = null; draw() }, confirmFollow: () => void confirmFollow(), acceptList, cancelFollow: () => { followFlow = null; draw() }, confirmShare: () => void share(), startQuote: () => { if (shareConfirm) startQuote(shareConfirm) }, cancelShare: () => { shareConfirm = null; draw() }, askDisconnect: () => { confirmingDisconnect = true; draw() }, cancelDisconnect: () => { confirmingDisconnect = false; draw() },
+      openConnect, startLink, pasteBunker: () => void pasteBunker(), cancelConnect, bunker: (x) => void bunker(x), dismissFlash: () => { flash = null; draw() }, confirmFollow: () => void confirmFollow(), acceptList, cancelFollow: () => { followFlow = null; draw() }, confirmShare: () => void share(), startQuote: () => { if (shareConfirm) startQuote(shareConfirm) }, cancelShare: () => { shareConfirm = null; draw() }, confirmDelete: () => void deleteNote(), cancelDelete: () => { deleteConfirm = null; draw() }, askDisconnect: () => { confirmingDisconnect = true; draw() }, cancelDisconnect: () => { confirmingDisconnect = false; draw() },
       disconnect: () => { confirmingDisconnect = false; void signer.disconnect(); composer = review = result = null; flash = null; draw() }, copy: (x) => { deps.copy?.(x); say('info', t(lang, 'copied')); draw() },
       edit: (x) => { if (composer) composer.text = x }, review: doReview, publish: () => void publish(), back: () => { review = null; draw() }, cancelComposer: () => { composer = null; review = null; draw() },
       retry: () => void retry(), dismissResult: () => { result = null; draw() }, startNote, cancelSigning: () => signing?.abort(),
@@ -1048,7 +1071,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       me && !isWide ? h('nav', { class: 'tabbar' }, tab('following', '#/'), tab('mentions', '#/mentions'), tab('me', '#/me')) : null,
     ]
     // put the reader back where they were (unless this is a new view)
-    if (scrollToTop || flash || composer || review || result || followFlow || shareConfirm || connectOpen) barsHidden = false // a new view, or something that talks to you: the bars stay
+    if (scrollToTop || flash || composer || review || result || followFlow || shareConfirm || deleteConfirm || connectOpen) barsHidden = false // a new view, or something that talks to you: the bars stay
     root.replaceChildren(...page.filter((x): x is HTMLElement => x !== null))
     if (searching && searchInput!.isConnected) searchInput!.focus({ preventScroll: true })
     if (editingAbout && aboutBox?.isConnected) aboutBox.focus({ preventScroll: true })

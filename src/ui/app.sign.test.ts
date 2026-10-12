@@ -749,10 +749,39 @@ describe('editing your description in Me', () => {
 
 describe('starting with the signer already connected', () => {
   it('the app comes up (a draw during start must not reach state declared further down) and Me shows the description with its Edit button', async () => {
-    const sg = fakeSigner({ saved: true }); sg.raw.state = 'connected'; sg.raw.pubkey = me
+    // like the real Signer: a saved session resumes at once and tells the app right then, while the app is still starting (its first draw comes before
+    // the state declared further down in startApp is set up: that broke twice)
+    const sg = fakeSigner({ saved: true }); const raw = sg.raw as unknown as { resume: () => Promise<boolean>; approve: () => void }; raw.resume = async () => true
+    const resume = (sg.raw as unknown as { resume: () => Promise<boolean> }); resume.resume = () => { raw.approve(); return Promise.resolve(true) }
     const a = boot({ events: [...world, ev(me, JSON.stringify({ name: 'Me', about: 'hello there' }), { kind: 0, created_at: 5 })], signer: sg, stored: { me } }); await tick(200)
+    expect(a.root.querySelector('article.note, .empty, .feedmode')).not.toBeNull() // the feed came up
     await a.go('#/me'); await tick(400)
     expect(a.root.querySelector('.account .about')!.textContent).toBe('hello there')
     expect([...a.root.querySelectorAll('.account button')].some((b) => b.textContent === 'Edit description')).toBe(true)
+    await a.go('#/mentions'); await tick(300); await a.go('#/search'); await tick(100); expect(a.root.querySelector('input.search-box')).not.toBeNull()
+  })
+})
+
+describe('deleting your own note', () => {
+  const open = async (events: Event[]) => { const sg = fakeSigner(); const a = boot({ events, signer: sg }); await tick(100); await connectClave(a, sg); await a.go('#/me'); await tick(400); return { a, sg } }
+  const menu = (n: Element) => { (n.querySelector('.more-btn') as HTMLButtonElement).click(); return [...n.querySelectorAll('.more-list button')].map((b) => b.textContent) }
+  it('your notes offer Delete (others offer Mute, not Delete); it asks first, shows the note and what deleting does, then asks the relays and the note is shown as deleted', async () => {
+    const mine = ev(me, 'a note with a typo', { created_at: 9000 })
+    const { a } = await open([...world, mine, ev(friend, 'friend note', { created_at: 8000 })])
+    const card = [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('a note with a typo'))!
+    const items = menu(card); expect(items).toContain('Delete note'); expect(items.some((x) => x!.startsWith('Mute'))).toBe(false)
+    ;([...card.querySelectorAll('.more-list button')].find((b) => b.textContent === 'Delete note') as HTMLButtonElement).click(); await tick(30)
+    const sheet = a.root.querySelector('.sheet')!; expect(sheet.querySelector('h2')!.textContent).toBe('Delete this note?'); expect(sheet.textContent).toContain('a note with a typo'); expect(sheet.textContent).toContain('not an eraser')
+    expect(a.pub.sent).toEqual([])
+    await click(sheet as HTMLElement, 'Delete'); await tick(500)
+    const e = a.pub.sent[0]!.event; expect(e.kind).toBe(5); expect(e.tags).toEqual([['e', mine.id], ['k', '1']])
+    expect(a.text()).toContain('You deleted this note.'); expect(a.text()).not.toContain('a note with a typo')
+    expect(JSON.parse(a.mem.get(`deleted:${me}`)!)).toEqual([mine.id])
+  })
+  it('another account\'s note offers Mute, not Delete', async () => {
+    const { a } = await open([...world, ev(friend, 'friend note', { created_at: 8000 })])
+    await a.go('#/'); await tick(400)
+    const card = [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('friend note'))!
+    const items = menu(card); expect(items).not.toContain('Delete note'); expect(items.some((x) => x!.startsWith('Mute'))).toBe(true)
   })
 })

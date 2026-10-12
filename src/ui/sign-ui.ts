@@ -1,5 +1,6 @@
 // Everything on screen that has to do with signing: connecting Clave, writing, reviewing what will be signed, progress, and the result per relay.
 // Pure of state: give it the state and the handlers, get elements. The text of strangers (a reply's target) only ever goes in as text.
+import { nip19 } from 'nostr-tools'
 import type { FollowAction } from '../core/follow.js'
 import type { Event as NostrEvent } from 'nostr-tools'
 import { cleanText } from '../core/text.js'
@@ -47,12 +48,14 @@ export interface SignUiState {
   followPanel: FollowPanel | null
   /** The note the reader is about to share: sharing is public, so it asks first. */
   shareConfirm: NostrEvent | null
+  /** One of the reader's notes about to be deleted: it asks first. */
+  deleteConfirm?: NostrEvent | null
   /** Disconnecting asks first: connecting again means pasting the bunker:// address again. */
   confirmDisconnect: boolean
 }
 
 export interface SignUiHandlers {
-  openConnect(): void; cancelConnect(): void; bunker(text: string): void; dismissFlash(): void; confirmFollow(): void; acceptList(): void; cancelFollow(): void; confirmShare(): void; startQuote(): void; cancelShare(): void; askDisconnect(): void; cancelDisconnect(): void; disconnect(): void; copy(text: string): void
+  openConnect(): void; cancelConnect(): void; bunker(text: string): void; dismissFlash(): void; confirmFollow(): void; acceptList(): void; cancelFollow(): void; confirmShare(): void; confirmDelete(): void; cancelDelete(): void; startQuote(): void; cancelShare(): void; askDisconnect(): void; cancelDisconnect(): void; disconnect(): void; copy(text: string): void
   edit(text: string): void; review(): void; publish(): void; back(): void; cancelComposer(): void; retry(): void; dismissResult(): void
   startNote(): void; cancelSigning(): void; startLink(): void; pasteBunker(): void; editBunker(text: string): void; setLinkOpen(open: boolean): void
 }
@@ -82,6 +85,7 @@ export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, sign
     if (s.step) parts.push(h('div', { class: 'popup stay', role: 'status' }, h('span', {}, t(v.lang, `step_${s.step}` as Parameters<typeof t>[1])), s.step === 'waiting' ? h('button', { type: 'button', class: 'link', onClick: hd.cancelSigning }, t(v.lang, 'cancel')) : null))
     else if (s.result) toast.push(renderResult(s.result, s.relays, hd, v))
     else if (s.followPanel) parts.push(sheet(renderFollowPanel(s.followPanel, hd, v)))
+    else if (s.deleteConfirm) parts.push(sheet(renderDeleteConfirm(s.deleteConfirm, hd, v)))
     else if (s.shareConfirm) parts.push(sheet(renderShareConfirm(s.shareConfirm, hd, v)))
     else if (s.review) parts.push(sheet(renderReview(s, hd, v)))
     else if (s.composer) parts.push(sheet(renderComposer(s, hd, v)))
@@ -159,12 +163,26 @@ function renderFollowPanel(f: FollowPanel, hd: SignUiHandlers, v: View): HTMLEle
     h('p', { class: 'buttons' }, h('button', { type: 'button', class: 'primary', onClick: hd.confirmFollow }, t(v.lang, `${f.action}Button` as 'followButton')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.cancelFollow }, t(v.lang, 'cancel'))))
 }
 
+/** A note's text for a confirmation: a quoted note's long reference reads as "[quoted note]", a mention as "@name". */
+const previewText = (content: string, v: View): string => cleanText(content, 400)
+  .replace(/nostr:(nevent1|note1)[a-z0-9]+/g, `[${t(v.lang, 'quotedNote')}]`)
+  .replace(/nostr:(npub1|nprofile1)[a-z0-9]+/g, (m) => { try { const d = nip19.decode(m.slice(6)); return '@' + nameOf(v, d.type === 'npub' ? d.data : (d.data as { pubkey: string }).pubkey) } catch { return m } })
+
+/** Deleting one of the reader's notes: the note is shown, what deleting does and does not do is said, and nothing is signed until the second tap. */
+function renderDeleteConfirm(target: NostrEvent, hd: SignUiHandlers, v: View): HTMLElement {
+  return h('div', { class: 'review', role: 'alertdialog', 'aria-label': t(v.lang, 'deleteTitle') },
+    h('h2', {}, t(v.lang, 'deleteTitle')),
+    h('pre', { class: 'preview' }, previewText(target.content, v)),
+    h('p', { class: 'meta' }, t(v.lang, 'deleteNoteHelp')),
+    h('p', { class: 'buttons' }, h('button', { type: 'button', class: 'danger', onClick: hd.confirmDelete }, t(v.lang, 'deleteConfirm')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.cancelDelete }, t(v.lang, 'cancel'))))
+}
+
 /** Sharing a note is public and cannot be undone from here: the note is shown, and nothing is signed until the second tap. */
 function renderShareConfirm(target: NostrEvent, hd: SignUiHandlers, v: View): HTMLElement {
   return h('div', { class: 'review', role: 'alertdialog', 'aria-label': t(v.lang, 'shareTitle') },
     h('h2', {}, t(v.lang, 'shareTitle')),
     h('p', { class: 'meta' }, t(v.lang, 'shareBy', { who: nameOf(v, target.pubkey) })),
-    h('pre', { class: 'preview' }, cleanText(target.content, 400)),
+    h('pre', { class: 'preview' }, previewText(target.content, v)),
     h('p', { class: 'meta' }, t(v.lang, 'shareNote')),
     h('p', { class: 'buttons' }, h('button', { type: 'button', class: 'primary', onClick: hd.confirmShare }, t(v.lang, 'shareConfirm')), ' ', h('button', { type: 'button', onClick: hd.startQuote }, t(v.lang, 'quoteButton')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.cancelShare }, t(v.lang, 'cancel'))))
 }
