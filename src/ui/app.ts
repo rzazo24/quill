@@ -279,8 +279,10 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   // A list you leave (to open a note, an account…) is kept as it was, for a while: coming back shows it at once, where you were, with what you had
   // unfolded, instead of loading it again from the top. Older than PAGE_KEEP_MS, it is loaded fresh.
   const PAGE_KEEP_MS = 10 * 60_000
-  const KEPT_PAGES = new Set(['following', 'mentions', 'me', 'user', 'people', 'saved'])
-  const pageCache = new Map<string, { body: HTMLElement; scroll: number; at: number }>()
+  const KEPT_PAGES = new Set(['following', 'me', 'user', 'people', 'saved']) // not Mentions: what is new there is worked out on every visit
+  const pageCache = new Map<string, { body: HTMLElement; scroll: number; at: number; stamp: string }>()
+  // what changes how a list is drawn: a kept page is only shown again if none of it changed (a signer connected, the language, the avatars…)
+  const pageStamp = () => JSON.stringify([signer?.state ?? '', signer?.pubkey ?? '', lang, avatarStyle, realAvatars, autoImages, showReposts, readOutbox, settings, !!nwcOf()])
   let restoreScroll: number | null = null
   const pageKey = (key: string) => (key === JSON.stringify({ name: 'following' }) ? `${key}:${feedMode}` : key) // Following is a different list in each mode
   let updateReady = false
@@ -694,12 +696,12 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       const now = deps.nowMs?.() ?? Date.now()
       const prev = shownRoute ? (JSON.parse(shownRoute) as Route) : null
       if (prev && body && KEPT_PAGES.has(prev.name)) {
-        pageCache.set(pageKey(shownRoute), { body, scroll: root.querySelector('main.view')?.scrollTop ?? 0, at: now })
+        pageCache.set(pageKey(shownRoute), { body, scroll: root.querySelector('main.view')?.scrollTop ?? 0, at: now, stamp: pageStamp() })
         while (pageCache.size > 6) pageCache.delete(pageCache.keys().next().value!) // the oldest goes
       }
       const back = KEPT_PAGES.has(route.name) ? pageCache.get(pageKey(key)) : undefined
       if (back) pageCache.delete(pageKey(key))
-      if (back && now - back.at < PAGE_KEEP_MS) { body = back.body; shownRoute = key; lateWaiting = null; restoreScroll = back.scroll; status = null; draw(); return }
+      if (back && now - back.at < PAGE_KEEP_MS && back.stamp === pageStamp()) { body = back.body; shownRoute = key; lateWaiting = null; restoreScroll = back.scroll; status = null; markFrom = null; followersMark = null; draw(); return } // (leaving Mentions ends its visit, as below)
     }
     if (key !== shownRoute) { body = null; shownRoute = key; lateWaiting = null; scrollToTop = true; profileMode = 'notes'; if (route.name !== 'mentions') { markFrom = null; followersMark = null } }
     if (route.name === 'settings' || route.name === 'help') { pageCache.clear(); status = null; body = null; draw(); return } // a change made there must show in every list
