@@ -6,8 +6,12 @@ export type Part =
   | { type: 'text'; value: string }
   | { type: 'person'; value: string; pubkey: string }
   | { type: 'note'; value: string; id: string; /** where the reference says the note can be found (nevent), tidy secure addresses only */ relays?: string[] }
+  /** a long-form article (NIP-23, kind 30023), named by its author and its `d` identifier (naddr); `naddr` is the bech32 string itself, for links */
+  | { type: 'article'; value: string; naddr: string; pubkey: string; identifier: string; relays?: string[] }
 
-const REF = /nostr:(npub1[a-z0-9]{58}|nprofile1[a-z0-9]+|note1[a-z0-9]{58}|nevent1[a-z0-9]+)/g
+const REF = /nostr:(npub1[a-z0-9]{58}|nprofile1[a-z0-9]+|note1[a-z0-9]{58}|nevent1[a-z0-9]+|naddr1[a-z0-9]+)/g
+export const ARTICLE_KIND = 30023
+const tidy = (relays: string[] | undefined): string[] => [...new Set((relays ?? []).map((r) => normalizeRelay(r)).filter((r): r is string => !!r))].slice(0, 3)
 
 function decode(ref: string): Part | null {
   try {
@@ -16,6 +20,7 @@ function decode(ref: string): Part | null {
     if (d.type === 'nprofile') return { type: 'person', value: ref, pubkey: d.data.pubkey }
     if (d.type === 'note') return { type: 'note', value: ref, id: d.data }
     if (d.type === 'nevent') { const hints = [...new Set((d.data.relays ?? []).map((r) => normalizeRelay(r)).filter((r): r is string => !!r))].slice(0, 3); return { type: 'note', value: ref, id: d.data.id, ...(hints.length ? { relays: hints } : {}) } }
+    if (d.type === 'naddr' && d.data.kind === ARTICLE_KIND && /^[0-9a-f]{64}$/.test(d.data.pubkey)) { const hints = tidy(d.data.relays); return { type: 'article', value: ref, naddr: ref, pubkey: d.data.pubkey, identifier: d.data.identifier, ...(hints.length ? { relays: hints } : {}) } }
   } catch { /* a malformed reference stays plain text */ }
   return null
 }

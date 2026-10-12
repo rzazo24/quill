@@ -1183,3 +1183,22 @@ describe('topics you care about', () => {
     area.value = 'relay\nSomething'; area.dispatchEvent(new Event('change')); expect(a.mem.get('interests')).toBe('relay\nsomething')
   })
 })
+
+describe('long-form articles', () => {
+  const article = (over: Partial<Event> = {}) => ev(friend, '# Intro\n\nSome **bold** text with [a link](https://example.com/x).\n\n- point one\n- point two', { kind: 30023, created_at: 7000, tags: [['d', 'my-post'], ['title', 'Why relays matter'], ['summary', 'A short take'], ['published_at', '1700000000']], ...over })
+  it('a note that references one shows a button with its title; the article reads as text with its title, author and blocks', async () => {
+    const naddr = nip19.naddrEncode({ kind: 30023, pubkey: friend, identifier: 'my-post' })
+    const a = boot({ events: [...world, article(), ev(friend, JSON.stringify({ name: 'Ana' }), { kind: 0 }), ev(friend, `new post nostr:${naddr}`, { created_at: 8000 })], stored: { me } }); await tick(900)
+    const link = a.root.querySelector('a.article-link') as HTMLAnchorElement; expect(link.textContent).toBe('Read: Why relays matter'); expect(link.getAttribute('href')).toBe(`#/article/${naddr}`)
+    await a.go(`#/article/${naddr}`); await tick(400)
+    const art = a.root.querySelector('article.article')!
+    expect(art.querySelector('h2')!.textContent).toBe('Why relays matter'); expect(art.textContent).toContain('Ana'); expect(art.textContent).toContain('A short take')
+    expect(art.querySelector('.article-body h3')!.textContent).toBe('Intro'); expect(art.querySelector('.article-body p')!.textContent).toBe('Some bold text with a link (https://example.com/x).')
+    expect([...art.querySelectorAll('.article-body li')].map((x) => x.textContent)).toEqual(['point one', 'point two'])
+  })
+  it('a missing article says so', async () => {
+    const naddr = nip19.naddrEncode({ kind: 30023, pubkey: friend, identifier: 'nope' })
+    const a = boot({ events: world, stored: { me } }); await tick(200); await a.go(`#/article/${naddr}`); await tick(400)
+    expect(a.text()).toContain('That article was not found')
+  })
+})

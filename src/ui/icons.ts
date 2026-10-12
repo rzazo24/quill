@@ -35,6 +35,8 @@ const PATHS = {
   search: ['M18 11a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z', 'M20 20l-4.2-4.2'],
   /** a star: something the reader cares about */
   star: ['M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9L12 3Z'],
+  /** a page of text: an article */
+  article: ['M6 3h9l4 4v14H6V3Z', 'M14 3v5h5', 'M9 12h7', 'M9 16h7'],
   refresh: ['M20 11a8 8 0 0 0-14.7-3', 'M4 4v4h4', 'M4 13a8 8 0 0 0 14.7 3', 'M20 20v-4h-4'],
 } as const
 

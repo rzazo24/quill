@@ -1,6 +1,8 @@
 // Turning judged notes into DOM. Pure of state: give it data, get elements. Nothing here loads anything external.
 import { nip19 } from 'nostr-tools'
 import { interestsIn } from '../core/interests.js'
+import { markdownBlocks } from '../core/markdown.js'
+import type { ArticleInfo } from '../data/article.js'
 import type { Child } from './dom.js'
 import type { TrustReason, TrustScore } from '../data/trust.js'
 import { h } from './dom.js'
@@ -22,7 +24,7 @@ import type { ThreadNode } from '../data/feed.js'
 import { hasReach, reactionTotal, type Reach } from '../data/reach.js'
 import { ago, reason, t, tallyLabel, type Lang } from './i18n.js'
 
-export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; /** The Halloween theme is on: extra reactions. */ halloween?: boolean; /** What a note of the reader's got from others (reactions, reposts, replies), once it is known. */ reach?: (id: string) => Reach | undefined; /** A note quoted in a text, once it is known (undefined: not yet asked; null: not found); `wantQuote` asks for it. */ quoted?: (id: string) => Judged | null | undefined; wantQuote?: (id: string, relays?: string[]) => void; /** Pictures linked in a note by this author load by themselves (the reader's setting); otherwise each waits for a tap. */ autoImages?: (pubkey: string) => boolean; /** Inside a quoted note (itself one link): addresses are plain text, no links or buttons inside the link. */ plainLinks?: boolean; /** Told about every note handed to a list or drawn, so the search can find it later. */ seen?: (notes: Judged[]) => void; /** The topics the reader cares about: a note that talks about one is marked. */ interests?: readonly string[]; /** With a signer: the "…" menu offers to mute (or unmute) the author. */ mute?: (pubkey: string) => void; isMuted?: (pubkey: string) => boolean; /** With a signer: the "…" of the reader's own notes offers to delete them. */ deleteNote?: (e: Judged['event']) => void; /** Notes the reader deleted: shown as a line that says so. */ deleted?: ReadonlySet<string>; /** The reader's key: their own notes offer Delete, the others Mute. */ self?: string; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** The relays put in a copied id/link as places to look for the note. */ hints?: readonly string[]; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
+export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; /** The Halloween theme is on: extra reactions. */ halloween?: boolean; /** What a note of the reader's got from others (reactions, reposts, replies), once it is known. */ reach?: (id: string) => Reach | undefined; /** A note quoted in a text, once it is known (undefined: not yet asked; null: not found); `wantQuote` asks for it. */ quoted?: (id: string) => Judged | null | undefined; wantQuote?: (id: string, relays?: string[]) => void; /** An article's title once it is known (undefined: not asked yet; null: not found); `wantArticle` asks for it. */ articleTitle?: (pubkey: string, identifier: string) => string | null | undefined; wantArticle?: (pubkey: string, identifier: string, relays?: string[]) => void; /** Pictures linked in a note by this author load by themselves (the reader's setting); otherwise each waits for a tap. */ autoImages?: (pubkey: string) => boolean; /** Inside a quoted note (itself one link): addresses are plain text, no links or buttons inside the link. */ plainLinks?: boolean; /** Told about every note handed to a list or drawn, so the search can find it later. */ seen?: (notes: Judged[]) => void; /** The topics the reader cares about: a note that talks about one is marked. */ interests?: readonly string[]; /** With a signer: the "…" menu offers to mute (or unmute) the author. */ mute?: (pubkey: string) => void; isMuted?: (pubkey: string) => boolean; /** With a signer: the "…" of the reader's own notes offers to delete them. */ deleteNote?: (e: Judged['event']) => void; /** Notes the reader deleted: shown as a line that says so. */ deleted?: ReadonlySet<string>; /** The reader's key: their own notes offer Delete, the others Mute. */ self?: string; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** The relays put in a copied id/link as places to look for the note. */ hints?: readonly string[]; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
 
 export const nameOf = (v: View, pubkey: string): string => v.names.get(pubkey) ?? shortNpub(pubkey)
 
@@ -103,6 +105,12 @@ export function renderContent(raw: string, v: View, fromId?: string, vouch: stri
   const auto = vouch.some((k) => !!v.autoImages?.(k))
   for (const part of refs(cleanText(raw, 4000))) {
     if (part.type === 'person') frag.append(v.plainLinks ? h('span', { class: 'ref' }, '@' + nameOf(v, part.pubkey)) : h('a', { class: 'ref', href: userHref(part.pubkey) }, '@' + nameOf(v, part.pubkey)))
+    else if (part.type === 'article') {
+      const title = v.articleTitle?.(part.pubkey, part.identifier)
+      if (title === undefined) v.wantArticle?.(part.pubkey, part.identifier, part.relays)
+      const label = title ? `${t(v.lang, 'readArticle')}: ${title}` : t(v.lang, 'article')
+      frag.append(v.plainLinks ? h('span', { class: 'meta' }, `[${label}]`) : h('a', { class: 'thread-link article-link', href: `#/article/${part.naddr}` }, icon('article', 14), label))
+    }
     else if (part.type === 'note' && v.plainLinks) frag.append(h('span', { class: 'meta' }, `[${t(v.lang, 'quotedNote')}]`))
     else if (part.type === 'note') {
       const href = `#/note/${part.id}${fromId && fromId !== part.id ? `?from=${fromId}` : ''}`, q = v.quoted?.(part.id)
@@ -317,6 +325,26 @@ export function renderTrust(tr: TrustScore | 'loading' | 'failed' | undefined, v
     h('p', { class: 'trust-score' }, h('strong', {}, `${tr.score}/100`), ' · ', t(v.lang, `trustLevel_${tr.level}` as Parameters<typeof t>[1])),
     tr.reasons.length ? h('details', {}, h('summary', {}, t(v.lang, 'trustWhy')), h('ul', {}, ...tr.reasons.map(line))) : h('p', { class: 'meta' }, t(v.lang, 'trustNothing')),
     h('p', { class: 'meta' }, t(v.lang, 'trustNote')))
+}
+
+/** A long-form article, read as text: its title, author and date, its summary, and its Markdown as headings, paragraphs, lists, quotes and code.
+ *  If the filter would hide its author, only the reason shows until the reader asks to read it anyway. */
+export function renderArticle(e: Judged['event'], info: ArticleInfo, verdict: Judged['verdict'], v: View, opts: { showAnyway: boolean; onShow: () => void }): HTMLElement {
+  const by = h('p', { class: 'meta article-by' }, h('a', { class: 'avatar-link', href: userHref(e.pubkey) }, avatarEl(e.pubkey, v)), h('a', { href: userHref(e.pubkey) }, nameOf(v, e.pubkey)), ' · ', h('time', { datetime: new Date(info.publishedAt * 1000).toISOString() }, new Date(info.publishedAt * 1000).toLocaleDateString(v.lang === 'es' ? 'es-ES' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' })))
+  const head = [h('h2', { class: 'article-title' }, info.title || t(v.lang, 'article')), by, info.summary ? h('p', { class: 'article-summary' }, info.summary) : null]
+  if (verdict.hidden && !opts.showAnyway) return h('article', { class: 'card article' }, ...head, h('p', { class: 'meta' }, `${t(v.lang, 'hiddenBy')}: `, reason(v.lang, verdict)), h('p', {}, h('button', { type: 'button', onClick: opts.onShow }, t(v.lang, 'readAnyway'))))
+  const body: HTMLElement[] = []
+  let list: HTMLElement | null = null
+  for (const b of markdownBlocks(e.content.slice(0, 100_000))) {
+    if (b.type === 'item') { const want = b.ordered ? 'OL' : 'UL'; if (!list || list.tagName !== want) { list = h(b.ordered ? 'ol' : 'ul', {}); body.push(list) } list.append(h('li', {}, renderContent(b.text, v, undefined, [e.pubkey]))); continue }
+    list = null
+    if (b.type === 'heading') body.push(h(b.level === 1 ? 'h3' : 'h4', {}, b.text))
+    else if (b.type === 'paragraph') body.push(h('p', {}, renderContent(b.text, v, undefined, [e.pubkey])))
+    else if (b.type === 'quote') body.push(h('blockquote', {}, renderContent(b.text, v, undefined, [e.pubkey])))
+    else if (b.type === 'code') body.push(h('pre', { class: 'article-code' }, b.text))
+    else body.push(h('hr', {}))
+  }
+  return h('article', { class: 'card article' }, ...head, h('div', { class: 'article-body' }, ...body))
 }
 
 /** Notes | Replies on an account's page. */
