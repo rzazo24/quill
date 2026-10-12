@@ -13,8 +13,12 @@ export interface TrustFacts {
   followers: number
   /** Of those, how many are themselves followed by at least ESTABLISHED_FOLLOWERS keys. */
   establishedFollowers: number
-  /** 0 = it is the reader, 1 = the reader follows it, 2 = followed by someone the reader follows. */
-  seedDistance?: 0 | 1 | 2
+  /** 0 = it is the reader, 1 = the reader follows it. */
+  seedDistance?: 0 | 1
+  /** How many of the accounts the reader follows follow it: the backing that a ring of fake accounts cannot buy. */
+  networkFollowers: number
+  /** How many of the accounts the reader follows have it in their (public) mute list. */
+  mutedByNetwork: number
   /** Distinct OTHER keys that replied to, reacted to, reposted or mentioned it. */
   engagers: number
   /** The oldest of its events that were read. */
@@ -22,18 +26,22 @@ export interface TrustFacts {
   hasProfile: boolean
   now: number
 }
-export type TrustReason = { points: number; key: 'isYou' | 'youFollow' | 'networkFollows' | 'followers' | 'established' | 'engagers' | 'seen30' | 'seen7' | 'profile'; n?: number }
+export type TrustReason = { points: number; key: 'isYou' | 'youFollow' | 'network' | 'followers' | 'established' | 'engagers' | 'seen30' | 'seen7' | 'profile' | 'mutedByNetwork'; n?: number }
 export interface TrustScore { score: number; level: TrustLevel; reasons: TrustReason[] }
 
 export const ESTABLISHED_FOLLOWERS = 3
 const DAY = 86400
-/** nostrclaw's weights (src/trust.ts there): change both or neither. */
+/** nostrclaw's weights (src/trust.ts there): change both or neither. Measured on real accounts (2026-10-12): counting followers, "established"
+ *  followers and engagers rated 13 of 15 spam accounts "some backing" (bot rings inflate exactly those), so they only fine-tune the number now,
+ *  and the LEVEL comes from the reader's own network. */
 export const TRUST_WEIGHTS = {
-  isTrusted: 60, followedByTrusted: 40, followedByFollowedByTrusted: 20,
-  followers1: 5, followers5: 10, followers20: 15,
-  established1: 5, established5: 10, established15: 15,
-  engagers1: 5, engagers3: 10,
-  seenOver7Days: 5, seenOver30Days: 10, hasProfile: 5,
+  isTrusted: 60, followedByTrusted: 40,
+  network1: 25, network3: 32, network10: 40,
+  followers1: 2, followers5: 5, followers20: 8,
+  established1: 4, established5: 8, established15: 12,
+  engagers1: 4, engagers3: 8,
+  seenOver7Days: 4, seenOver30Days: 8, hasProfile: 4,
+  mutedBy1: -15, mutedBy3: -30, mutedBy5: -50,
 } as const
 
 export function scoreTrust(f: TrustFacts): TrustScore {
@@ -42,7 +50,8 @@ export function scoreTrust(f: TrustFacts): TrustScore {
   const add = (points: number, key: TrustReason['key'], n?: number) => { score += points; reasons.push(n === undefined ? { points, key } : { points, key, n }) }
   if (f.seedDistance === 0) add(W.isTrusted, 'isYou')
   else if (f.seedDistance === 1) add(W.followedByTrusted, 'youFollow')
-  else if (f.seedDistance === 2) add(W.followedByFollowedByTrusted, 'networkFollows')
+  const k = f.networkFollowers
+  if (k >= 10) add(W.network10, 'network', k); else if (k >= 3) add(W.network3, 'network', k); else if (k >= 1) add(W.network1, 'network', k)
   if (f.followers >= 20) add(W.followers20, 'followers', f.followers)
   else if (f.followers >= 5) add(W.followers5, 'followers', f.followers)
   else if (f.followers >= 1) add(W.followers1, 'followers', f.followers)
@@ -55,8 +64,14 @@ export function scoreTrust(f: TrustFacts): TrustScore {
   if (days !== undefined && days >= 30) add(W.seenOver30Days, 'seen30', days)
   else if (days !== undefined && days >= 7) add(W.seenOver7Days, 'seen7', days)
   if (f.hasProfile) add(W.hasProfile, 'profile')
-  score = Math.min(100, score)
-  return { score, level: score >= 60 ? 'established' : score >= 25 ? 'some' : 'unknown', reasons }
+  const m = f.mutedByNetwork
+  if (m >= 5) add(W.mutedBy5, 'mutedByNetwork', m); else if (m >= 3) add(W.mutedBy3, 'mutedByNetwork', m); else if (m >= 1) add(W.mutedBy1, 'mutedByNetwork', m)
+  score = Math.max(0, Math.min(100, score))
+  // The level says who vouches for it IN YOUR NETWORK (nothing a ring of fake accounts can buy): you or 3+ of your follows -> established; one of your
+  // follows -> some backing; nobody in your network -> unknown, however many followers it has elsewhere. Being muted by your network lowers it.
+  let level: TrustLevel = f.seedDistance !== undefined || k >= 3 ? 'established' : k >= 1 ? 'some' : 'unknown'
+  if (m >= 5) level = 'unknown'; else if (m >= 3) level = level === 'established' ? 'some' : 'unknown'
+  return { score, level, reasons }
 }
 
 const HEX64 = /^[0-9a-f]{64}$/
@@ -74,15 +89,18 @@ export const MAX_CHECKED_FOLLOWERS = 200
 
 /** The facts about one account, asked of the reader's relays. `own`: its events already read (profile, notes), for its age and whether it has a profile. */
 export async function loadTrust(f: Fetcher, pubkey: string, ctx: Context, own: Event[], now: number): Promise<TrustScore> {
-  const [lists, engage] = await Promise.all([f.query({ kinds: [3], '#p': [pubkey], limit: 1000 }), f.query({ kinds: [1, 6, 7, 16], '#p': [pubkey], limit: 300 })])
+  const [lists, engage, mutes] = await Promise.all([f.query({ kinds: [3], '#p': [pubkey], limit: 1000 }), f.query({ kinds: [1, 6, 7, 16], '#p': [pubkey], limit: 300 }), f.query({ kinds: [10000], '#p': [pubkey], limit: 500 })])
   const followers = [...(followersOf(lists, [pubkey]).get(pubkey) ?? [])]
   const checked = followers.slice(0, MAX_CHECKED_FOLLOWERS), second: Event[] = []
   for (let i = 0; i < checked.length; i += 100) second.push(...await f.query({ kinds: [3], '#p': checked.slice(i, i + 100), limit: 3000 }))
   const theirs = followersOf(second, checked)
   const established = checked.filter((k) => (theirs.get(k)?.size ?? 0) >= ESTABLISHED_FOLLOWERS).length
   const engagers = new Set(engage.filter((e) => e.pubkey !== pubkey && e.tags.some((t) => t[0] === 'p' && t[1] === pubkey)).map((e) => e.pubkey)).size
-  const d = pubkey === ctx.me ? 0 : ctx.follows.has(pubkey) ? 1 : ctx.graph.distance(pubkey) === 2 ? 2 : undefined
+  const d = pubkey === ctx.me ? 0 : ctx.follows.has(pubkey) ? 1 : undefined
+  const networkFollowers = followers.filter((k) => ctx.follows.has(k)).length
+  // the newest mute list of each of your follows that names it (an older list may name it and the newest no longer)
+  const mutedByNetwork = [...newestPerAuthor(mutes.filter((e) => e.kind === 10000 && ctx.follows.has(e.pubkey)))].filter(([, e]) => e.tags.some((t) => t[0] === 'p' && t[1] === pubkey)).length
   const mine = own.filter((e) => e.pubkey === pubkey)
   const oldestSeen = mine.length ? Math.min(...mine.map((e) => e.created_at)) : undefined
-  return scoreTrust({ followers: followers.length, establishedFollowers: established, ...(d === undefined ? {} : { seedDistance: d }), engagers, ...(oldestSeen === undefined ? {} : { oldestSeen }), hasProfile: mine.some((e) => e.kind === 0), now })
+  return scoreTrust({ followers: followers.length, establishedFollowers: established, networkFollowers, mutedByNetwork, ...(d === undefined ? {} : { seedDistance: d }), engagers, ...(oldestSeen === undefined ? {} : { oldestSeen }), hasProfile: mine.some((e) => e.kind === 0), now })
 }

@@ -323,7 +323,7 @@ export function renderTrust(tr: TrustScore | 'loading' | 'failed' | undefined, v
   if (!tr) return null
   if (tr === 'loading') return h('section', { class: 'card trust' }, h('h2', {}, t(v.lang, 'trustTitle')), h('p', { class: 'meta', role: 'status' }, t(v.lang, 'trustLoading')))
   if (tr === 'failed') return h('section', { class: 'card trust' }, h('h2', {}, t(v.lang, 'trustTitle')), h('p', { class: 'meta' }, t(v.lang, 'trustFailed')))
-  const line = (r: TrustReason) => h('li', {}, h('span', { class: 'trust-pts' }, `+${r.points}`), ' ', t(v.lang, `trust_${r.key}` as Parameters<typeof t>[1], r.n === undefined ? {} : { n: r.n }))
+  const line = (r: TrustReason) => h('li', {}, h('span', { class: `trust-pts${r.points < 0 ? ' minus' : ''}` }, r.points < 0 ? `−${-r.points}` : `+${r.points}`), ' ', t(v.lang, `trust_${r.key}` as Parameters<typeof t>[1], r.n === undefined ? {} : { n: r.n }))
   return h('section', { class: `card trust ${tr.level}` },
     h('h2', {}, t(v.lang, 'trustTitle')),
     h('p', { class: 'trust-score' }, h('strong', {}, `${tr.score}/100`), ' · ', t(v.lang, `trustLevel_${tr.level}` as Parameters<typeof t>[1])),
