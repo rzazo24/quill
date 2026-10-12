@@ -297,6 +297,16 @@ describe('writing a reply', () => {
   })
 })
 
+describe('a reaction one relay turned away', () => {
+  it('reached most relays: one quiet line, no panel (some relays only take reactions from their own web of trust); a note would still show the panel', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg, pub: publisherFake({ 'wss://r1.example': 'ok', 'wss://r2.example': 'ok', 'wss://r3.example': 'Policy violated and pubkey is not in our web of trust.' }) })
+    await tick(100); await connectClave(a, sg)
+    ;(a.root.querySelector('button[aria-label="React 👍"]') as HTMLElement).click(); await tick(80)
+    expect(a.text()).not.toContain('Published to 2 of 3 relays'); expect(a.root.querySelector('.popup')!.textContent).toContain('👍 →')
+    expect(a.root.querySelector('.result')).toBeNull()
+  })
+})
+
 describe('signing out', () => {
   it('disconnects the signer too', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)

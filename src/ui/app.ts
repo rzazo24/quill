@@ -1057,8 +1057,9 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     if (engagement.of(target.id).reactions.has(normReaction(emoji))) { say('info', t(lang, 'alreadyReacted', { emoji: emoji === '+' ? '👍' : emoji })); return draw() }
     if (await send(template)) {
       engagement.addReaction(target.id, emoji); rebar(target)
-      // A like that reached every relay needs one quiet line that fades, not the per-relay panel. If some relay failed, the panel stays (it has the retry).
-      if (result && !failedRelays(result.outcomes).length) {
+      // A like that reached most of the relays needs one quiet line that fades, not the per-relay panel: some relays only take reactions from keys in their
+      // own web of trust, and saying so every time helps nobody. Only when most relays failed does the panel stay (it has the retry). Notes and reposts always tell.
+      if (result && failedRelays(result.outcomes).length * 2 < Object.keys(result.outcomes).length) {
         result = null; say('info', `${emoji === '+' ? '👍' : emoji} → ${nameOf(view(), target.pubkey)}`)
       }
     }
