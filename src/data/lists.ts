@@ -34,3 +34,14 @@ export function nameOf(event: Pick<Event, 'content'>): string | undefined {
     return name || undefined
   } catch { return undefined }
 }
+
+/** The profile picture's address, only if it is a plain https URL (no other schemes, no data: blobs, nothing odd). */
+export function pictureOf(event: Pick<Event, 'content'>): string | undefined {
+  try {
+    const p = JSON.parse(event.content) as Record<string, unknown>
+    const u = typeof p.picture === 'string' ? p.picture.trim() : ''
+    if (!u || u.length > 500 || /\s/.test(u)) return undefined
+    const url = new URL(u)
+    return url.protocol === 'https:' && !url.username && !url.password ? url.toString() : undefined
+  } catch { return undefined }
+}

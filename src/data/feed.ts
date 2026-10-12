@@ -3,7 +3,7 @@ import type { Event } from 'nostr-tools'
 import { COMMENT_KIND } from '../core/thread.js'
 import { isReply, threadRefs } from '../core/thread.js'
 import { analyse, judge, judgeAll, type Context, type Judged, type Settings, DEFAULT_SETTINGS } from '../core/verdict.js'
-import { newestPerAuthor, nameOf } from './lists.js'
+import { newestPerAuthor, nameOf, pictureOf } from './lists.js'
 import { queryAuthors, type Fetcher } from '../net/fetcher.js'
 import { fetchOriginals, loadRepostRefs, mergeFeed } from './reposts.js'
 import { fromOutbox, withinPatience } from './outbox.js'
@@ -97,12 +97,15 @@ export async function loadNote(f: Fetcher, id: string, ctx: Context, settings: S
 }
 
 /** Display names for the keys on screen. Missing profiles simply have no name. */
-export async function loadNames(f: Fetcher, pubkeys: string[]): Promise<Map<string, string>> {
+/** `pictures`, when given, is filled too with each profile's picture address (the same events: no extra question). */
+export async function loadNames(f: Fetcher, pubkeys: string[], pictures?: Map<string, string>): Promise<Map<string, string>> {
   const out = new Map<string, string>()
   const unique = [...new Set(pubkeys)]
   for (const [pk, e] of newestPerAuthor(await queryAuthors(f, { kinds: [0], limit: 200 }, unique))) {
     const n = nameOf(e)
     if (n) out.set(pk, n)
+    const pic = pictures ? pictureOf(e) : undefined
+    if (pic) pictures!.set(pk, pic)
   }
   return out
 }

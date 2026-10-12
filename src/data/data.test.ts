@@ -150,3 +150,13 @@ describe('views', () => {
     expect(await loadNames(f, [a, b])).toEqual(new Map([[a, 'new']]))
   })
 })
+
+describe('profile pictures', () => {
+  it('only a plain https address is taken', async () => {
+    const { pictureOf } = await import('./lists.js')
+    const pic = (picture: unknown) => pictureOf({ content: JSON.stringify({ picture }) })
+    expect(pic('https://img.example/a.jpg')).toBe('https://img.example/a.jpg')
+    expect(pic('http://img.example/a.jpg')).toBeUndefined(); expect(pic('data:image/png;base64,AAAA')).toBeUndefined(); expect(pic('javascript:alert(1)')).toBeUndefined()
+    expect(pic('https://user:pw@img.example/a.jpg')).toBeUndefined(); expect(pic(42)).toBeUndefined(); expect(pictureOf({ content: 'not json' })).toBeUndefined()
+  })
+})

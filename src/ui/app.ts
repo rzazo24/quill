@@ -106,6 +106,11 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let font: FontSize = parseFont(safeGet(kv, 'font'))
   let showReposts = parseReposts(safeGet(kv, 'reposts'))
   let readOutbox = parseReposts(safeGet(kv, 'outbox')) // on unless turned off ('0'), like reposts
+  let realAvatars = safeGet(kv, 'realAvatars') === '1' // off unless turned on
+  const pictures = new Map<string, string>() // profile picture addresses, learnt with the names
+  // a profile is asked for once per visit: a name kept from last time (the feed's cache) still needs its picture when real ones are on
+  const profileAsked = new Set<string>()
+  const needsProfile = (k: string) => !profileAsked.has(k) && (!names.has(k) || realAvatars)
   // the reader's wallet for zaps (NWC): its connection string is kept ONLY on this device, per account; `nwcState` is what Settings shows of a test
   let nwcState: { testing: true } | { balance: number | null } | { error: string } | null = null
   let nwcError: string | null = null
@@ -310,7 +315,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
   /** The lists are built once and reused between redraws, so a bar already on screen keeps what it showed: redo the bar(s) of this note in place. */
   const rebar = (e: NostrEvent) => { for (const old of root.querySelectorAll(`article.note[data-id="${e.id}"] .actions`)) old.replaceWith(barFor(e)) }
-  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), zapsOf: (id: string) => { const z = zapMap.get(id); if (z === undefined) wantZaps(id); return z ?? undefined }, quoted: (id: string) => quotedMap.get(id), wantQuote, suggestPeople: (word: string) => (session ? matchPeople(names, word, ctx(), 50).filter((p) => fold(p.name).split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(fold(word)))).slice(0, 5) : []), articleTitle: (pk: string, d: string) => (articleTitles.has(`${pk}:${d}`) ? articleTitles.get(`${pk}:${d}`) ?? null : undefined), wantArticle, ...(me ? { saved: { has: (id: string) => savedNotes().some((x) => x.event.id === id), toggle: toggleSaved } } : {}), seen: rememberNotes, interests, deleted: deletedIds(), ...(me ? { self: me } : {}), ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk), deleteNote: (e: NostrEvent) => { if (e.pubkey === me && e.kind === 1) { deleteConfirm = e; draw() } } } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
+  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), picture: (pk: string) => (realAvatars && (pk === me || !!session?.follows.has(pk)) ? pictures.get(pk) : undefined), zapsOf: (id: string) => { const z = zapMap.get(id); if (z === undefined) wantZaps(id); return z ?? undefined }, quoted: (id: string) => quotedMap.get(id), wantQuote, suggestPeople: (word: string) => (session ? matchPeople(names, word, ctx(), 50).filter((p) => fold(p.name).split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(fold(word)))).slice(0, 5) : []), articleTitle: (pk: string, d: string) => (articleTitles.has(`${pk}:${d}`) ? articleTitles.get(`${pk}:${d}`) ?? null : undefined), wantArticle, ...(me ? { saved: { has: (id: string) => savedNotes().some((x) => x.event.id === id), toggle: toggleSaved } } : {}), seen: rememberNotes, interests, deleted: deletedIds(), ...(me ? { self: me } : {}), ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk), deleteNote: (e: NostrEvent) => { if (e.pubkey === me && e.kind === 1) { deleteConfirm = e; draw() } } } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
   const ctx = () => contextOf(session!, { mutedWords: words, mutedKeys: [] })
   const who = () => (signer?.pubkey ? nameOf(view(), signer.pubkey) : '')
 
@@ -359,9 +364,10 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   async function nameThem(items: Judged[], extra: string[] = []): Promise<void> {
-    const keys = [...extra, ...items.flatMap((j) => [j.event.pubkey, ...(j.repostedBy ?? []), ...(j.followedBy ?? []).slice(0, 1), ...(j.pickedBy ?? []).slice(0, 1), ...mentionedKeys(j.event.content)]), ...(signer?.pubkey ? [signer.pubkey] : [])].filter((k) => !names.has(k))
+    const keys = [...extra, ...items.flatMap((j) => [j.event.pubkey, ...(j.repostedBy ?? []), ...(j.followedBy ?? []).slice(0, 1), ...(j.pickedBy ?? []).slice(0, 1), ...mentionedKeys(j.event.content)]), ...(signer?.pubkey ? [signer.pubkey] : [])].filter(needsProfile)
     if (!keys.length) return
-    for (const [k, n] of await loadNames(fetcher, keys)) names.set(k, n)
+    for (const k of keys) profileAsked.add(k)
+    for (const [k, n] of await loadNames(fetcher, keys, pictures)) names.set(k, n)
   }
 
   /** Counts what the given notes got, a moment after the page is up, and builds the Me view once more with the numbers (the answers are remembered: no new questions). */
@@ -584,7 +590,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         // the names of what is on the first page come first; the rest are asked for once it is on screen (a card of a later page is built when "Show more" is tapped, by then they are in)
         await nameThem(act ? [...items.slice(0, PAGE), ...act.reactions, ...act.reposts] : items.slice(0, PAGE), fresher.slice(0, 8))
         if (items.length > PAGE) setTimeout(() => { void nameThem(items.slice(PAGE)) }, 300)
-        if (route.name === 'me' && !names.has(me!)) for (const [k, n] of await loadNames(fetcher, [me!])) names.set(k, n)
+        if (route.name === 'me' && !names.has(me!)) for (const [k, n] of await loadNames(fetcher, [me!], pictures)) names.set(k, n)
         if (act) {
           if (markFrom === null) markFrom = seenAt ?? nowSec() // first ever visit: nothing is "new"
           const fresh = countNew(act, markFrom, followersMark!)
@@ -814,7 +820,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
   }
 
   /** Reads everything again from the relays (an installed app has no pull-to-refresh). */
-  function refresh(): void { fetcher.clear(); lateNotes.clear(); latePending.clear(); lateWaiting = null; zapMap.clear(); articleTitles.clear(); reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); session = null; void load() }
+  function refresh(): void { fetcher.clear(); profileAsked.clear(); lateNotes.clear(); latePending.clear(); lateWaiting = null; zapMap.clear(); articleTitles.clear(); reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); session = null; void load() }
 
   const flat = (nodes: ThreadNode[]): Judged[] => nodes.flatMap((n) => [n.item, ...flat(n.children)])
 
@@ -874,6 +880,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
   function changeAvatars(a: AvatarStyle): void { avatarStyle = a; safeSet(kv, 'avatars', a === 'initials' ? null : a); void load() } // the cards are built once and kept: they are rebuilt with the new pictures
   function changeAutoImages(on: boolean): void { autoImages = on; safeSet(kv, 'autoImages', on ? '1' : null); draw() }
   function changeReposts(on: boolean): void { showReposts = on; safeSet(kv, 'reposts', on ? null : '0'); void load() }
+  function changeRealAvatars(on: boolean): void { realAvatars = on; safeSet(kv, 'realAvatars', on ? '1' : null); draw(); void load() }
   function changeOutbox(on: boolean): void { readOutbox = on; safeSet(kv, 'outbox', on ? null : '0'); void load() }
   function changeScheme(x: Scheme): void { scheme = x; safeSet(kv, 'scheme', x === 'dark' ? null : x); applyTheme(); draw() }
   function changeTheme(on: boolean): void { themeChoice = on ? 'halloween' : 'default'; safeSet(kv, 'theme', themeChoice); applyTheme(); draw() } // an explicit choice, kept, wins over the season
@@ -1178,9 +1185,10 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
 
   /** Display names for some keys, asked of the relays only for the ones not known yet. */
   async function nameKeys(keys: string[]): Promise<void> {
-    const missing = keys.filter((k) => !names.has(k))
+    const missing = [...new Set(keys)].filter(needsProfile)
     if (!missing.length) return
-    for (const [k, n] of await loadNames(fetcher, missing)) names.set(k, n)
+    for (const k of missing) profileAsked.add(k)
+    for (const [k, n] of await loadNames(fetcher, missing, pictures)) names.set(k, n)
   }
 
   /** The two lists behind the counts in Me. Following is your own list, exact; followers is what this app has seen (the same ~N as the count), so it says so. */
@@ -1327,7 +1335,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     const helpPage = renderHelp(view(), helpOpen, (id, isOpen) => { if (isOpen) helpOpen.add(id); else helpOpen.delete(id) })
     const content: (HTMLElement | null)[] = route.name === 'help' ? [signArea, helpPage]
       : !me ? [...(route.name === 'note' && guestBody ? [guestBody] : []), loginForm, signArea]
-      : route.name === 'settings' ? [signArea, renderPrefs({ font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, scheme, onScheme: changeScheme, halloween: halloween(), onHalloween: changeTheme, autoImages, onAutoImages: changeAutoImages, interests, onInterests: changeInterests, reposts: showReposts, onReposts: changeReposts, outbox: readOutbox, onOutbox: changeOutbox, nwc: { relay: nwcOf()?.relays[0] ?? null, state: nwcState, error: nwcError, canSign: signer?.state === 'connected' }, onNwcSave: saveNwc, onNwcRemove: removeNwc, onNwcTest: () => void testNwc(), relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
+      : route.name === 'settings' ? [signArea, renderPrefs({ font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, realAvatars, onRealAvatars: changeRealAvatars, scheme, onScheme: changeScheme, halloween: halloween(), onHalloween: changeTheme, autoImages, onAutoImages: changeAutoImages, interests, onInterests: changeInterests, reposts: showReposts, onReposts: changeReposts, outbox: readOutbox, onOutbox: changeOutbox, nwc: { relay: nwcOf()?.relays[0] ?? null, state: nwcState, error: nwcError, canSign: signer?.state === 'connected' }, onNwcSave: saveNwc, onNwcRemove: removeNwc, onNwcTest: () => void testNwc(), relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
         onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
       : isWide ? [wideView(route, signArea, signOut)]

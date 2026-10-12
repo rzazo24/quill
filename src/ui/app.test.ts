@@ -424,10 +424,10 @@ describe('reposts of the people you follow', () => {
 describe('the switches in Settings', () => {
   it('every rule, the reposts and the pictures options is a switch (a checkbox announced as on/off), with the words first and the switch at the end, and one line that says what on and off mean', async () => {
     const a = boot({ stored: { me } }); await tick(80); await a.go('#/settings'); await tick(100)
-    const rows = [...a.root.querySelectorAll('label.check')]; expect(rows).toHaveLength(10) // six rules + reposts + pictures + the Halloween theme + reading people where they write
+    const rows = [...a.root.querySelectorAll('label.check')]; expect(rows).toHaveLength(11) // six rules + reposts + pictures + the Halloween theme + reading people where they write + real profile pictures
     for (const r of rows) { const input = r.querySelector('input')!; expect(input.type).toBe('checkbox'); expect(input.getAttribute('role')).toBe('switch'); expect(r.firstElementChild!.tagName).toBe('SPAN'); expect(r.lastElementChild).toBe(input) }
     expect(a.root.querySelector('.settings .meta')!.textContent).toBe('On = the rule hides what meets its condition. Off = it hides nothing.')
-    const rules = rows.filter((r) => !/Halloween|repost|pictures|where they write/.test(r.textContent!)); expect(rules).toHaveLength(6)
+    const rules = rows.filter((r) => !/Halloween|repost|pictures|where they write|profile pictures/.test(r.textContent!)); expect(rules).toHaveLength(6)
     expect(rules.map((r) => (r.querySelector('input') as HTMLInputElement).checked)).toEqual([true, true, true, true, true, true]) // all on by default
   })
 })
@@ -1345,5 +1345,26 @@ describe('notes from people\'s own relays that arrive late', () => {
   it('with the switch off, nobody else\'s relay is asked', async () => {
     const a = boot({ events: w, stored: { me, outbox: '0' }, elsewhere: { relay: 'wss://far.example', events: [late], delayMs: 10 } }); await tick(600)
     expect(a.text()).not.toContain('written where only I write')
+  })
+})
+
+describe('real profile pictures', () => {
+  const withPics = [...world.filter((e) => !(e.kind === 0 && e.pubkey === friend)), ev(friend, JSON.stringify({ name: 'Ana', picture: 'https://img.example/ana.jpg' }), { kind: 0 }), ev(far, JSON.stringify({ name: 'Spammy', picture: 'https://img.example/spam.jpg' }), { kind: 0 }), ev(far, 'a stranger with a picture', { created_at: 9500, tags: [['p', me]] })]
+  it('off by default; once on, only people you follow show theirs (strangers keep the drawn one); a picture that fails goes back to the drawn one', async () => {
+    const a = boot({ events: withPics, stored: { me } }); await tick(300)
+    expect(a.root.querySelector('.avatar.photo')).toBeNull()
+    await a.go('#/settings'); await tick(80)
+    const sw = [...a.root.querySelectorAll('label.check')].find((r) => r.textContent!.includes('Real profile pictures'))!.querySelector('input') as HTMLInputElement
+    expect(sw.checked).toBe(false); expect(a.text()).toContain('that site sees your IP address')
+    sw.checked = true; sw.dispatchEvent(new Event('change')); await tick(100); expect(a.mem.get('realAvatars')).toBe('1')
+    await a.go('#/'); await tick(300)
+    const imgs = [...a.root.querySelectorAll('.avatar.photo img')] as HTMLImageElement[]
+    expect(imgs.length).toBeGreaterThan(0); expect(imgs.every((i) => i.getAttribute('src') === 'https://img.example/ana.jpg')).toBe(true)
+    expect(imgs[0]!.getAttribute('referrerpolicy')).toBe('no-referrer')
+    await a.go('#/mentions'); await tick(300)
+    expect(a.root.querySelector('img[src="https://img.example/spam.jpg"]')).toBeNull() // a stranger: drawn avatar
+    await a.go('#/'); await tick(300)
+    const one = a.root.querySelector('.avatar.photo img') as HTMLImageElement; const box = one.parentElement!
+    one.dispatchEvent(new Event('error')); expect(box.isConnected).toBe(false)
   })
 })
