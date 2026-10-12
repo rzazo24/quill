@@ -111,6 +111,8 @@ Organización del código: `src/core` lógica pura (seguridad del texto, hilos, 
 
 `scripts/deploy.sh <repo-del-relé> <dominio>` compila, copia `dist/` junto a un bloque de sitio de [Caddy](https://caddyserver.com) (`deploy/quill.caddy.template`, con cabeceras de seguridad estrictas), **valida toda la configuración de Caddy** y solo entonces la recarga; si la validación falla, restaura los archivos anteriores.
 
+Opcional: `server/avatars` (Go, sin dependencias nativas) sirve las fotos de perfil como miniaturas cuadradas en `/avatar?u=<foto>&s=96`: el servidor las descarga una vez y las guarda, así que quien lee se baja unos kilobytes en vez de megas, y los sitios de las fotos ven al servidor, no a quien lee. Solo pide direcciones `https` públicas (comprobadas al conectar), como mucho 8 MB, solo imágenes, con un límite de peticiones por cliente. Se compila con `go build` en esa carpeta y se ejecuta como servicio escuchando donde solo Caddy llegue (el bloque del sitio le pasa `/avatar`). Sin él, las fotos vienen directamente de sus sitios.
+
 ## Estado de la técnica
 
 Mirado antes de empezar (octubre de 2026): Coracle oculta notas bajo un umbral de red de confianza sin decir por qué; nostui es un cliente de terminal sin filtro de spam.

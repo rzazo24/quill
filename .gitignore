@@ -4,3 +4,4 @@ dist
 .probe
 .e2e
 .e2e.log
+/server/avatars/quill-avatars

@@ -111,6 +111,8 @@ Layout of the code: `src/core` pure logic (text safety, threads, the filter) · 
 
 `scripts/deploy.sh <relay-repo> <domain>` builds, copies `dist/` next to a [Caddy](https://caddyserver.com) site block (`deploy/quill.caddy.template`, with the strict security headers), **validates the whole Caddy configuration** and only then reloads it; if validation fails it restores the previous files.
 
+Optional: `server/avatars` (Go, no native dependencies) serves profile pictures as small square thumbnails at `/avatar?u=<picture>&s=96`, fetched once by the server and kept on disk, so readers download a few kilobytes instead of megabytes and the picture hosts see the server, not the reader. It only fetches public `https` addresses (checked when connecting), at most 8 MB, images only, with a per-client rate limit. Build it with `go build` there, run it as a service listening where only Caddy can reach it (the site block proxies `/avatar` to it). Without it, pictures come straight from their sites.
+
 ## Prior art
 
 Looked at before starting (October 2026): Coracle hides notes under a web-of-trust threshold without saying why; nostui is a terminal client with no spam filtering.

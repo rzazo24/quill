@@ -17,6 +17,11 @@ __DOMAIN__ {
 	@page not path /assets/*
 	header @page Cache-Control "no-cache"
 	# the morning digest of notes (written by ~/.local/share/quality-digest/run.sh into <relay-repo>/sites/digest/, which deploys never touch); not for search engines
+	# profile pictures as small thumbnails, fetched by this server (server/avatars, a user service listening on the Docker network's gateway;
+	# the host firewall lets only that network reach it)
+	handle /avatar {
+		reverse_proxy 172.19.0.1:8790
+	}
 	redir /digest /digest/
 	handle /digest/* {
 		root * /srv/sites

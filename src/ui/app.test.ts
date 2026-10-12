@@ -18,11 +18,12 @@ const roots: HTMLElement[] = []
 /** A choice in the search Filters (Show / Search in): its buttons are there even while the panel is folded. */
 const pickFilter = (a: { root: HTMLElement }, label: string) => ([...a.root.querySelectorAll('.search-filters button')].find((b) => b.textContent === label) as HTMLButtonElement).click()
 
-function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; copy?: (text: string) => void; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; light?: { value: boolean }; elsewhere?: { relay: string; events: Event[]; delayMs: number } } = {}) {
+function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; copy?: (text: string) => void; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; light?: { value: boolean }; elsewhere?: { relay: string; events: Event[]; delayMs: number }; avatarProxy?: string } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
   const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], schemeChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs, opts.slowFor, opts.onlyWhenAll), calls = { n: 0 }, filters: Filter[] = []
   startApp(root, {
+    ...(opts.avatarProxy ? { avatarProxy: opts.avatarProxy } : {}),
     fetcher: { query: async (f, o) => { calls.n++; filters.push(f); if (o?.only) { const el = opts.elsewhere; if (!el || !o.only.includes(el.relay)) return []; await new Promise((r) => setTimeout(r, el.delayMs)); return el.events.filter((e) => answers(f, e)) } return base.query(f, o) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', prefersLight: () => !!opts.light?.value, onSchemeChange: (cb) => schemeChanged.push(cb), onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
     copy: opts.copy,
     searchFetcher: opts.searchable ? { query: async (f: Filter) => opts.searchable!.filter((e) => answers(f, e) && (!(f as { search?: string }).search || e.content.toLowerCase().includes((f as { search: string }).search.toLowerCase()))) } : undefined,
@@ -1356,7 +1357,7 @@ describe('real profile pictures', () => {
     expect(a.root.querySelector('.avatar.photo')).toBeNull()
     await a.go('#/settings'); await tick(80)
     const sw = [...a.root.querySelectorAll('label.check')].find((r) => r.textContent!.includes('Real profile pictures'))!.querySelector('input') as HTMLInputElement
-    expect(sw.checked).toBe(false); expect(a.text()).toContain('that site sees your IP address')
+    expect(sw.checked).toBe(false); expect(a.text()).toContain('see that server\'s address, not yours')
     sw.checked = true; sw.dispatchEvent(new Event('change')); await tick(100); expect(a.mem.get('realAvatars')).toBe('1')
     await a.go('#/'); await tick(300)
     const imgs = [...a.root.querySelectorAll('.avatar.photo img')] as HTMLImageElement[]
@@ -1367,5 +1368,14 @@ describe('real profile pictures', () => {
     await a.go('#/'); await tick(300)
     const one = a.root.querySelector('.avatar.photo img') as HTMLImageElement; const box = one.parentElement!
     one.dispatchEvent(new Event('error')); expect(box.isConnected).toBe(false)
+  })
+})
+
+describe('profile pictures through Quill\'s server', () => {
+  it('with a thumbnail service, the picture is asked there, small, never straight from its site', async () => {
+    const withPic = [...world.filter((e) => !(e.kind === 0 && e.pubkey === friend)), ev(friend, JSON.stringify({ name: 'Ana', picture: 'https://img.example/ana.jpg?x=1' }), { kind: 0 })]
+    const a = boot({ events: withPic, stored: { me, realAvatars: '1' }, avatarProxy: 'https://quill.example/avatar' }); await tick(400)
+    const src = (a.root.querySelector('.avatar.photo img') as HTMLImageElement).getAttribute('src')
+    expect(src).toBe('https://quill.example/avatar?u=https%3A%2F%2Fimg.example%2Fana.jpg%3Fx%3D1&s=96')
   })
 })
