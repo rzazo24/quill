@@ -369,8 +369,11 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
   let searchQuery = ''
   let searchKind: SearchKind = 'all' // All | People | Notes, under the box
-  let searchShowNet = false // the network's answer is on screen (instead of what was loaded)
-  let searchNet: { query: string; state: 'loading' } | { query: string; state: 'failed' } | { query: string; state: 'done'; notes: Judged[]; people: Found[]; kind?: SearchKind } | null = null
+  let searchWhere: 'loaded' | 'network' = 'loaded' // back to 'loaded' every time the search opens: the network sends what is typed to third parties
+  let netTimer: ReturnType<typeof setTimeout> | undefined
+  let searchOpen = false, searchFiltersPaint: (() => void) | null = null
+  let searchHintEl: HTMLElement | null = null
+  let searchNet: { query: string; kind: SearchKind; state: 'loading' } | { query: string; kind: SearchKind; state: 'failed' } | { query: string; kind: SearchKind; state: 'done'; notes: Judged[]; people: Found[] } | null = null
   let searchInput: HTMLInputElement | null = null
   // a single #tag is also asked of the reader's own relays (they all filter by tag), a moment after typing stops
   let tagSearch: { tag: string; state: 'loading' | 'failed' | 'done'; notes: Judged[] } | null = null
@@ -396,44 +399,67 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   /** The search page is built once and kept: typing only redraws the results under the box, so the box keeps its focus and what was typed. */
   function searchPage(): HTMLElement {
     if (searchPageEl) { drawSearch(); return searchPageEl }
+    deps.onHash(() => { // opened again from another page: back to what is loaded (the network is chosen on purpose, each time)
+      const r = parseRoute(deps.location.hash).name === 'search'
+      if (r && !searchOpen) { searchWhere = 'loaded'; searchFiltersPaint?.() }
+      searchOpen = r
+    })
+    searchOpen = true
     searchInput = h('input', { type: 'search', class: 'search-box', placeholder: t(lang, 'searchPlaceholder'), 'aria-label': t(lang, 'search'), autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false', enterkeyhint: 'search' }) as HTMLInputElement
     searchInput.value = searchQuery
     searchInput.addEventListener('input', () => { searchQuery = searchInput!.value; drawSearch() })
     searchResults = h('div', { class: 'stack search-results' })
+    searchHintEl = h('p', { class: 'meta search-note' })
     const form = h('form', { class: 'card search-form', role: 'search', onSubmit: (e: Event) => { e.preventDefault(); const target = parseTarget(searchQuery); if (target) deps.setHash(target.kind === 'user' ? `#/user/${target.pubkey}` : `#/note/${target.id}`); else searchInput?.blur() } },
-      h('label', { class: 'search-row' }, icon('search', 20), searchInput), kindSwitch(), h('p', { class: 'meta search-note' }, t(lang, 'searchHint')), searchTip = h('p', { class: 'meta search-note', hidden: true }, t(lang, 'searchType')))
+      h('label', { class: 'search-row' }, icon('search', 20), searchInput), filters(), searchHintEl, searchTip = h('p', { class: 'meta search-note', hidden: true }, t(lang, 'searchType')))
     searchPageEl = h('div', { class: 'stack search' }, form, searchResults)
     drawSearch()
     setTimeout(() => { if (searchInput?.isConnected && !searchQuery) searchInput.focus() }, 0) // opened to type: the box is ready
     return searchPageEl
   }
-  /** All | People | Notes: what the results (and a network search) are about. Its buttons are lit in place: the box keeps its cursor. */
-  function kindSwitch(): HTMLElement {
-    const box = h('div', { class: 'seg search-kind', role: 'group', 'aria-label': t(lang, 'searchKind') })
-    const paint = () => { for (const b of box.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.kind === searchKind)) }
-    for (const k of ['all', 'people', 'notes'] as const) box.append(h('button', { type: 'button', 'data-kind': k, onClick: () => { searchKind = k; paint(); drawSearch() } }, t(lang, `searchKind_${k}` as Key)))
-    paint()
-    return box
+  /** "Filters · People · Network": one small button that says what is chosen; it opens two groups, Show (All | People | Notes) and Search in
+   *  (What is loaded | The network). Its parts are lit in place: the box keeps its cursor. */
+  function filters(): HTMLElement {
+    const summary = h('span', {})
+    const toggle = h('button', { type: 'button', class: 'thread-link search-filters-btn', 'aria-expanded': 'false', onClick: () => { panel.hidden = !panel.hidden; toggle.setAttribute('aria-expanded', String(!panel.hidden)) } }, icon('gear', 14), summary)
+    const group = <K extends string>(label: string, keys: readonly K[], get: () => K, set: (k: K) => void, text: (k: K) => string) => {
+      const seg = h('div', { class: 'seg search-kind', role: 'group', 'aria-label': label })
+      for (const k of keys) seg.append(h('button', { type: 'button', 'data-k': k, onClick: () => { set(k); paint(); drawSearch() } }, text(k)))
+      return { el: h('div', { class: 'search-filter-group' }, h('span', { class: 'meta' }, label), seg), seg, get }
+    }
+    const show = group(t(lang, 'searchKind'), ['all', 'people', 'notes'] as const, () => searchKind, (k) => { searchKind = k }, (k) => t(lang, `searchKind_${k}` as Key))
+    const where = group(t(lang, 'searchWhere'), ['loaded', 'network'] as const, () => searchWhere, (k) => { searchWhere = k }, (k) => t(lang, `searchWhere_${k}` as Key))
+    const panel = h('div', { class: 'search-filters', hidden: true }, show.el, where.el)
+    function paint() {
+      for (const g of [show, where]) for (const b of g.seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String((b as HTMLElement).dataset.k === g.get()))
+      const parts = [searchKind === 'all' ? null : t(lang, `searchKind_${searchKind}` as Key), searchWhere === 'network' ? t(lang, 'searchWhere_network') : null].filter(Boolean)
+      summary.textContent = [t(lang, 'searchFilters'), ...parts].join(' · ')
+      toggle.classList.toggle('on', parts.length > 0)
+    }
+    paint(); searchFiltersPaint = () => { paint(); drawSearch() }
+    return h('div', { class: 'search-filters-box' }, toggle, panel)
   }
   function drawSearch(): void {
     if (!searchResults || !session) return
     const q = searchQuery.trim(), v = view(), parts: (HTMLElement | null)[] = []
+    if (searchHintEl) searchHintEl.textContent = searchWhere === 'network' ? t(lang, 'searchNetHint', { relays: SEARCH_RELAYS.map((r) => r.replace(/^wss:\/\//, '')).join(' · ') }) : t(lang, 'searchHint')
     const target = parseTarget(q)
+    const wantPeople = searchKind !== 'notes', wantNotes = searchKind !== 'people'
     if (target) parts.push(h('p', {}, h('a', { class: 'button primary', href: target.kind === 'user' ? `#/user/${target.pubkey}` : `#/note/${target.id}` }, t(lang, target.kind === 'user' ? 'searchOpenAccount' : 'searchOpenNote'))))
     else if (q.length < MIN_QUERY) { /* the tip under the box says what to type */ }
-    else {
-      const wantPeople = searchKind !== 'notes', wantNotes = searchKind !== 'people'
-      // once the network was asked, only its answer shows (mixing it with what was loaded confused): a link goes back to what was loaded
-      const net = searchNet?.query === q && searchNet.state === 'done' && (!searchNet.kind || searchNet.kind === 'all' || searchNet.kind === searchKind) ? searchNet : null
-      if (net && searchShowNet) {
+    else if (searchWhere === 'network') {
+      // the search relays, asked a moment after typing stops (not on every letter); only what is chosen in Show
+      const net = searchNet?.query === q && searchNet.kind === searchKind ? searchNet : null
+      if (!net) { clearTimeout(netTimer); netTimer = setTimeout(() => void runNetSearch(q), 600); parts.push(h('p', { class: 'status loading', role: 'status' }, h('span', {}, t(lang, 'searchNetLoading')))) }
+      else if (net.state === 'loading') parts.push(h('p', { class: 'status loading', role: 'status' }, h('span', {}, t(lang, 'searchNetLoading'))))
+      else if (net.state === 'failed') parts.push(h('p', { class: 'error' }, t(lang, 'searchNetFailed')), h('p', {}, h('button', { type: 'button', onClick: () => void runNetSearch(q) }, t(lang, 'searchRetry'))))
+      else {
         const people = wantPeople ? net.people : [], notes = wantNotes ? net.notes : []
-        parts.push(h('div', { class: 'search-net-head' }, h('h2', { class: 'section' }, t(lang, 'searchNetFrom')), h('button', { type: 'button', class: 'thread-link search-back', 'aria-label': t(lang, 'searchBackLocal'), title: t(lang, 'searchBackLocal'), onClick: () => { searchShowNet = false; drawSearch() } }, icon('back', 14), t(lang, 'back'))))
         if (people.length) parts.push(peopleCard(t(lang, 'searchPeople'), people, v))
-        if (notes.length) parts.push(h('h2', { class: 'section' }, `${t(lang, 'searchNotes')} · ${notes.length}`), renderList(notes, { ...v, seen: undefined })) // not "loaded": back on what was loaded, they do not show
+        if (notes.length) parts.push(h('h2', { class: 'section' }, `${t(lang, 'searchNotes')} · ${notes.length}`), renderList(notes, { ...v, seen: undefined })) // not "loaded"
         if (!people.length && !notes.length) parts.push(h('p', { class: 'empty' }, t(lang, 'searchNetNone')))
-        searchResults.replaceChildren(...parts.filter((x): x is HTMLElement => x !== null)); if (searchTip) searchTip.hidden = true
-        return
       }
+    } else {
       const tag = wantNotes ? tagOf(q) : null
       if (tag) askTag(tag); else { clearTimeout(tagTimer); tagSearch = null }
       const people = wantPeople ? matchPeople(names, q, ctx()) : [], local = wantNotes ? matchNotes(knownNotes.values(), q) : []
@@ -442,8 +468,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       if (tag && tagSearch?.tag === tag && tagSearch.state !== 'done') parts.push(h('p', { class: tagSearch.state === 'loading' ? 'status loading' : 'meta', role: 'status' }, h('span', {}, t(lang, tagSearch.state === 'loading' ? 'searchTagLoading' : 'searchTagFailed', { tag: '#' + tag }))))
       if (people.length) parts.push(peopleCard(t(lang, 'searchPeople'), people, v))
       if (notes.length) parts.push(h('h2', { class: 'section' }, `${t(lang, 'searchNotes')} · ${notes.length}`), renderList(notes, { ...v, seen: undefined }))
-      if (!people.length && !notes.length) parts.push(h('p', { class: 'empty' }, t(lang, 'searchNone')))
-      parts.push(netSection(q, v, new Set(people.map((p) => p.pubkey)), new Set(notes.map((n) => n.event.id))))
+      if (!people.length && !notes.length) parts.push(h('p', { class: 'empty' }, t(lang, deps.searchFetcher ? 'searchNoneTryNetwork' : 'searchNone')))
     }
     if (searchTip) searchTip.hidden = !!target || q.length >= MIN_QUERY
     searchResults.replaceChildren(...parts.filter((x): x is HTMLElement => x !== null))
@@ -452,27 +477,17 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     return h('section', { class: 'card search-people' }, h('h2', {}, `${title} · ${people.length}`),
       h('ul', {}, ...people.map((p) => h('li', {}, h('a', { href: `#/user/${p.pubkey}` }, avatarEl(p.pubkey, v), h('strong', {}, p.name)), p.relation === 'none' ? null : h('span', { class: 'meta' }, t(lang, p.relation === 'follow' ? 'relFollow' : 'relNetwork'))))))
   }
-  function netSection(q: string, v: View, havePeople: Set<string>, haveNotes: Set<string>): HTMLElement | null {
-    if (!deps.searchFetcher) return null
-    const net = searchNet?.query === q && (searchNet.state !== 'done' || !searchNet.kind || searchNet.kind === 'all' || searchNet.kind === searchKind) ? searchNet : null // asked for people only, the notes were not asked for
-    if (!net) return h('div', { class: 'search-net' }, h('button', { type: 'button', onClick: () => void runNetSearch(q) }, icon('search', 16), t(lang, 'searchNet')), h('p', { class: 'meta' }, t(lang, 'searchNetHint', { relays: SEARCH_RELAYS.map((r) => r.replace(/^wss:\/\//, '')).join(' · ') })))
-    if (net.state === 'loading') return h('p', { class: 'status loading', role: 'status' }, h('span', {}, t(lang, 'searchNetLoading')))
-    if (net.state === 'failed') return h('div', { class: 'search-net' }, h('p', { class: 'error' }, t(lang, 'searchNetFailed')), h('button', { type: 'button', onClick: () => void runNetSearch(q) }, t(lang, 'searchRetry')))
-    void havePeople; void haveNotes
-    return h('div', { class: 'search-net' }, h('button', { type: 'button', onClick: () => { searchShowNet = true; drawSearch() } }, icon('search', 16), t(lang, 'searchNetShow')))
-  }
   async function runNetSearch(q: string): Promise<void> {
-    if (!deps.searchFetcher || !session) return
-    const who = me
-    searchNet = { query: q, state: 'loading' }; searchShowNet = true; drawSearch()
+    if (!deps.searchFetcher || !session || searchWhere !== 'network' || searchQuery.trim() !== q) return
+    const who = me, kind = searchKind
+    searchNet = { query: q, state: 'loading', kind }; drawSearch()
     try {
-      const kind = searchKind
       const found = await searchNetwork(deps.searchFetcher, q, ctx(), settings, kind)
       if (me !== who) return
       await nameThem(found.notes.slice(0, PAGE)).catch(() => {})
-      if (me !== who || searchNet?.query !== q) return
+      if (me !== who || searchNet?.query !== q || searchNet.kind !== kind) return
       searchNet = { query: q, state: 'done', notes: found.notes, people: found.people, kind }
-    } catch { if (searchNet?.query === q) searchNet = { query: q, state: 'failed' } }
+    } catch { if (searchNet?.query === q && searchNet.kind === kind) searchNet = { query: q, state: 'failed', kind } }
     drawSearch()
   }
 

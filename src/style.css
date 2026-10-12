@@ -406,5 +406,12 @@ textarea.interests { width: 100%; box-sizing: border-box; font: inherit; padding
 /* a draft came back into the composer */
 .draft-line { margin: 0 0 6px; display: flex; align-items: center; gap: 8px } .draft-line button.link { min-height: 0; padding: 0 }
 .trust-pts.minus { color: var(--red) }
-.search-form .search-kind { margin-left: 30px; gap: 6px } .search-kind button { flex: none; min-height: 0; padding: 4px 12px; font-size: .85rem; line-height: 1.5 }
+.search-kind { gap: 6px } .search-kind button { flex: none; min-height: 0; padding: 4px 12px; font-size: .85rem; line-height: 1.5 }
 .search-net-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap } .search-net-head h2 { margin: 0 } .search-net-head .search-back { flex: none; cursor: pointer; min-height: 0; padding: 0 9px 0 8px; font-size: .85rem; line-height: 1.9 }
+
+/* search filters: one small button that says what is chosen, and its panel */
+.search-filters-box { margin-left: 30px; display: grid; gap: 8px; justify-items: start }
+.search-filters-btn { cursor: pointer; min-height: 0; padding: 0 9px 0 8px; font-size: .85rem; line-height: 1.9 } .search-filters-btn.on { color: var(--accent); border-color: var(--accent) }
+.search-filters { display: grid; gap: 8px } .search-filters[hidden] { display: none }
+.search-filter-group { display: grid; gap: 4px; justify-items: start } .search-filter-group > .meta { font-size: .85rem }
+.search-filters .search-kind { margin-left: 0 }

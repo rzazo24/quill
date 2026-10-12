@@ -15,6 +15,8 @@ const world: Event[] = [
 const relays = (events: Event[], delayMs = 0, slowFor?: (f: Filter) => number, onlyWhenAll?: (e: Event) => boolean): Fetcher => ({ query: async (f: Filter, o?: { quick?: boolean }) => { const wait = delayMs + (slowFor?.(f) ?? 0); if (wait) await new Promise((r) => setTimeout(r, wait)); return events.filter((e) => answers(f, e) && !(onlyWhenAll?.(e) && o?.quick !== false)) } })
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms))
 const roots: HTMLElement[] = []
+/** A choice in the search Filters (Show / Search in): its buttons are there even while the panel is folded. */
+const pickFilter = (a: { root: HTMLElement }, label: string) => ([...a.root.querySelectorAll('.search-filters button')].find((b) => b.textContent === label) as HTMLButtonElement).click()
 
 function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; copy?: (text: string) => void; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; light?: { value: boolean } } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
@@ -1110,13 +1112,14 @@ describe('search', () => {
     await type(a, 'zzzz'); expect(a.text()).toContain('Nothing like that in what Quill has loaded.')
     await type(a, nip19.npubEncode(friend)); expect(a.root.querySelector('.search-results a.button')!.getAttribute('href')).toBe(`#/user/${friend}`)
   })
-  it('"Search the network too" asks the search relays only when tapped, and shows what they found that was not already there', async () => {
+  it('"Search in: The network" (in Filters) asks the search relays, a moment after typing, and shows only what they found', async () => {
     const far1 = ev(far, 'a far note about quill clients', { created_at: 7000 })
     const a = boot({ events: world, stored: { me }, searchable: [far1, ev(far, JSON.stringify({ name: 'Quill fan' }), { kind: 0 })] }); await tick(300)
     await a.go('#/search'); await tick(50); await type(a, 'quill')
-    expect(a.text()).toContain('search.nos.today'); expect(a.text()).not.toContain('a far note about quill')
-    ;([...a.root.querySelectorAll('.search-net button')].find((b) => b.textContent!.includes('Search the network too')) as HTMLButtonElement).click(); await tick(200)
-    expect(a.text()).toContain('From the network'); expect(a.text()).toContain('a far note about quill clients'); expect(a.root.querySelector('.search-people')!.textContent).toContain('Quill fan') // its name is known now, so it is listed with the people
+    expect(a.text()).not.toContain('a far note about quill'); expect(a.root.querySelector('.search-filters-btn')!.textContent).toBe('Filters')
+    pickFilter(a, 'The network'); await tick(900)
+    expect(a.root.querySelector('.search-filters-btn')!.textContent).toBe('Filters · The network'); expect(a.text()).toContain('search.nos.today') // the hint says who sees the search
+    expect(a.text()).toContain('a far note about quill clients'); expect(a.root.querySelector('.search-people')!.textContent).toContain('Quill fan')
   })
 })
 
@@ -1264,34 +1267,32 @@ describe('zaps under your notes', () => {
 })
 
 describe('searching only people or only notes', () => {
-  it('All | People | Notes under the box limits the results, and the network search asks only for that', async () => {
+  it('Show: All | People | Notes limits the results, and the network search asks only for that', async () => {
     const a = boot({ events: [...world, ev(friend, 'about quillish things', { created_at: 8000 }), ev(friend, JSON.stringify({ name: 'Quillfan' }), { kind: 0 })], stored: { me }, searchable: [ev(far, 'a far quillish note', { created_at: 7000 }), ev(far, JSON.stringify({ name: 'Quill far' }), { kind: 0 })] }); await tick(300)
     await a.go('#/search'); await tick(50)
     const box = a.root.querySelector('input.search-box') as HTMLInputElement; box.value = 'quill'; box.dispatchEvent(new Event('input')); await tick(20)
-    const kind = (label: string) => [...a.root.querySelectorAll('.search-kind button')].find((b) => b.textContent === label) as HTMLButtonElement
-    expect(kind('All').getAttribute('aria-pressed')).toBe('true'); expect(a.root.querySelector('.search-people')).not.toBeNull(); expect(a.root.querySelector('.search-results article.note')).not.toBeNull()
-    kind('People').click(); await tick(20)
+    expect(a.root.querySelector('.search-people')).not.toBeNull(); expect(a.root.querySelector('.search-results article.note')).not.toBeNull()
+    pickFilter(a, 'People'); await tick(20)
     expect(a.root.querySelector('.search-results article.note')).toBeNull(); expect(a.root.querySelector('.search-people')!.textContent).toContain('Quillfan')
-    kind('Notes').click(); await tick(20)
+    pickFilter(a, 'Notes'); await tick(20)
     expect(a.root.querySelector('.search-people')).toBeNull(); expect(a.root.querySelector('.search-results article.note')!.textContent).toContain('about quillish things')
-    ;([...a.root.querySelectorAll('.search-net button')].find((b) => b.textContent!.includes('Search the network too')) as HTMLButtonElement).click(); await tick(200)
-    expect(a.text()).toContain('a far quillish note'); expect(a.text()).not.toContain('Quill far') // notes only: no people asked for
-    expect(document.activeElement === box || box.isConnected).toBe(true)
+    pickFilter(a, 'The network'); await tick(900)
+    expect(a.text()).toContain('a far quillish note'); expect(a.text()).not.toContain('Quill far'); expect(a.text()).not.toContain('about quillish things') // notes only, network only
+    expect(a.root.querySelector('.search-filters-btn')!.textContent).toBe('Filters · Notes · The network')
   })
 })
 
 describe('the network search, on its own', () => {
-  it('once the network answers, only its results show (not mixed with what was loaded); "Back to what was loaded" returns, and they can be shown again without asking again', async () => {
+  it('shows only the network\'s answer; "What is loaded" goes back; opening the search again starts on What is loaded', async () => {
     const a = boot({ events: [...world, ev(friend, 'loaded quillish note', { created_at: 8000 })], stored: { me }, searchable: [ev(far, 'network quillish note', { created_at: 7000 })] }); await tick(300)
     await a.go('#/search'); await tick(50)
     const box = a.root.querySelector('input.search-box') as HTMLInputElement; box.value = 'quillish'; box.dispatchEvent(new Event('input')); await tick(20)
     expect(a.text()).toContain('loaded quillish note')
-    ;([...a.root.querySelectorAll('.search-net button')].find((b) => b.textContent!.includes('Search the network too')) as HTMLButtonElement).click(); await tick(200)
-    expect(a.text()).toContain('From the network'); expect(a.text()).toContain('network quillish note'); expect(a.text()).not.toContain('loaded quillish note')
-    ;([...a.root.querySelectorAll('.search-net-head button')][0] as HTMLButtonElement).click(); await tick(20)
+    pickFilter(a, 'The network'); await tick(900)
+    expect(a.text()).toContain('network quillish note'); expect(a.text()).not.toContain('loaded quillish note')
+    pickFilter(a, 'What is loaded'); await tick(20)
     expect(a.text()).toContain('loaded quillish note'); expect(a.text()).not.toContain('network quillish note')
-    const calls = a.calls.n
-    ;([...a.root.querySelectorAll('.search-net button')].find((b) => b.textContent!.includes('again')) as HTMLButtonElement).click(); await tick(20)
-    expect(a.text()).toContain('network quillish note'); expect(a.calls.n).toBe(calls)
+    pickFilter(a, 'The network'); await tick(900); await a.go('#/'); await tick(100); await a.go('#/search'); await tick(100)
+    expect(a.root.querySelector('.search-filters-btn')!.textContent).toBe('Filters'); expect(a.text()).toContain('loaded quillish note') // back on what is loaded
   })
 })
