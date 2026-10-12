@@ -18,12 +18,12 @@ const roots: HTMLElement[] = []
 /** A choice in the search Filters (Show / Search in): its buttons are there even while the panel is folded. */
 const pickFilter = (a: { root: HTMLElement }, label: string) => ([...a.root.querySelectorAll('.search-filters button')].find((b) => b.textContent === label) as HTMLButtonElement).click()
 
-function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; copy?: (text: string) => void; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; light?: { value: boolean } } = {}) {
+function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; copy?: (text: string) => void; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; light?: { value: boolean }; elsewhere?: { relay: string; events: Event[]; delayMs: number } } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
   const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], schemeChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs, opts.slowFor, opts.onlyWhenAll), calls = { n: 0 }, filters: Filter[] = []
   startApp(root, {
-    fetcher: { query: (f, o) => { calls.n++; filters.push(f); return base.query(f, o) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', prefersLight: () => !!opts.light?.value, onSchemeChange: (cb) => schemeChanged.push(cb), onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
+    fetcher: { query: async (f, o) => { calls.n++; filters.push(f); if (o?.only) { const el = opts.elsewhere; if (!el || !o.only.includes(el.relay)) return []; await new Promise((r) => setTimeout(r, el.delayMs)); return el.events.filter((e) => answers(f, e)) } return base.query(f, o) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', prefersLight: () => !!opts.light?.value, onSchemeChange: (cb) => schemeChanged.push(cb), onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
     copy: opts.copy,
     searchFetcher: opts.searchable ? { query: async (f: Filter) => opts.searchable!.filter((e) => answers(f, e) && (!(f as { search?: string }).search || e.content.toLowerCase().includes((f as { search: string }).search.toLowerCase()))) } : undefined,
     checkVersion: opts.newer ? async () => { asked.n++; return opts.newer!.value } : undefined, languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
@@ -1305,5 +1305,23 @@ describe('reading people where they write', () => {
     sw.checked = false; sw.dispatchEvent(new Event('change')); await tick(100)
     expect(a.mem.get('outbox')).toBe('0')
     await a.go(`#/user/${friend}`); await tick(200); expect(a.root.querySelector('.profile, .account, article.note')).not.toBeNull()
+  })
+})
+
+describe('notes from people\'s own relays that arrive late', () => {
+  const late = ev(far, 'written where only I write', { created_at: 2_000_000_000 })
+  const w = [...world.map((e) => (e.kind === 3 && e.pubkey === me ? list(me, 3, [['p', friend], ['p', far]]) : e)), ev(far, '', { kind: 10002, tags: [['r', 'wss://far.example']] })]
+  for (const wideScreen of [false, true]) {
+    it(`are added once they come, without holding the page up (${wideScreen ? 'wide screen' : 'phone'})`, async () => {
+      const a = boot({ events: w, stored: { me }, elsewhere: { relay: 'wss://far.example', events: [late], delayMs: 900 }, wide: { value: wideScreen } }); await tick(500)
+      const feed = () => (wideScreen ? a.root.querySelector('.col[data-col="following"]') : a.root.querySelector('main.view'))?.textContent ?? ''
+      expect(feed()).toContain('a post from my friend'); expect(feed()).not.toContain('written where only I write') // drawn before it came
+      await tick(900)
+      expect(feed()).toContain('written where only I write')
+    })
+  }
+  it('with the switch off, nobody else\'s relay is asked', async () => {
+    const a = boot({ events: w, stored: { me, outbox: '0' }, elsewhere: { relay: 'wss://far.example', events: [late], delayMs: 10 } }); await tick(600)
+    expect(a.text()).not.toContain('written where only I write')
   })
 })

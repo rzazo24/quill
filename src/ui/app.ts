@@ -530,7 +530,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         content = await peopleView(route.list, alive)
         if (!alive()) return null
       } else if (route.name === 'user') {
-        const { info, notes, own } = await loadProfile(fetcher, route.pubkey, session!, ctx(), settings, readOutbox ? relays : undefined, () => topUp(route, alive))
+        const { info, notes, own } = await loadProfile(fetcher, route.pubkey, session!, ctx(), settings, readOutbox ? relays : undefined, (e) => topUp(route, alive, e), () => lateFor(route))
         if (!alive()) return null
         askTrust(route.pubkey, own)
         await nameThem(notes, [info.pubkey, ...info.via.slice(0, 3)]); content = profileView(info, notes)
@@ -540,7 +540,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
           if (seenAt === null) loadSeen()
           const opts = activityOptions(); act = await loadActivity(fetcher, ctx(), settings, opts); afterActivity(act, !!opts.verifyKnown)
         }
-        const items = act ? act.notes : route.name === 'me' ? (await Promise.all([loadMine(fetcher, ctx(), settings), loadMyProfile()]))[0] : (feedMode === 'network' ? await loadNetwork(fetcher, session!, ctx(), settings) : feedMode === 'popular' ? await loadPopular(fetcher, ctx(), nowSec(), settings) : await loadFollowing(fetcher, ctx(), settings, { reposts: showReposts, ...(readOutbox ? { outbox: relays, onLate: () => topUp(route, alive) } : {}) }))
+        const items = act ? act.notes : route.name === 'me' ? (await Promise.all([loadMine(fetcher, ctx(), settings), loadMyProfile()]))[0] : (feedMode === 'network' ? await loadNetwork(fetcher, session!, ctx(), settings) : feedMode === 'popular' ? await loadPopular(fetcher, ctx(), nowSec(), settings) : await loadFollowing(fetcher, ctx(), settings, { reposts: showReposts, ...(readOutbox ? { outbox: relays, onLate: (e) => topUp(route, alive, e), arrived: () => lateFor(route) } : {}) }))
         if (!alive()) return null
         // the first visit to Mentions ever takes the followers of today as its starting point (nothing is "new" yet); later, the ones not seen before are
         const baseline = act ? (loadKnown() ?? new Set(act.followers)) : null
@@ -651,13 +651,31 @@ export function startApp(root: HTMLElement, deps: Deps): void {
 
   /** Notes from people's own relays arrived after the page was drawn: draw it again with them (the answers are remembered, so it is quick),
    *  but only while the reader is still on that page and near its top: nothing moves under someone who is reading. */
-  function topUp(route: Route, alive: () => boolean): void {
+  // what came late from people's own relays, by page: kept so drawing again does not ask again (asking again would come late again)
+  const lateNotes = new Map<string, NostrEvent[]>()
+  const lateFor = (route: Route) => (readOutbox ? lateNotes.get(JSON.stringify(route)) ?? [] : [])
+  function topUp(route: Route, _alive: () => boolean, events: NostrEvent[]): void {
+    const key = JSON.stringify(route), had = lateNotes.get(key) ?? [], known = new Set(had.map((e) => e.id))
+    const fresh = events.filter((e) => !known.has(e.id))
+    if (!fresh.length) return // nothing new: no need to draw again
+    lateNotes.set(key, [...had, ...fresh].slice(-500))
+    // on a wide screen the page is a column: Following, or the panel on the right (an account)
+    const paneId = wide() ? (route.name === 'following' ? 'following' : 'detail') : null
+    // the load that asked may be gone (a newer one of the same page started meanwhile, and it picks these up when it ends): what counts is
+    // that the page is still the one on screen and nothing newer starts before this draw
+    const same = () => (paneId ? paneId === 'following' || detailKey === key : shownRoute === key) && (wide() ? !!paneId : !paneId)
+    const mark = paneId ? panes[paneId].run : run
+    const alive = () => same() && (paneId ? panes[paneId].run === mark : run === mark)
+    const scrolled = () => (paneId ? root.querySelector<HTMLElement>(`.col[data-col="${paneId}"]`)?.scrollTop : root.querySelector('main.view')?.scrollTop) ?? 0
     setTimeout(() => void (async () => {
-      if (!alive() || wide() || (root.querySelector('main.view')?.scrollTop ?? 0) > 200) return
+      if (!alive() || scrolled() > 200) return
       const content = await buildContent(route, alive)
-      if (content && alive() && (root.querySelector('main.view')?.scrollTop ?? 0) <= 200) { body = content; draw() }
+      if (!content || !alive() || scrolled() > 200) return
+      if (paneId) panes[paneId].body = content; else body = content
+      draw()
     })(), 0)
   }
+
 
   /** Looks for what is new around my notes since the last visit to Mentions and shows how many things the filter lets through as a number on the tab. */
   async function poll(): Promise<void> {
@@ -684,7 +702,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   /** Reads everything again from the relays (an installed app has no pull-to-refresh). */
-  function refresh(): void { fetcher.clear(); articleTitles.clear(); reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); session = null; void load() }
+  function refresh(): void { fetcher.clear(); lateNotes.clear(); articleTitles.clear(); reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); session = null; void load() }
 
   const flat = (nodes: ThreadNode[]): Judged[] => nodes.flatMap((n) => [n.item, ...flat(n.children)])
 

@@ -46,11 +46,11 @@ export function followedVia(s: Pick<Session, 'follows' | 'graphInfo'>, pubkey: s
 }
 
 /** `outbox`: the reader's relays; when given, the account is also read on the relays it says it writes to, if none of them is the reader's. */
-export async function loadProfile(f: Fetcher, pubkey: string, s: Session, ctx: Context, settings: Settings = DEFAULT_SETTINGS, outbox?: string[], onLate?: (events: Event[]) => void): Promise<{ info: ProfileInfo; notes: Judged[]; own: Event[] }> {
+export async function loadProfile(f: Fetcher, pubkey: string, s: Session, ctx: Context, settings: Settings = DEFAULT_SETTINGS, outbox?: string[], onLate?: (events: Event[]) => void, arrived: () => Event[] = () => []): Promise<{ info: ProfileInfo; notes: Judged[]; own: Event[] }> {
   const ownQ = Promise.all([f.query({ kinds: [0, 3], authors: [pubkey], limit: 20 }), f.query({ kinds: [1], authors: [pubkey], limit: PROFILE_NOTES })])
   const [[meta, here1], there] = outbox ? await withinPatience(ownQ, fromOutbox(f, { kinds: [1], limit: PROFILE_NOTES }, [pubkey], outbox), undefined, onLate) : [await ownQ, [] as Event[]]
   const seenIds = new Set<string>()
-  const notes = [...here1, ...there].filter((e) => !seenIds.has(e.id) && seenIds.add(e.id))
+  const notes = [...here1, ...there, ...arrived()].filter((e) => !seenIds.has(e.id) && seenIds.add(e.id))
   const newest = (kind: number) => newestPerAuthor(meta.filter((e) => e.kind === kind && e.pubkey === pubkey)).get(pubkey)
   const info: ProfileInfo = { pubkey, ...profileFields(newest(0)), following: followingCount(newest(3)), via: followedVia(s, pubkey) }
   // you opened this account on purpose: "outside your network" would only hide everything it wrote; the other rules (muted, bursts, repeats, links) still apply
