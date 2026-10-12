@@ -16,5 +16,14 @@ __DOMAIN__ {
 	header @assets Cache-Control "public, max-age=31536000, immutable"
 	@page not path /assets/*
 	header @page Cache-Control "no-cache"
-	file_server
+	# the morning digest of notes (written by ~/.local/share/quality-digest/run.sh into <relay-repo>/sites/digest/, which deploys never touch); not for search engines
+	redir /digest /digest/
+	handle /digest/* {
+		root * /srv/sites
+		header X-Robots-Tag "noindex, nofollow"
+		file_server
+	}
+	handle {
+		file_server
+	}
 }
