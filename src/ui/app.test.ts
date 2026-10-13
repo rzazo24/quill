@@ -358,7 +358,7 @@ describe('the logo', () => {
     for (const a of [boot(), boot({ stored: { me } })]) {
       const link = a.root.querySelector('header.top h1 a')!
       expect(link.textContent).toBe('Quill'); expect(link.querySelector('svg.logo')).not.toBeNull(); expect(link.querySelector('svg.logo')!.getAttribute('aria-hidden')).toBe('true'); expect(a.root.querySelectorAll('img').length).toBe(0)
-      expect(link.querySelectorAll('svg.logo path')).toHaveLength(3); expect(link.firstElementChild!.tagName.toLowerCase()).toBe('svg') // before the name
+      expect(link.querySelectorAll('svg.logo path')).toHaveLength(4); expect(link.firstElementChild!.tagName.toLowerCase()).toBe('svg') // before the name
     }
   })
 })

@@ -19,7 +19,7 @@ const PATHS = {
   /** two arrows going round a rectangle: a repost */
   repost: ['M17 2l3 3-3 3', 'M4 11V9a4 4 0 0 1 4-4h12', 'M7 22l-3-3 3-3', 'M20 13v2a4 4 0 0 1-4 4H4'],
   /** the quill of the logo (same shape, drawn as an outline): write */
-  feather: ['M20 3.4C12.8 3.4 6.4 8.3 5.6 17.2 12 17.6 18.8 12.8 20 3.4Z', 'M18.8 4.6Q11.3 9.8 6.4 16.8', 'M6 17.3L3.4 21.4'],
+  feather: ['M 18.7 4.0 C 19.7 8.7 17.9 12.0 15.4 13.8 L 13.7 12.9 L 13.9 15.0 C 11.6 16.6 9.5 16.7 8.6 16.0 C 7.8 15.3 7.6 13.2 8.7 10.7 L 10.8 10.5 L 9.6 9.0 C 11.0 6.2 13.9 3.8 18.7 4.0Z', 'M16.1 7.1L5.3 20.0'],
   /** a circle with a question mark: help */
   help: ['M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z', 'M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3', 'M12 17h.01'],
   /** a cog: settings */
@@ -55,11 +55,14 @@ export function icon(name: IconName, size = 16): SVGElement {
 export function logo(size = 24, halloween = false): SVGElement {
   const svg = document.createElementNS(NS, 'svg')
   for (const [k, v] of Object.entries({ viewBox: '0 0 64 64', width: String(size), height: String(size), class: 'logo', 'aria-hidden': 'true', focusable: 'false' })) svg.setAttribute(k, v)
-  const part = (tag: string, attrs: Record<string, string>) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); svg.append(e) }
   const colour = halloween ? '#ff8a1f' : '#2dd4bf'
-  part('path', { d: 'M53 9 C34 9 17 22 15 46 C32 47 50 34 53 9 Z', fill: colour })
-  part('path', { d: 'M50 12 Q30 26 17 45', fill: 'none', stroke: '#0b0f16', 'stroke-width': '2.6', 'stroke-linecap': 'round' })
-  part('path', { d: 'M16 46 L9 57', fill: 'none', stroke: colour, 'stroke-width': '4.5', 'stroke-linecap': 'round' })
+  // a quill: a symmetric vane with a notch on each side, a dark gap along the middle only (the tip and the base stay whole), the shaft down to the nib
+  const g = document.createElementNS(NS, 'g'); g.setAttribute('transform', 'rotate(40 32 32)'); svg.append(g)
+  const add = (attrs: Record<string, string>) => { const e = document.createElementNS(NS, 'path'); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); g.append(e) }
+  add({ d: 'M32 4 C42 12 44 22 42 30 L37 31 L41 35 C39 42 35 46 32 46 C29 46 25 42 23 35 L27 31 L22 30 C20 22 22 12 32 4 Z', fill: colour })
+  add({ d: 'M32 14 L32 40', style: 'stroke: var(--bg, #0b0f16)', 'stroke-width': '3', 'stroke-linecap': 'round' })
+  add({ d: 'M32 15 L32 60', stroke: colour, 'stroke-width': '2.2', 'stroke-linecap': 'round' })
+  add({ d: 'M32 44 L32 60', stroke: colour, 'stroke-width': '3.4', 'stroke-linecap': 'round' })
   return svg
 }
 
