@@ -55,14 +55,14 @@ export function icon(name: IconName, size = 16): SVGElement {
 export function logo(size = 24, halloween = false): SVGElement {
   const svg = document.createElementNS(NS, 'svg')
   for (const [k, v] of Object.entries({ viewBox: '0 0 64 64', width: String(size), height: String(size), class: 'logo', 'aria-hidden': 'true', focusable: 'false' })) svg.setAttribute(k, v)
-  const colour = halloween ? '#ff8a1f' : '#2dd4bf'
+  const colour = halloween ? '#ff8a1f' : '#2dd4bf' // a fallback: the page's stylesheet gives it the buttons' colour of the theme in use (inline styles are not allowed by the CSP)
   // a quill: a symmetric vane with a notch on each side, a dark gap along the middle only (the tip and the base stay whole), the shaft down to the nib
   const g = document.createElementNS(NS, 'g'); g.setAttribute('transform', 'rotate(40 32 32)'); svg.append(g)
   const add = (attrs: Record<string, string>) => { const e = document.createElementNS(NS, 'path'); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); g.append(e) }
-  add({ d: 'M32 4 C42 12 44 22 42 30 L37 31 L41 35 C39 42 35 46 32 46 C29 46 25 42 23 35 L27 31 L22 30 C20 22 22 12 32 4 Z', fill: colour })
-  add({ d: 'M32 14 L32 40', style: 'stroke: var(--bg, #0b0f16)', 'stroke-width': '3', 'stroke-linecap': 'round' })
-  add({ d: 'M32 15 L32 60', stroke: colour, 'stroke-width': '2.2', 'stroke-linecap': 'round' })
-  add({ d: 'M32 44 L32 60', stroke: colour, 'stroke-width': '3.4', 'stroke-linecap': 'round' })
+  add({ d: 'M32 4 C42 12 44 22 42 30 L37 31 L41 35 C39 42 35 46 32 46 C29 46 25 42 23 35 L27 31 L22 30 C20 22 22 12 32 4 Z', fill: colour, class: 'vane' })
+  add({ d: 'M32 14 L32 40', stroke: '#0b0f16', class: 'gap', 'stroke-width': '3', 'stroke-linecap': 'round' })
+  add({ d: 'M32 15 L32 60', stroke: colour, class: 'shaft', 'stroke-width': '2.2', 'stroke-linecap': 'round' })
+  add({ d: 'M32 44 L32 60', stroke: colour, class: 'shaft', 'stroke-width': '3.4', 'stroke-linecap': 'round' })
   return svg
 }
 
