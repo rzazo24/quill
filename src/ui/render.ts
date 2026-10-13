@@ -127,14 +127,19 @@ export function renderContent(raw: string, v: View, fromId?: string, vouch: stri
 
 /** A round picture: colour and initials, or a robot, or a pixel figure drawn from the key. Nothing is loaded. The colour goes in through the style object (CSSOM),
  *  which the page's CSP allows. */
+/** Pictures already shown, and pictures that failed (for this visit): a redraw reuses what is known instead of flashing or trying again. */
+const loadedPictures = new Set<string>(), failedPictures = new Set<string>()
+
 export function avatarEl(pubkey: string, v: View, size: 'md' | 'lg' = 'md', chosen?: AvatarStyle): HTMLElement {
   const style: AvatarStyle = chosen ?? v.avatars ?? 'initials'
   // a real picture only when the reader turned them on, for someone they follow (decided by the view); a sample in Settings (an explicit style) never
   const pic = chosen ? undefined : v.picture?.(pubkey, size === 'lg' ? 192 : 96)
-  if (pic) {
+  if (pic && !failedPictures.has(pic)) {
     const box = h('span', { class: size === 'lg' ? 'avatar lg photo' : 'avatar photo', 'aria-hidden': 'true' })
-    const img = h('img', { src: pic, alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' }) as HTMLImageElement
-    img.addEventListener('error', () => box.replaceWith(avatarEl(pubkey, v, size, style))) // it did not load: the drawn one
+    // not lazy: a few kilobytes each, and Safari is unreliable about lazy images inside a scrolling area. One already shown decodes at once on a redraw (no flash).
+    const img = h('img', { src: pic, alt: '', decoding: loadedPictures.has(pic) ? 'sync' : 'async', referrerpolicy: 'no-referrer' }) as HTMLImageElement
+    img.addEventListener('load', () => loadedPictures.add(pic))
+    img.addEventListener('error', () => { failedPictures.add(pic); box.replaceWith(avatarEl(pubkey, v, size, style)) }) // it did not load: the drawn one, from now on without trying again
     box.append(img)
     return box
   }

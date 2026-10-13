@@ -1366,8 +1366,11 @@ describe('real profile pictures', () => {
     await a.go('#/mentions'); await tick(300)
     expect(a.root.querySelector('img[src="https://img.example/spam.jpg"]')).toBeNull() // a stranger: drawn avatar
     await a.go('#/'); await tick(300)
+    expect([...a.root.querySelectorAll('.avatar.photo img')].every((i) => !i.hasAttribute('loading'))).toBe(true) // not lazy: Safari skips lazy images in a scrolling area
     const one = a.root.querySelector('.avatar.photo img') as HTMLImageElement; const box = one.parentElement!
     one.dispatchEvent(new Event('error')); expect(box.isConnected).toBe(false)
+    await a.go('#/mentions'); await tick(200); await a.go('#/'); await tick(300)
+    expect(a.root.querySelector('img[src="https://img.example/ana.jpg"]')).toBeNull() // failed once: the drawn avatar from then on, no flashing
   })
 })
 
