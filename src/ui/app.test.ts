@@ -1265,15 +1265,15 @@ describe('zaps under your notes', () => {
     const reach = card.querySelector('.reach') as HTMLElement; expect(reach.textContent).toContain('1,000'); expect(reach.getAttribute('aria-label')).toContain('1 zap (1,000 sats)')
     reach.click(); expect(card.querySelector('.reach-who')!.textContent).toContain('Ana · 1,000 sats')
   })
-  it('other people\'s notes show their zaps too (only the zaps: no reaction or repost counts), from any sender, and not your own notes twice', async () => {
+  it('other people\'s notes show their zaps and how many replies they got (never reaction or repost counts), from any sender, and not your own notes twice', async () => {
     const theirs = ev(friend, 'zap my friend', { created_at: 9000 }), plain = ev(friend, 'nobody zapped this', { created_at: 8900 })
     const req = { kind: 9734, pubkey: far, id: 'r'.repeat(64), sig: '', created_at: 1, content: '', tags: [['e', theirs.id], ['p', friend], ['amount', '2100000']] }
     const receipt = ev(pk('e'), '', { kind: 9735, created_at: 9100, tags: [['e', theirs.id], ['p', friend], ['bolt11', 'lnbc21u1abc'], ['description', JSON.stringify(req)]] })
-    const reaction = ev(far, '+', { kind: 7, tags: [['e', theirs.id], ['p', friend]] })
-    const a = boot({ events: [...world, theirs, plain, receipt, reaction], stored: { me } }); await tick(1200)
+    const reaction = ev(far, '+', { kind: 7, tags: [['e', theirs.id], ['p', friend]] }), reply = ev(far, 'good point', { created_at: 9050, tags: [['e', theirs.id, '', 'root'], ['p', friend]] })
+    const a = boot({ events: [...world, theirs, plain, receipt, reaction, reply], stored: { me } }); await tick(1200)
     const card = (text: string) => [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes(text))!
     const reach = card('zap my friend').querySelector('.reach') as HTMLElement
-    expect(reach.textContent).toContain('2,100'); expect(reach.getAttribute('aria-label')).toBe('1 zap (2,100 sats)') // the reaction is not counted
+    expect(reach.textContent).toContain('2,100'); expect(reach.getAttribute('aria-label')).toBe('1 reply, 1 zap (2,100 sats)') // replies and zaps; the reaction is not counted
     expect(card('nobody zapped this').querySelector('.reach')).toBeNull()
   })
 })

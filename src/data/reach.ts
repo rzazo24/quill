@@ -18,7 +18,7 @@ export const hasReach = (r: Reach | undefined): r is Reach => !!r && (r.reposts 
 export const reactionTotal = (r: Reach): number => [...r.reactions.values()].reduce((a, b) => a + b, 0)
 
 /** Pure: the counts for `ids` from the events the relays returned. Anything that is not about one of the ids, or comes from the reader or a muted account, is ignored. */
-export function reachOf(events: Event[], ids: readonly string[], ctx: Pick<Context, 'me' | 'muted'>, verify: (e: Event) => boolean = verifyEvent, { countMyZaps = false } = {}): Map<string, Reach> {
+export function reachOf(events: Event[], ids: readonly string[], ctx: Pick<Context, 'me' | 'muted'>, verify: (e: Event) => boolean = verifyEvent, { countMyZaps = false, countMyReplies = false } = {}): Map<string, Reach> {
   const wanted = new Set(ids)
   const reacted = new Map<string, Map<string, Set<string>>>(), reposted = new Map<string, Set<string>>(), replied = new Map<string, Set<string>>() // note -> emoji -> people, note -> people, note -> events
   const add = <K, V>(m: Map<K, Set<V>>, k: K, v: V) => { const s = m.get(k) ?? new Set<V>(); s.add(v); m.set(k, s) }
@@ -32,7 +32,7 @@ export function reachOf(events: Event[], ids: readonly string[], ctx: Pick<Conte
       acc.sats += z.sats; acc.count++; acc.by.set(z.sender, (acc.by.get(z.sender) ?? 0) + z.sats); zapped.set(z.target, acc)
       continue
     }
-    if (e.pubkey === ctx.me || ctx.muted.has(e.pubkey)) continue
+    if (ctx.muted.has(e.pubkey) || (e.pubkey === ctx.me && !(countMyReplies && (e.kind === 1 || e.kind === COMMENT_KIND)))) continue
     if (e.kind === 7) {
       const id = reactionTarget(e)
       if (!id || !wanted.has(id)) continue
@@ -71,13 +71,13 @@ export async function loadReach(f: Fetcher, ids: readonly string[], ctx: Pick<Co
   return reachOf(answers.flat().filter((e) => !seen.has(e.id) && seen.add(e.id)), unique, ctx, verify)
 }
 
-/** Only the zaps of other people's notes (their reactions and reposts are not counted on purpose: numbers of likes are not what Quill shows). */
-export async function loadZaps(f: Fetcher, ids: readonly string[], ctx: Pick<Context, 'me' | 'muted'>, verify?: (e: Event) => boolean): Promise<Map<string, Reach>> {
+/** What other people's notes show: their zaps and how many replies they got (a sign there is a conversation), never their reactions or reposts: a count
+ *  of likes is not what Quill shows. The reader's own zaps and replies count here (on the reader's notes they never do). */
+export async function loadOthersReach(f: Fetcher, ids: readonly string[], ctx: Pick<Context, 'me' | 'muted'>, verify?: (e: Event) => boolean): Promise<Map<string, Reach>> {
   const unique = [...new Set(ids)].filter((i) => HEX64.test(i))
   const chunks: string[][] = []
   for (let i = 0; i < unique.length; i += CHUNK) chunks.push(unique.slice(i, i + CHUNK))
-  const answers = await Promise.all(chunks.map((c) => f.query({ kinds: [ZAP_RECEIPT_KIND], '#e': c, limit: 500 }).catch(() => [] as Event[])))
+  const answers = await Promise.all(chunks.flatMap((c) => [f.query({ kinds: [ZAP_RECEIPT_KIND], '#e': c, limit: 500 }), f.query({ kinds: [1, COMMENT_KIND], '#e': c, limit: 500 })].map((p) => p.catch(() => [] as Event[]))))
   const seen = new Set<string>()
-  // on someone else's note the reader's own zaps count too (on the reader's notes they never do: nobody zaps themselves into the numbers)
-  return reachOf(answers.flat().filter((e) => e.kind === ZAP_RECEIPT_KIND && !seen.has(e.id) && seen.add(e.id)), unique, ctx, verify, { countMyZaps: true })
+  return reachOf(answers.flat().filter((e) => (e.kind === ZAP_RECEIPT_KIND || e.kind === 1 || e.kind === COMMENT_KIND) && !seen.has(e.id) && seen.add(e.id)), unique, ctx, verify, { countMyZaps: true, countMyReplies: true })
 }

@@ -40,7 +40,7 @@ Principles: behaviour is evidence, **missing data is not** (a key without a prof
 - **What your notes got**: in Me, under each note of yours, small numbers for the reactions, reposts and replies it received (nobody counts twice; you and your muted accounts do not count).
 - **Drafts**: what you write is kept on the device as you type, and comes back when you open the same box again.
 - **Zaps** your notes got (⚡ sats, and who sent them) in the numbers under each note in Me.
-- **Zaps on other people's notes** too (only the zaps, never their reaction or repost counts).
+- **Zaps and reply counts on other people's notes** too (never their reaction or repost counts).
 - **Send zaps** with your own wallet through Nostr Wallet Connect (NIP-47): the connection string is kept only on that device, with a clear warning that it can spend; the invoice is checked to ask for exactly the amount chosen before the wallet pays it.
 - **Save notes for later** from their …, kept whole on the device (Me › “N saved”).
 - **Mentions while writing**: type @ and the start of a name to pick the account (people you follow first).

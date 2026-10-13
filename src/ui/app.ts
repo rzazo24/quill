@@ -20,7 +20,7 @@ import { followPubkeys, followTemplate, listKindOf, MUTE_LIST_KIND, type FollowA
 import { addBackup, checkBase, loadFollowList, nextKnown, parseBackups } from '../data/followlist.js'
 import { loadFollowing, loadMentions, loadMine, loadNames, loadNote, loadThread, type Thread, type ThreadNode } from '../data/feed.js'
 import { Engagement, loadEngagement, normReaction } from '../data/engaged.js'
-import { loadReach, loadZaps, type Reach } from '../data/reach.js'
+import { loadReach, loadOthersReach, type Reach } from '../data/reach.js'
 import { invoiceMatches, lnurlOf, MAX_ZAP_COMMENT, MAX_ZAP_SATS, parseNwc, payUrlOf, zapRequestTemplate, type NwcConnection } from '../core/zapsend.js'
 import { getJson, payInfo, zapInvoice, ZapError, type GetJson } from '../net/lnurl.js'
 import { nwcCall, type NwcMethod } from '../net/nwc.js'
@@ -234,7 +234,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     for (const id of ids) zapMap.set(id, null) // asked: not again (a refresh asks again)
     const who = me
     let found = new Map<string, Reach>()
-    try { found = await loadZaps(fetcher, ids, ctx(), deps.verify) } catch { return }
+    try { found = await loadOthersReach(fetcher, ids, ctx(), deps.verify) } catch { return }
     if (me !== who || !found.size) return
     for (const [id, r] of found) zapMap.set(id, r)
     await nameKeys([...new Set([...found.values()].flatMap((r) => (r.who?.zaps ?? []).map(([k]) => k).filter((k): k is string => !!k)))]).catch(() => {})
