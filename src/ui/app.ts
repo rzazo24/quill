@@ -879,7 +879,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
   }
   async function pickCardEl(): Promise<HTMLElement | null> {
     const pk = await Promise.race([pickOfDay(), new Promise<null>((r) => setTimeout(() => r(null), 1500))]) // never holds the feed up
-    return pk ? h('a', { class: 'card pick-card', href: '#/pick' }, h('strong', {}, t(lang, 'pickTitle')), h('span', { class: 'meta' }, t(lang, 'pickCount', { n: pk.items.length })), icon('chevron', 16)) : null
+    return pk ? h('a', { class: 'card pick-card', href: '#/pick' }, h('span', { class: 'pick-text' }, h('strong', {}, icon('star', 16), t(lang, 'pickTitle')), h('span', { class: 'meta' }, t(lang, 'pickCount', { n: pk.items.length }))), icon('chevron', 18)) : null
   }
 
   /** Reads everything again from the relays (an installed app has no pull-to-refresh). */

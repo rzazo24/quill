@@ -432,5 +432,8 @@ textarea.interests { width: 100%; box-sizing: border-box; font: inherit; padding
 /* the quill in the header: the buttons' colour of the theme in use, and a gap the colour of the page */
 .logo .vane { fill: var(--accent) } .logo .shaft { stroke: var(--accent) } .logo .gap { stroke: var(--bg) }
 /* Pick of the day: a card in Highlights, and each entry with its title and summary above the note */
-.pick-card { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit } .pick-card .meta { flex: 1 } .pick-card svg { color: var(--accent) }
+.pick-card { position: relative; display: flex; justify-content: center; align-items: center; text-decoration: none; color: inherit; padding: 14px 44px }
+.pick-card .pick-text { display: grid; gap: 3px; justify-items: center; text-align: center }
+.pick-card strong { display: inline-flex; align-items: center; gap: 6px; font-size: 1.05rem } .pick-card strong svg { color: var(--accent) }
+.pick-card .meta { font-size: .9rem } .pick-card > svg { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: var(--accent) }
 .pick-item h3 { margin: 18px 0 4px; font-size: 1.05rem; color: var(--text) } .pick-item > p { margin: 0 0 8px; color: var(--muted) }

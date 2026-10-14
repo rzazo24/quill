@@ -1413,7 +1413,7 @@ describe('the Pick of the day', () => {
   it('a card in Highlights opens it: each entry with its title and summary, and the note itself (judged by the reader\'s filter) below', async () => {
     const a = boot({ events: [...world, picked], stored: { me, feed: 'highlights' }, pick: file }); await tick(500)
     const card = a.root.querySelector('a.pick-card') as HTMLAnchorElement
-    expect(card.getAttribute('href')).toBe('#/pick'); expect(card.textContent).toContain('2 notes chosen this morning') // the malformed one is dropped
+    expect(card.getAttribute('href')).toBe('#/pick'); expect(card.textContent).toContain('2 notes · chosen this morning') // the malformed one is dropped
     await a.go('#/pick'); await tick(300)
     expect(a.text()).toContain('Why relays matter'); expect(a.text()).toContain('A clear case for running your own.')
     expect(a.root.querySelector('.pick-item article.note')!.textContent).toContain('a carefully argued note about relays')
