@@ -1436,4 +1436,15 @@ describe('what your notes got, wherever they are', () => {
     const card = [...a.root.querySelectorAll('main.view article.note')].find((n) => n.textContent!.includes('my note in the feed'))!
     expect(card.querySelector('.reach')!.getAttribute('aria-label')).toBe('1 reaction, 1 reply')
   })
+
+  it('a reaction that arrives while the app stays open updates the numbers of that note (they are not counted only once)', async () => {
+    const mine = ev(me, 'my note in the feed', { created_at: 9000 }), events = [...world, mine]
+    const a = boot({ events, stored: { me }, clock: { now: 9_100_000 } }); await tick(1200)
+    const card = () => [...a.root.querySelectorAll('main.view article.note')].find((n) => n.textContent!.includes('my note in the feed'))!
+    expect(card().querySelector('.reach')).toBeNull()
+    a.poll(); await tick(400) // the first look only starts counting from now
+    events.push(ev(friend, '+', { kind: 7, created_at: 9200, tags: [['e', mine.id], ['p', me]] }))
+    a.poll(); await tick(1200)
+    expect(card().querySelector('.reach')!.getAttribute('aria-label')).toBe('1 reaction')
+  })
 })

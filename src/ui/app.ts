@@ -5,7 +5,7 @@ import { canRepost, repostTemplate } from '../core/repost.js'
 import { hashtagTags, mentionTags, mergeTags, quoteContent, quoteTags, reactionTags, replyTags } from '../core/compose.js'
 import { parseIdentity } from '../core/identity.js'
 import { mentionedKeys, refs, shortNpub } from '../core/refs.js'
-import { isReply } from '../core/thread.js'
+import { isReply, threadRefs } from '../core/thread.js'
 import { judgeAll, tally, type Context, type Judged, type Settings } from '../core/verdict.js'
 import { loadNetwork } from '../data/network.js'
 import { loadHighlights } from '../data/highlights.js'
@@ -25,7 +25,7 @@ import { loadReach, loadOthersReach, type Reach } from '../data/reach.js'
 import { invoiceMatches, lnurlOf, MAX_ZAP_COMMENT, MAX_ZAP_SATS, parseNwc, payUrlOf, zapRequestTemplate, type NwcConnection } from '../core/zapsend.js'
 import { getJson, payInfo, zapInvoice, ZapError, type GetJson } from '../net/lnurl.js'
 import { nwcCall, type NwcMethod } from '../net/nwc.js'
-import { countNew, groupReactions, groupReposts, loadActivity, mergeKnown, newFollowers, parseKnown, type Activity } from '../data/activity.js'
+import { countNew, reactionTarget, groupReactions, groupReposts, loadActivity, mergeKnown, newFollowers, parseKnown, type Activity } from '../data/activity.js'
 import { contextOf, loadGraphInfo, loadOwnLists, pendingGraph, type Session } from '../data/session.js'
 import { DEFAULT_RELAYS, memo, type Fetcher } from '../net/fetcher.js'
 import { failedRelays, type Publisher } from '../net/publisher.js'
@@ -208,6 +208,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let engagement = new Engagement() // what the reader already did to each note
   const reachMap = new Map<string, Reach>() // what each of the reader's notes got from others (reactions, reposts, replies), filled in after the page is up
   const reachAsked = new Set<string>()
+  const reachAskedAt = new Map<string, number>() // note -> when its numbers were asked for (unix seconds)
   // notes quoted inside other notes: asked for together once the page is up, then the view is built again with them inside
   const quotedMap = new Map<string, Judged | null>()
   // titles of the articles referenced in notes, asked once each; the page is drawn again when they arrive
@@ -309,6 +310,12 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   /** Who stopped following is forgotten (they count again as new if they come back), and the check is remembered. */
   const afterActivity = (a: Activity, verified: boolean) => {
     if (verified) lastVerify = deps.nowMs?.() ?? Date.now()
+    // a reaction, repost or reply that arrived after a note's numbers were counted: count that note again (the PWA can stay open for hours)
+    const stale = new Set<string>()
+    const check = (id: string | undefined, at: number) => { const asked = reachAskedAt.get(id ?? ''); if (id && asked !== undefined && at >= asked - 60) stale.add(id) }
+    for (const j of [...a.reactions, ...a.reposts]) check(reactionTarget(j.event), j.event.created_at)
+    for (const j of a.notes) check(threadRefs(j.event).reply, j.event.created_at)
+    if (stale.size) { for (const id of stale) { reachAsked.delete(id); reachAskedAt.delete(id) } queueReach([...stale]) }
     if (!a.gone.length) return
     const gone = new Set(a.gone)
     for (const k of gone) followersSeen.delete(k)
@@ -317,7 +324,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const followersSeen = new Set<string>() // everybody seen following you since this page opened (the known ones are in `knownFollowers`)
   /** How many accounts have been seen following the reader: only a lower bound (each relay knows part of them), and it only grows. Null while nothing has been looked at yet. */
   const followerCount = (): number | null => { const k = loadKnown(); return k === null && followersSeen.size === 0 ? null : new Set([...(k ?? []), ...followersSeen]).size }
-  const forgetAccount = () => { pageCache.clear(); myProfile = undefined; zapMap.clear(); zapFlow = null; nwcState = null; nwcError = null; aboutEdit = null; reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
+  const forgetAccount = () => { pageCache.clear(); myProfile = undefined; zapMap.clear(); zapFlow = null; nwcState = null; nwcError = null; aboutEdit = null; reachMap.clear(); reachAsked.clear(); reachAskedAt.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
   const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
@@ -398,7 +405,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   function queueReach(ids: string[]): void {
     const todo = ids.filter((id) => !reachAsked.has(id))
     if (!todo.length) return
-    for (const id of todo) reachAsked.add(id)
+    const now = Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
+    for (const id of todo) { reachAsked.add(id); reachAskedAt.set(id, now) }
     const who = me, s = session
     setTimeout(() => {
       if (!who || me !== who || session !== s) return
@@ -890,7 +898,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
   }
 
   /** Reads everything again from the relays (an installed app has no pull-to-refresh). */
-  function refresh(): void { pickCache = null; pageCache.clear(); fetcher.clear(); profileAsked.clear(); lateNotes.clear(); latePending.clear(); lateWaiting = null; zapMap.clear(); articleTitles.clear(); reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); session = null; void load() }
+  function refresh(): void { pickCache = null; pageCache.clear(); fetcher.clear(); profileAsked.clear(); lateNotes.clear(); latePending.clear(); lateWaiting = null; zapMap.clear(); articleTitles.clear(); reachMap.clear(); reachAsked.clear(); reachAskedAt.clear(); quotedMap.clear(); trustMap.clear(); session = null; void load() }
 
   const flat = (nodes: ThreadNode[]): Judged[] => nodes.flatMap((n) => [n.item, ...flat(n.children)])
 
