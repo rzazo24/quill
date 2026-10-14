@@ -673,9 +673,6 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (!(await ensureSession()) || !session) return
     if (paneJobs === 0) status = null // reading the account is done; what turns the button now is the columns loading
     const route = parseRoute(deps.location.hash)
-    // a note opened from the Pick of the day stays in that column (instead of opening a fourth one); any other page ends that
-    if (route.name === 'note' && (lastWideRoute === 'pick' || pickSlot)) pickSlot = true; else if (route.name !== 'note') pickSlot = false
-    lastWideRoute = route.name
     const jobs: Promise<void>[] = [] // Settings and Help too: a change made there (avatars, filter, relays) must already be in the columns when you go back
     if (scope === 'all') for (const id of ['following', 'mentions', 'me'] as const) jobs.push(loadPane(panes[id], { name: id }))
     if (route.name === 'note' || route.name === 'user' || route.name === 'people' || route.name === 'article' || route.name === 'saved' || route.name === 'pick') {
@@ -878,7 +875,6 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
 
   // the Pick of the day: read once per visit (and again after a refresh); the card in Highlights opens it
   let pickCache: { at: number; pick: DailyPick | null } | null = null
-  let pickSlot = false, lastWideRoute = '' // wide screen: the note on screen was opened from the Pick of the day (it shows in that column)
   async function pickOfDay(): Promise<DailyPick | null> {
     if (!deps.pickSource) return null
     const now = deps.nowMs?.() ?? Date.now()
@@ -1356,17 +1352,16 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
       h('section', { class: 'col', 'data-col': id }, h('h2', { class: 'col-title' }, h('span', {}, title), ...extra), id === 'following' ? lateButton('following') : null, ...nodes)
     const write = signer?.state === 'connected' ? h('button', { type: 'button', class: 'primary write', onClick: startNote }, icon('feather', 16), t(lang, 'newNote').replace(/…$/, '')) : null
     const count = badge > 0 ? h('span', { class: 'badge', 'aria-label': `${badge}` }, badge > 9 ? '9+' : String(badge)) : null
-    const inPickCol = route.name === 'pick' || (route.name === 'note' && pickSlot)
-    const detailOpen = !inPickCol && (route.name === 'note' || route.name === 'user' || route.name === 'people' || route.name === 'article' || route.name === 'saved')
+    // never a fourth column (it squeezed the others too much): whatever opens (a thread, an account, a list, the Pick of the day) takes the place of Me, as the search does
+    const inSlot = route.name === 'pick' || route.name === 'note' || route.name === 'user' || route.name === 'people' || route.name === 'article' || route.name === 'saved'
     const detailTitle = route.name === 'pick' ? t(lang, 'pickShort') : route.name === 'saved' ? t(lang, 'savedShort') : route.name === 'article' ? t(lang, 'article') : route.name === 'note' ? t(lang, 'thread') : route.name === 'people' ? t(lang, route.list === 'following' ? 'peopleFollowing' : 'peopleFollowers') : t(lang, 'account')
-    return h('div', { class: detailOpen ? 'cols with-detail' : 'cols' },
+    return h('div', { class: 'cols' },
       column('following', t(lang, 'following'), [panes.following.body], [write]),
       column('mentions', t(lang, 'mentions'), [panes.mentions.body], [count]),
-      // the Pick of the day takes the place of Me, as the search does (its content is loaded like the panel on the right)
-      inPickCol ? h('section', { class: 'col pick-col', 'data-col': 'detail' }, h('h2', { class: 'col-title' }, h('span', {}, t(lang, route.name === 'note' ? 'thread' : 'pickShort')), h('button', { type: 'button', class: 'icon close', 'aria-label': t(lang, 'dismiss'), title: t(lang, 'dismiss'), onClick: () => deps.setHash('') }, '×')), panes.detail.body)
+      // the panel that opens (a thread, an account, a list, the Pick of the day) takes the place of Me, as the search does
+      inSlot ? h('section', { class: 'col detail', 'data-col': 'detail' }, h('h2', { class: 'col-title' }, h('span', {}, route.name === 'pick' ? t(lang, 'pickShort') : detailTitle), h('button', { type: 'button', class: 'icon close', 'aria-label': t(lang, 'dismiss'), title: t(lang, 'dismiss'), onClick: () => deps.setHash('') }, '×')), panes.detail.body)
       : route.name === 'search' ? h('section', { class: 'col search-col' }, h('h2', { class: 'col-title' }, h('span', {}, t(lang, 'search')), h('button', { type: 'button', class: 'icon close', 'aria-label': t(lang, 'dismiss'), title: t(lang, 'dismiss'), onClick: () => deps.setHash('') }, '×')), searchPage()) // the search takes the place of Me: four columns would squeeze the others
-      : column('me', t(lang, 'me'), [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), panes.me.body, h('div', { class: 'foot' }, signOut)]),
-      detailOpen ? h('section', { class: 'col detail', 'data-col': 'detail' }, h('h2', { class: 'col-title' }, h('span', {}, detailTitle), h('button', { type: 'button', class: 'icon close', 'aria-label': t(lang, 'dismiss'), title: t(lang, 'dismiss'), onClick: () => deps.setHash('') }, '×')), lateButton('detail'), panes.detail.body) : null)
+      : column('me', t(lang, 'me'), [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), panes.me.body, h('div', { class: 'foot' }, signOut)]))
   }
 
   function draw(): void {

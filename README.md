@@ -8,9 +8,9 @@ Live at **<https://quill.hivescope.xyz>**. Paste an `npub` to read; connect a NI
 
 ![Quill on a phone: the feed of the people you follow, the mentions with what the filter hid and why, and the filter settings](docs/screenshot.png)
 
-On a computer the three tabs sit side by side and a thread, an account or a list opens in a panel on the right:
+On a computer the three tabs sit side by side, and a thread, an account or a list opens in the place of Me (never a fourth column):
 
-![Quill on a computer: Following, Mentions and Me in three columns, with the thread of a note open on the right](docs/screenshot.desktop.png)
+![Quill on a computer: Following and Mentions, with the thread of a note open in the place of Me](docs/screenshot.desktop.png)
 <sub>Screenshots with demo data (made-up accounts), not real people.</sub>
 
 ## Three promises
@@ -51,7 +51,7 @@ Principles: behaviour is evidence, **missing data is not** (a key without a prof
 - **Search** (the magnifying-glass button): instant, on your device, in the notes and names Quill has already loaded (a single #tag also asks your own relays for its latest notes); “Search in: The network”, in Filters, asks two NIP-50 search relays only when chosen, and shows only what they found.
 - **Account pages**: tap a name, an avatar or an @mention to see that account's profile (as text: its pictures are never loaded), how you are connected to it, **how much the network vouches for it** (a score out of 100 with the reason for every point, the same as nostrclaw's), and its notes and replies; with a signer connected, **follow / unfollow** and **mute / unmute** from there (muting is also in each note's …; your mute list is public, and Quill keeps the rest of it, private part included, as it is).
 - **React** with one tap; **share** (repost) or **quote** a note after a confirmation; what you already reacted to or replied to is marked; **reply** and **write a note** through a review screen that shows the exact text, kind, tags and relays before anything is asked of your signer.
-- **Wide screens**: on a computer (about 1100 px or more) **Following, Mentions and Me sit side by side**, each scrolling on its own, and a thread, an account or a list opens in a panel on the right. On a phone it stays one column with the tabs at the bottom.
+- **Wide screens**: on a computer (about 1100 px or more) **Following, Mentions and Me sit side by side**, each scrolling on its own, and a thread, an account, a list or the Pick of the day opens in the place of Me (never a fourth column, which squeezed the others; × brings Me back). On a phone it stays one column with the tabs at the bottom.
 - **Help**: a page with folding sections (the filter, writing with Clave, settings, install), behind the ? button, in both languages.
 - **Avatars**: initials on a colour, robots, pixel figures or Halloween creatures (pumpkins, ghosts, bats, skulls, cats, spiders, witches), all drawn from the account's key (nothing is loaded).
 - **Settings**: your own relay list (with a connection test; optionally published on Nostr as your NIP-65 list, and used as the starting point on a new device) and four text sizes, both remembered on the device.

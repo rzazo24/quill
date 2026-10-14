@@ -276,7 +276,7 @@ button.icon.spinning svg { animation: spin .9s linear infinite }
 #app.wide { --col: 1760px }
 main.view.wide { display: block; overflow: hidden; padding: 12px 14px 0; scrollbar-gutter: auto }
 .cols { height: 100%; max-width: var(--col); margin: 0 auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px }
-.cols.with-detail { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.2fr) }
+/* (there is never a fourth column: what opens takes the place of Me) */
 .col { min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 12px; align-content: start; padding: 0 2px 24px }
 .col-title { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; padding: 0 2px; height: 46px; flex: none; font-size: 1rem; background: var(--bg); border-bottom: 1px solid var(--border) } /* the same height in every column, with or without a button in it */
 .col-title .write { min-height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; font-size: .85rem }

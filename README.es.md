@@ -8,9 +8,9 @@ En marcha en **<https://quill.hivescope.xyz>**. Pega un `npub` para leer; conect
 
 ![Quill en un móvil: el feed de la gente que sigues, las menciones con lo que el filtro ocultó y por qué, y los ajustes del filtro](docs/screenshot.es.png)
 
-En un ordenador las tres pestañas van una al lado de otra y un hilo, una cuenta o una lista se abre en un panel a la derecha:
+En un ordenador las tres pestañas van una al lado de otra, y un hilo, una cuenta o una lista se abre en el sitio de Yo (nunca en una cuarta columna):
 
-![Quill en un ordenador: Siguiendo, Menciones y Yo en tres columnas, con el hilo de una nota abierto a la derecha](docs/screenshot.es.desktop.png)
+![Quill en un ordenador: Siguiendo y Menciones, con el hilo de una nota abierto en el sitio de Yo](docs/screenshot.es.desktop.png)
 <sub>Capturas con datos de demostración (cuentas inventadas), no personas reales.</sub>
 
 ## Tres promesas
@@ -51,7 +51,7 @@ Principios: la conducta es una prueba, **la falta de datos no lo es** (una clave
 - **Buscar** (el botón de la lupa): al instante y en tu dispositivo, en las notas y nombres que Quill ya ha cargado (una sola #etiqueta pregunta además a tus relés por sus últimas notas); «Buscar en: La red», en Filtros, pregunta a dos relés de búsqueda NIP-50 solo cuando lo eliges, y muestra solo lo que encuentran.
 - **Páginas de cuenta**: toca un nombre, un avatar o una @mención para ver el perfil de esa cuenta (como texto: sus imágenes nunca se cargan), cómo estás conectado con ella, **cuánto la respalda la red** (una puntuación sobre 100 con el motivo de cada punto, la misma que la de nostrclaw) y sus notas y respuestas; con un firmador conectado, **seguir / dejar de seguir** y **silenciar / dejar de silenciar** desde ahí (silenciar está también en los … de cada nota; tu lista de silenciados es pública, y Quill deja el resto, parte privada incluida, como está).
 - **Reaccionar** con un toque; **compartir** (repostear) o **citar** una nota tras una confirmación; lo que ya has reaccionado o respondido queda marcado; **responder** y **escribir una nota** con una pantalla de revisión que muestra el texto exacto, el tipo, las etiquetas y los relés antes de pedirle nada al firmador.
-- **Pantallas anchas**: en un ordenador (unos 1100 px o más) **Siguiendo, Menciones y Yo van una al lado de otra**, cada una con su propio desplazamiento, y un hilo, una cuenta o una lista se abre en un panel a la derecha. En el móvil sigue siendo una sola columna con las pestañas abajo.
+- **Pantallas anchas**: en un ordenador (unos 1100 px o más) **Siguiendo, Menciones y Yo van una al lado de otra**, cada una con su propio desplazamiento, y un hilo, una cuenta, una lista o la Selección del día se abre en el sitio de Yo (nunca en una cuarta columna, que estrechaba las demás; × devuelve Yo). En el móvil sigue siendo una sola columna con las pestañas abajo.
 - **Ayuda**: una página con secciones plegables (el filtro, escribir con Clave, ajustes, instalar), tras el botón ?, en los dos idiomas.
 - **Avatares**: iniciales sobre un color, robots, figuras de píxeles o criaturas de Halloween (calabazas, fantasmas, murciélagos, calaveras, gatos, arañas, brujas), todos dibujados a partir de la clave de la cuenta (no se carga nada).
 - **Ajustes**: tu propia lista de relés (con prueba de conexión; se puede publicar en Nostr como tu lista NIP-65, y se usa como punto de partida en un dispositivo nuevo) y cuatro tamaños de letra, ambos recordados en el dispositivo.

@@ -808,16 +808,17 @@ describe('wide screens: three columns and a panel', () => {
     await tick(700); expect(col(a, 'following').textContent).toContain('a post from my friend'); expect(spinning()).toBe(false)
     await a.go('#/me/following'); await tick(400); expect(spinning()).toBe(false) // the panel loaded too
   })
-  it('a thread opens in a panel on the right and the columns stay exactly as they were (not loaded again)', async () => {
+  it('a thread opens in the place of Me (never a fourth column) and the other columns stay exactly as they were (not loaded again)', async () => {
     const post = wideWorld().find((e) => e.content === 'a post from my friend')!
     const a = boot({ events: wideWorld(), stored: { me }, wide: { value: true } }); await tick(250)
     const first = col(a, 'following').querySelector('article.note')!; const calls = a.calls.n
     await a.go('#/note/' + post.id); await tick(150)
-    expect(titles(a)).toEqual(['Following', 'Mentions', 'Me', 'Thread']); expect(col(a, 'detail').textContent).toContain('a post from my friend')
+    expect(titles(a)).toEqual(['Following', 'Mentions', 'Thread']); expect(col(a, 'detail').textContent).toContain('a post from my friend')
     expect(col(a, 'following').querySelector('article.note')).toBe(first) // the very same card: nothing was rebuilt
     expect(a.calls.n - calls).toBeLessThan(8) // only the thread was asked for
     ;(col(a, 'detail').querySelector('button.close') as HTMLElement).click(); await tick(60)
     expect(a.root.querySelector('.col.detail')).toBeNull(); expect(col(a, 'following').querySelector('article.note')).toBe(first)
+    expect(titles(a)).toEqual(['Following', 'Mentions', 'Me']) // Me is back
   })
   it('an account and the lists open in the panel too; Settings and Help take the whole page', async () => {
     const a = boot({ events: wideWorld(), stored: { me }, wide: { value: true } }); await tick(250)
