@@ -136,6 +136,21 @@ describe('views', () => {
     expect(t.replies[0]!.children.map((n) => n.item.event.id)).toEqual([r2.id])
     expect(await loadThread(f, 'e'.repeat(64), ctx)).toBeNull()
   })
+  it('a branch whose replies name a reply as their "root" (as some apps do) is found and hangs under it, from the real root or from that reply', async () => {
+    const root = ev(a, 'the root of it all')
+    const r1 = ev(c, 'a reply', { tags: [['e', root.id, '', 'root'], ['e', root.id, '', 'reply']], created_at: 2000 })
+    const b1 = ev(a, 'answers r1, but calls it the root', { tags: [['e', r1.id, '', 'root']], created_at: 3000 })
+    const b2 = ev(c, 'answers b1', { tags: [['e', r1.id, '', 'root'], ['e', b1.id, '', 'reply']], created_at: 4000 })
+    const elsewhere = ev(b, 'another thread', { tags: [['e', 'd'.repeat(64), '', 'root']], created_at: 5000 })
+    const f = fake([...world, root, r1, b1, b2, elsewhere])
+    const ctx = contextOf(await loadSession(f, me))
+    for (const open of [r1.id, root.id]) {
+      const t = (await loadThread(f, open, ctx))!
+      expect(t.rootId).toBe(root.id); expect(t.total).toBe(3)
+      expect(t.replies.map((n) => n.item.event.id)).toEqual([r1.id])
+      expect(t.replies[0]!.children.map((n) => n.item.event.id)).toEqual([b1.id]); expect(t.replies[0]!.children[0]!.children.map((n) => n.item.event.id)).toEqual([b2.id])
+    }
+  })
   it('replies that answer each other in a loop cannot break the tree, and none is lost', () => {
     const x = ev(a, 'x'), y = ev(b, 'y', { tags: [['e', x.id, '', 'reply']] })
     const x2 = { ...x, tags: [['e', y.id, '', 'reply']] } as Event // x answers y while y answers x

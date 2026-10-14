@@ -79,6 +79,18 @@ export async function loadThread(f: Fetcher, id: string, ctx: Context, settings:
   const [direct, comments] = await Promise.all([f.query({ kinds: [1, COMMENT_KIND], '#e': [rootId], limit: 300 }), f.query({ kinds: [COMMENT_KIND], '#E': [rootId], limit: 300 })])
   const seenIds = new Set<string>()
   const replies = [...direct, ...comments].filter((e) => e.id !== rootId && !seenIds.has(e.id) && seenIds.add(e.id) && threadRefs(e).root === rootId)
+  // some apps start a new "root" at the reply they answer (its replies name it, not the real root): those branches are asked for too, by the notes
+  // of the thread (the one opened included), and kept when their root is one of them; buildTree then hangs each under its parent
+  const inThread = new Set([rootId, first.id, ...replies.map((e) => e.id)])
+  const subRoots = [...inThread].filter((i) => i !== rootId).slice(0, 100)
+  if (subRoots.length) {
+    const more = await Promise.all([0, 50].filter((i) => i < subRoots.length).map((i) => f.query({ kinds: [1, COMMENT_KIND], '#e': subRoots.slice(i, i + 50), limit: 300 }).catch(() => [] as Event[])))
+    for (const e of more.flat()) {
+      const root = threadRefs(e).root
+      if (e.id === rootId || seenIds.has(e.id) || !root || root === rootId || !inThread.has(root)) continue
+      seenIds.add(e.id); replies.push(e)
+    }
+  }
   const pool = [...replies, ...(rootEvent ? [rootEvent] : [])]
   const signals = analyse(pool)
   const judged = replies.map((event) => ({ event, verdict: judge(event, ctx, signals, settings) }))
