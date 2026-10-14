@@ -239,7 +239,7 @@ describe('notifications inside the app', () => {
     expect(a.root.querySelector('.new-line')!.textContent).toBe('1 new · hidden by the filter: 1')
   })
   it('no number when you are reading as somebody who has nothing new, and no look is made while Mentions is open', async () => {
-    const a = start(base()); await tick(150); await a.go('#/mentions'); await tick(150)
+    const a = start(base()); await tick(150); await a.go('#/mentions'); await tick(700) // the numbers of the reader's own notes on screen have been asked for by now
     const before = a.calls.n; a.poll(); await tick(60); expect(a.calls.n).toBe(before); expect(badge(a)).toBeNull(); expect(a.root.querySelector('.reacted')).toBeNull()
   })
 })
@@ -1424,5 +1424,15 @@ describe('the Pick of the day', () => {
     expect(a.text()).toContain('Por qué importan los relés')
     const b = boot({ stored: { me, feed: 'highlights' }, pick: null }); await tick(500)
     expect(b.root.querySelector('a.pick-card')).toBeNull()
+  })
+})
+
+describe('what your notes got, wherever they are', () => {
+  it('a note of yours in Following shows its numbers there too (not only in Me)', async () => {
+    const mine = ev(me, 'my note in the feed', { created_at: 9000 })
+    const like = ev(friend, '🔥', { kind: 7, created_at: 9010, tags: [['e', mine.id], ['p', me]] }), answer = ev(friend, 'nice one', { created_at: 9020, tags: [['e', mine.id, '', 'root'], ['p', me]] })
+    const a = boot({ events: [...world, mine, like, answer], stored: { me } }); await tick(1200)
+    const card = [...a.root.querySelectorAll('main.view article.note')].find((n) => n.textContent!.includes('my note in the feed'))!
+    expect(card.querySelector('.reach')!.getAttribute('aria-label')).toBe('1 reaction, 1 reply')
   })
 })

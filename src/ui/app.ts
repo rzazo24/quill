@@ -331,7 +331,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
   /** The lists are built once and reused between redraws, so a bar already on screen keeps what it showed: redo the bar(s) of this note in place. */
   const rebar = (e: NostrEvent) => { for (const old of root.querySelectorAll(`article.note[data-id="${e.id}"] .actions`)) old.replaceWith(barFor(e)) }
-  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), picture: (pk: string, px: number) => { const u = realAvatars && (pk === me || !!session?.follows.has(pk)) ? pictures.get(pk) : undefined; return u && deps.avatarProxy ? `${deps.avatarProxy}?u=${encodeURIComponent(u)}&s=${px}` : u }, zapsOf: (id: string) => { const z = zapMap.get(id); if (z === undefined) wantZaps(id); return z ?? undefined }, quoted: (id: string) => quotedMap.get(id), wantQuote, suggestPeople: (word: string) => (session ? matchPeople(names, word, ctx(), 50).filter((p) => fold(p.name).split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(fold(word)))).slice(0, 5) : []), articleTitle: (pk: string, d: string) => (articleTitles.has(`${pk}:${d}`) ? articleTitles.get(`${pk}:${d}`) ?? null : undefined), wantArticle, ...(me ? { saved: { has: (id: string) => savedNotes().some((x) => x.event.id === id), toggle: toggleSaved } } : {}), seen: rememberNotes, interests, deleted: deletedIds(), ...(me ? { self: me } : {}), ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk), deleteNote: (e: NostrEvent) => { if (e.pubkey === me && e.kind === 1) { deleteConfirm = e; draw() } } } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
+  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), wantReach, picture: (pk: string, px: number) => { const u = realAvatars && (pk === me || !!session?.follows.has(pk)) ? pictures.get(pk) : undefined; return u && deps.avatarProxy ? `${deps.avatarProxy}?u=${encodeURIComponent(u)}&s=${px}` : u }, zapsOf: (id: string) => { const z = zapMap.get(id); if (z === undefined) wantZaps(id); return z ?? undefined }, quoted: (id: string) => quotedMap.get(id), wantQuote, suggestPeople: (word: string) => (session ? matchPeople(names, word, ctx(), 50).filter((p) => fold(p.name).split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(fold(word)))).slice(0, 5) : []), articleTitle: (pk: string, d: string) => (articleTitles.has(`${pk}:${d}`) ? articleTitles.get(`${pk}:${d}`) ?? null : undefined), wantArticle, ...(me ? { saved: { has: (id: string) => savedNotes().some((x) => x.event.id === id), toggle: toggleSaved } } : {}), seen: rememberNotes, interests, deleted: deletedIds(), ...(me ? { self: me } : {}), ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk), deleteNote: (e: NostrEvent) => { if (e.pubkey === me && e.kind === 1) { deleteConfirm = e; draw() } } } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
   const ctx = () => contextOf(session!, { mutedWords: words, mutedKeys: [] })
   const who = () => (signer?.pubkey ? nameOf(view(), signer.pubkey) : '')
 
@@ -387,6 +387,14 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
 
   /** Counts what the given notes got, a moment after the page is up, and builds the Me view once more with the numbers (the answers are remembered: no new questions). */
+  /** A note of the reader's drawn anywhere (Following, Mentions, a thread, the search…): its numbers are asked for, a few at a time. */
+  const reachWanted = new Set<string>()
+  let reachTimer: ReturnType<typeof setTimeout> | undefined
+  function wantReach(id: string): void {
+    if (reachAsked.has(id) || reachWanted.has(id)) return
+    reachWanted.add(id)
+    clearTimeout(reachTimer); reachTimer = setTimeout(() => { const ids = [...reachWanted]; reachWanted.clear(); queueReach(ids) }, 200)
+  }
   function queueReach(ids: string[]): void {
     const todo = ids.filter((id) => !reachAsked.has(id))
     if (!todo.length) return
@@ -399,8 +407,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         for (const [id, r] of found) reachMap.set(id, r)
         if (!found.size) return
         await nameKeys([...new Set([...found.values()].flatMap((r) => [...(r.who?.reactions.flatMap(([, k]) => k) ?? []), ...(r.who?.reposts ?? [])]))].slice(0, 300)).catch(() => {}) // the names the list of who reacted needs
-        const route = parseRoute(deps.location.hash)
-        if (wide()) void loadPane(panes.me, { name: 'me' }); else if (route.name === 'me') void load()
+        void load('all') // wherever those notes are on screen (the answers are remembered: nothing is asked again)
       }).catch(() => { /* a failed count only means no numbers */ })
     }, 150)
   }
