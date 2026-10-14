@@ -431,3 +431,6 @@ textarea.interests { width: 100%; box-sizing: border-box; font: inherit; padding
 .seg.feedmode.two { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 420px }
 /* the quill in the header: the buttons' colour of the theme in use, and a gap the colour of the page */
 .logo .vane { fill: var(--accent) } .logo .shaft { stroke: var(--accent) } .logo .gap { stroke: var(--bg) }
+/* Pick of the day: a card in Highlights, and each entry with its title and summary above the note */
+.pick-card { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit } .pick-card .meta { flex: 1 } .pick-card svg { color: var(--accent) }
+.pick-item h3 { margin: 18px 0 4px; font-size: 1.05rem; color: var(--text) } .pick-item > p { margin: 0 0 8px; color: var(--muted) }

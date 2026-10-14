@@ -9,6 +9,7 @@ import { isReply } from '../core/thread.js'
 import { judgeAll, tally, type Context, type Judged, type Settings } from '../core/verdict.js'
 import { loadNetwork } from '../data/network.js'
 import { loadHighlights } from '../data/highlights.js'
+import { loadPickNotes, parsePick, type DailyPick } from '../data/pick.js'
 import { loadPopular } from '../data/popular.js'
 import { articleInfo, loadArticle } from '../data/article.js'
 import { deletionTemplate } from '../core/deletion.js'
@@ -46,6 +47,8 @@ export interface Deps {
   fetcher: Fetcher; /** Relays that can search text (NIP-50), asked only when the reader taps 'search the network too'. */ searchFetcher?: Fetcher; storage?: KV; languages?: readonly string[]; location: Pick<Location, 'hash'>; onHash: (cb: () => void) => void; setHash: (h: string) => void
   /** Without these the app is read-only. */
   signer?: SignerApi; publisher?: Publisher; relays?: string[]; copy?: (text: string) => void; nowMs?: () => number
+  /** The Pick of the day (the site's /digest/latest.json); without it, Highlights shows no card. */
+  pickSource?: () => Promise<unknown>
   /** Where profile pictures are asked for as small thumbnails (this site's /avatar); without it they come straight from their own sites. */
   avatarProxy?: string
   /** Zaps: the recipient's Lightning server (https) and the reader's wallet (NWC). Real ones by default; tests pass fakes. */
@@ -74,7 +77,7 @@ export interface Deps {
   verify?: (e: NostrEvent) => boolean
 }
 
-type Route = { name: 'following' } | { name: 'search' } | { name: 'saved' } | { name: 'article'; naddr: string; pubkey: string; identifier: string; relays: string[] } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'help' } | { name: 'user'; pubkey: string } | { name: 'people'; list: 'following' | 'followers' } | { name: 'note'; id: string; from?: string }
+type Route = { name: 'following' } | { name: 'search' } | { name: 'saved' } | { name: 'pick' } | { name: 'article'; naddr: string; pubkey: string; identifier: string; relays: string[] } | { name: 'mentions' } | { name: 'me' } | { name: 'settings'; focus?: 'filter' } | { name: 'help' } | { name: 'user'; pubkey: string } | { name: 'people'; list: 'following' | 'followers' } | { name: 'note'; id: string; from?: string }
 /** Someone with no account who opens a link to a note: they read that one public note and its replies, exactly as they are. No follows, no mutes, no rule that hides anything. */
 const GUEST_CONTEXT: Context = { me: '', follows: new Set(), muted: new Set(), mutedWords: [], graph: { loaded: false, distance: () => null } }
 const GUEST_SETTINGS: Settings = { rules: { repeatedText: false, burst: false, linkOnly: false, mentionFlood: false, notText: false, outsideNetwork: false }, maxDistance: 2, burstEvents: 5 }
@@ -94,6 +97,7 @@ export function parseRoute(hash: string): Route {
   const art = /^#\/article\/(naddr1[a-z0-9]+)$/i.exec(hash)
   if (art) { const p = refs(`nostr:${art[1]!.toLowerCase()}`)[0]; if (p?.type === 'article') return { name: 'article', naddr: p.naddr, pubkey: p.pubkey, identifier: p.identifier, relays: p.relays ?? [] } }
   if (hash === '#/me/saved') return { name: 'saved' }
+  if (hash === '#/pick') return { name: 'pick' }
   if (hash === '#/me/following' || hash === '#/me/followers') return { name: 'people', list: hash === '#/me/following' ? 'following' : 'followers' }
   const u = /^#\/user\/(.+)$/.exec(hash)
   if (u) { const r = parseIdentity(decodeURIComponent(u[1]!)); if (r.ok) return { name: 'user', pubkey: r.pubkey } } // an account: its key in hex, npub or nprofile
@@ -279,7 +283,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   // A list you leave (to open a note, an account…) is kept as it was, for a while: coming back shows it at once, where you were, with what you had
   // unfolded, instead of loading it again from the top. Older than PAGE_KEEP_MS, it is loaded fresh.
   const PAGE_KEEP_MS = 10 * 60_000
-  const KEPT_PAGES = new Set(['following', 'me', 'user', 'people', 'saved']) // not Mentions: what is new there is worked out on every visit
+  const KEPT_PAGES = new Set(['following', 'me', 'user', 'people', 'saved', 'pick']) // not Mentions: what is new there is worked out on every visit
   const pageCache = new Map<string, { body: HTMLElement; scroll: number; at: number; stamp: string }>()
   // what changes how a list is drawn: a kept page is only shown again if none of it changed (a signer connected, the language, the avatars…)
   const pageStamp = () => JSON.stringify([signer?.state ?? '', signer?.pubkey ?? '', lang, avatarStyle, realAvatars, autoImages, showReposts, readOutbox, settings, !!nwcOf()])
@@ -547,6 +551,21 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   /** The content of one view (a feed, a thread, an account, a list…). `alive` says whether the answer is still wanted: when it is not, null comes back. */
   async function buildContent(route: Route, alive: () => boolean): Promise<HTMLElement | null> {
     if (route.name === 'search') return searchPage()
+    if (route.name === 'pick') {
+      const pk = await pickOfDay()
+      if (!alive()) return null
+      if (!pk) return h('div', { class: 'stack' }, backLink(), h('p', { class: 'empty' }, t(lang, 'pickNone')))
+      const notes = await loadPickNotes(fetcher, pk.items).catch(() => new Map<string, NostrEvent>())
+      const here: Settings = { ...settings, rules: { ...settings.rules, outsideNetwork: false } } // chosen from a network, not from yours: the other rules and your mutes still apply
+      const judged = new Map(judgeAll([...notes.values()], ctx(), here).map((j) => [j.event.id, j]))
+      await nameThem([...judged.values()])
+      if (!alive()) return null
+      return h('div', { class: 'stack pick' }, backLink(),
+        h('h2', { class: 'section' }, t(lang, 'pickTitle'), ' ', h('span', { class: 'meta' }, pk.date)),
+        h('p', { class: 'meta' }, t(lang, 'pickHelp')),
+        ...pk.items.map((it) => { const j = judged.get(it.id)
+          return h('section', { class: 'pick-item' }, h('h3', {}, it.title), it.summary ? h('p', {}, it.summary) : null, j ? renderList([j], view()) : h('p', { class: 'meta' }, t(lang, 'pickNoteMissing'))) }))
+    }
     if (route.name === 'saved') {
       const list = savedNotes()
       const here: Settings = { ...settings, rules: { ...settings.rules, outsideNetwork: false } } // saved on purpose
@@ -616,7 +635,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
           const network = route.name === 'following' && feedMode === 'network'
           const empty = network && !items.length ? h('p', { class: 'empty' }, t(lang, session!.graphInfo.answered === 0 ? 'networkNotLoaded' : 'networkEmpty')) : route.name === 'following' && feedMode === 'popular' && !items.length ? h('p', { class: 'empty' }, t(lang, 'popularEmpty')) : route.name === 'following' && feedMode === 'highlights' && !items.length ? h('p', { class: 'empty' }, t(lang, 'highlightsEmpty')) : null
           if (route.name === 'following' && feedMode === 'follows' && items.length) saveFeedCache(items)
-          content = h('div', { class: 'stack' }, route.name === 'following' ? renderFeedMode(feedMode, changeFeedMode, view()) : null, renderSummary(tally(items), view(), toggleSettings), empty ?? renderList(items, view()))
+          const pickCard = route.name === 'following' && feedMode === 'highlights' ? await pickCardEl() : null
+          content = h('div', { class: 'stack' }, route.name === 'following' ? renderFeedMode(feedMode, changeFeedMode, view()) : null, pickCard, renderSummary(tally(items), view(), toggleSettings), empty ?? renderList(items, view()))
         }
       }
     } catch { content = h('p', { class: 'empty' }, t(lang, 'noNote')) }
@@ -648,7 +668,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const route = parseRoute(deps.location.hash)
     const jobs: Promise<void>[] = [] // Settings and Help too: a change made there (avatars, filter, relays) must already be in the columns when you go back
     if (scope === 'all') for (const id of ['following', 'mentions', 'me'] as const) jobs.push(loadPane(panes[id], { name: id }))
-    if (route.name === 'note' || route.name === 'user' || route.name === 'people' || route.name === 'article' || route.name === 'saved') {
+    if (route.name === 'note' || route.name === 'user' || route.name === 'people' || route.name === 'article' || route.name === 'saved' || route.name === 'pick') {
       const key = JSON.stringify(route)
       if (scope === 'all' || key !== detailKey) {
         if (key !== detailKey) { panes.detail.body = null; panes.detail.resetScroll = true; profileMode = 'notes' }
@@ -846,8 +866,24 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     }
   }
 
+  // the Pick of the day: read once per visit (and again after a refresh); the card in Highlights opens it
+  let pickCache: { at: number; pick: DailyPick | null } | null = null
+  async function pickOfDay(): Promise<DailyPick | null> {
+    if (!deps.pickSource) return null
+    const now = deps.nowMs?.() ?? Date.now()
+    if (pickCache && now - pickCache.at < 30 * 60_000) return pickCache.pick
+    let pick: DailyPick | null = null
+    try { pick = parsePick(await deps.pickSource(), lang) } catch { pick = null }
+    pickCache = { at: now, pick }
+    return pick
+  }
+  async function pickCardEl(): Promise<HTMLElement | null> {
+    const pk = await Promise.race([pickOfDay(), new Promise<null>((r) => setTimeout(() => r(null), 1500))]) // never holds the feed up
+    return pk ? h('a', { class: 'card pick-card', href: '#/pick' }, h('strong', {}, t(lang, 'pickTitle')), h('span', { class: 'meta' }, t(lang, 'pickCount', { n: pk.items.length })), icon('chevron', 16)) : null
+  }
+
   /** Reads everything again from the relays (an installed app has no pull-to-refresh). */
-  function refresh(): void { pageCache.clear(); fetcher.clear(); profileAsked.clear(); lateNotes.clear(); latePending.clear(); lateWaiting = null; zapMap.clear(); articleTitles.clear(); reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); session = null; void load() }
+  function refresh(): void { pickCache = null; pageCache.clear(); fetcher.clear(); profileAsked.clear(); lateNotes.clear(); latePending.clear(); lateWaiting = null; zapMap.clear(); articleTitles.clear(); reachMap.clear(); reachAsked.clear(); quotedMap.clear(); trustMap.clear(); session = null; void load() }
 
   const flat = (nodes: ThreadNode[]): Judged[] => nodes.flatMap((n) => [n.item, ...flat(n.children)])
 
@@ -1309,8 +1345,8 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
       h('section', { class: 'col', 'data-col': id }, h('h2', { class: 'col-title' }, h('span', {}, title), ...extra), id === 'following' ? lateButton('following') : null, ...nodes)
     const write = signer?.state === 'connected' ? h('button', { type: 'button', class: 'primary write', onClick: startNote }, icon('feather', 16), t(lang, 'newNote').replace(/…$/, '')) : null
     const count = badge > 0 ? h('span', { class: 'badge', 'aria-label': `${badge}` }, badge > 9 ? '9+' : String(badge)) : null
-    const detailOpen = route.name === 'note' || route.name === 'user' || route.name === 'people' || route.name === 'article' || route.name === 'saved'
-    const detailTitle = route.name === 'saved' ? t(lang, 'savedShort') : route.name === 'article' ? t(lang, 'article') : route.name === 'note' ? t(lang, 'thread') : route.name === 'people' ? t(lang, route.list === 'following' ? 'peopleFollowing' : 'peopleFollowers') : t(lang, 'account')
+    const detailOpen = route.name === 'note' || route.name === 'user' || route.name === 'people' || route.name === 'article' || route.name === 'saved' || route.name === 'pick'
+    const detailTitle = route.name === 'pick' ? t(lang, 'pickShort') : route.name === 'saved' ? t(lang, 'savedShort') : route.name === 'article' ? t(lang, 'article') : route.name === 'note' ? t(lang, 'thread') : route.name === 'people' ? t(lang, route.list === 'following' ? 'peopleFollowing' : 'peopleFollowers') : t(lang, 'account')
     return h('div', { class: detailOpen ? 'cols with-detail' : 'cols' },
       column('following', t(lang, 'following'), [panes.following.body], [write]),
       column('mentions', t(lang, 'mentions'), [panes.mentions.body], [count]),

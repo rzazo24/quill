@@ -19,6 +19,7 @@ startApp(document.getElementById('app')!, {
   setRelays: (list) => { relays = list },
   probeRelay: (url) => probeRelay(url),
   signer: new Signer({ kv: storage, appUrl: location.origin }),
+  pickSource: async () => { const r = await fetch('/digest/latest.json', { cache: 'no-store' }); return r.ok ? r.json() : null },
   // thumbnails from this site's own server (quill-avatars); a local preview has none, so the pictures come straight from their sites
   ...(location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? {} : { avatarProxy: `${location.origin}/avatar` }),
   storage,

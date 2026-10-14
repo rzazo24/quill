@@ -18,12 +18,13 @@ const roots: HTMLElement[] = []
 /** A choice in the search Filters (Show / Search in): its buttons are there even while the panel is folded. */
 const pickFilter = (a: { root: HTMLElement }, label: string) => ([...a.root.querySelectorAll('.search-filters button')].find((b) => b.textContent === label) as HTMLButtonElement).click()
 
-function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; copy?: (text: string) => void; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; light?: { value: boolean }; elsewhere?: { relay: string; events: Event[]; delayMs: number }; avatarProxy?: string } = {}) {
+function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; copy?: (text: string) => void; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; light?: { value: boolean }; elsewhere?: { relay: string; events: Event[]; delayMs: number }; avatarProxy?: string; pick?: unknown } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
   const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], schemeChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs, opts.slowFor, opts.onlyWhenAll), calls = { n: 0 }, filters: Filter[] = []
   startApp(root, {
     ...(opts.avatarProxy ? { avatarProxy: opts.avatarProxy } : {}),
+    ...(opts.pick !== undefined ? { pickSource: async () => opts.pick } : {}),
     fetcher: { query: async (f, o) => { calls.n++; filters.push(f); if (o?.only) { const el = opts.elsewhere; if (!el || !o.only.includes(el.relay)) return []; await new Promise((r) => setTimeout(r, el.delayMs)); return el.events.filter((e) => answers(f, e)) } return base.query(f, o) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', prefersLight: () => !!opts.light?.value, onSchemeChange: (cb) => schemeChanged.push(cb), onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
     copy: opts.copy,
     searchFetcher: opts.searchable ? { query: async (f: Filter) => opts.searchable!.filter((e) => answers(f, e) && (!(f as { search?: string }).search || e.content.toLowerCase().includes((f as { search: string }).search.toLowerCase()))) } : undefined,
@@ -1403,5 +1404,25 @@ describe('coming back to a list', () => {
     const calls = a.calls.n
     await a.go(''); await tick(200)
     expect(a.calls.n).toBeGreaterThan(calls)
+  })
+})
+
+describe('the Pick of the day', () => {
+  const picked = ev(far, 'a carefully argued note about relays', { created_at: 8000 })
+  const file = { date: '2026-10-14', items: [{ id: picked.id, pubkey: far, en: { title: 'Why relays matter', summary: 'A clear case for running your own.' }, es: { title: 'Por qué importan los relés', summary: 'Un buen argumento.' } }, { id: 'f'.repeat(64), pubkey: far, en: { title: 'Gone' } }, { id: 'bad', pubkey: far, en: { title: 'x' } }] }
+  it('a card in Highlights opens it: each entry with its title and summary, and the note itself (judged by the reader\'s filter) below', async () => {
+    const a = boot({ events: [...world, picked], stored: { me, feed: 'highlights' }, pick: file }); await tick(500)
+    const card = a.root.querySelector('a.pick-card') as HTMLAnchorElement
+    expect(card.getAttribute('href')).toBe('#/pick'); expect(card.textContent).toContain('2 notes chosen this morning') // the malformed one is dropped
+    await a.go('#/pick'); await tick(300)
+    expect(a.text()).toContain('Why relays matter'); expect(a.text()).toContain('A clear case for running your own.')
+    expect(a.root.querySelector('.pick-item article.note')!.textContent).toContain('a carefully argued note about relays')
+    expect(a.text()).toContain('the relays did not return this note') // the second one is not on the relays
+  })
+  it('in Spanish, the Spanish words; without a file, no card', async () => {
+    const a = boot({ events: [...world, picked], stored: { me, lang: 'es' }, pick: file }); await tick(300); await a.go('#/pick'); await tick(300)
+    expect(a.text()).toContain('Por qué importan los relés')
+    const b = boot({ stored: { me, feed: 'highlights' }, pick: null }); await tick(500)
+    expect(b.root.querySelector('a.pick-card')).toBeNull()
   })
 })
