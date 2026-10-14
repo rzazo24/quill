@@ -1209,6 +1209,14 @@ describe('long-form articles', () => {
     expect(links.map((l) => l.textContent)).toEqual(['Read: Why relays matter']); expect(links[0]!.getAttribute('href')).toBe(`#/article/${naddr}`)
     expect(a.root.querySelector('a.ext[href="https://primal.net/Ana/my-post"]')).not.toBeNull() // the address itself stays
   })
+  it('inside an article its pictures and its cover load by themselves, even from someone you do not follow', async () => {
+    const naddr = nip19.naddrEncode({ kind: 30023, pubkey: far, identifier: 'pics' })
+    const a = boot({ events: [...world, ev(far, 'Look:\n\n![chart](https://img.example/chart.png)Next line', { kind: 30023, created_at: 7000, tags: [['d', 'pics'], ['title', 'Pics'], ['image', 'https://img.example/cover.png']] })], stored: { me } }); await tick(200)
+    await a.go(`#/article/${naddr}`); await tick(400)
+    const art = a.root.querySelector('article.article')!
+    expect([...art.querySelectorAll('img')].map((i) => i.getAttribute('src'))).toEqual(['https://img.example/cover.png', 'https://img.example/chart.png'])
+    expect(art.querySelector('.pic-btn')).toBeNull()
+  })
   it('a missing article says so', async () => {
     const naddr = nip19.naddrEncode({ kind: 30023, pubkey: friend, identifier: 'nope' })
     const a = boot({ events: world, stored: { me } }); await tick(200); await a.go(`#/article/${naddr}`); await tick(400)

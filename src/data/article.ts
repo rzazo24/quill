@@ -4,12 +4,13 @@ import { ARTICLE_KIND } from '../core/refs.js'
 import { cleanText } from '../core/text.js'
 import type { Fetcher } from '../net/fetcher.js'
 
-export interface ArticleInfo { title: string; summary: string; publishedAt: number }
+/** `image`: the cover (an https address), or empty. */
+export interface ArticleInfo { title: string; summary: string; publishedAt: number; image: string }
 const tag = (e: Event, name: string): string | undefined => e.tags.find((t) => t[0] === name && typeof t[1] === 'string')?.[1]
 
 export function articleInfo(e: Event): ArticleInfo {
   const published = Number(tag(e, 'published_at'))
-  return { title: cleanText(tag(e, 'title') ?? '', 200).trim(), summary: cleanText(tag(e, 'summary') ?? '', 600).trim(), publishedAt: Number.isFinite(published) && published > 0 ? published : e.created_at }
+  return { title: cleanText(tag(e, 'title') ?? '', 200).trim(), summary: cleanText(tag(e, 'summary') ?? '', 600).trim(), publishedAt: Number.isFinite(published) && published > 0 ? published : e.created_at, image: /^https:\/\/\S+$/.test(tag(e, 'image') ?? '') ? tag(e, 'image')! : '' }
 }
 
 /** The newest version of the article, asked of every relay (and of the relays its reference names), or null. */

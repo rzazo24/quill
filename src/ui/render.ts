@@ -361,6 +361,8 @@ export function renderArticle(e: Judged['event'], info: ArticleInfo, verdict: Ju
   if (verdict.hidden && !opts.showAnyway) return h('article', { class: 'card article' }, ...head, h('p', { class: 'meta' }, `${t(v.lang, 'hiddenBy')}: `, reason(v.lang, verdict)), h('p', {}, h('button', { type: 'button', onClick: opts.onShow }, t(v.lang, 'readAnyway'))))
   const body: HTMLElement[] = []
   let list: HTMLElement | null = null
+  v = { ...v, autoImages: () => true } // opening an article is already the reader's choice: its pictures load by themselves, whoever wrote it
+  if (info.image) body.push(imageEl(info.image, v, true)) // the cover
   for (const b of markdownBlocks(e.content.slice(0, 100_000))) {
     if (b.type === 'item') { const want = b.ordered ? 'OL' : 'UL'; if (!list || list.tagName !== want) { list = h(b.ordered ? 'ol' : 'ul', {}); body.push(list) } list.append(h('li', {}, renderContent(b.text, v, undefined, [e.pubkey]))); continue }
     list = null
