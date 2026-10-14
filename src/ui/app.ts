@@ -567,8 +567,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       const judged = new Map(judgeAll([...notes.values()], ctx(), here).map((j) => [j.event.id, j]))
       await nameThem([...judged.values()])
       if (!alive()) return null
-      return h('div', { class: 'stack pick' }, backLink(),
-        h('h2', { class: 'section' }, t(lang, 'pickTitle'), ' ', h('span', { class: 'meta' }, pk.date)),
+      return h('div', { class: 'stack pick' }, wide() ? null : backLink(), // on a wide screen the column has its own ×
+        wide() ? h('p', { class: 'meta' }, pk.date) : h('h2', { class: 'section' }, t(lang, 'pickTitle'), ' ', h('span', { class: 'meta' }, pk.date)), // on a wide screen the column already says what it is
         h('p', { class: 'meta' }, t(lang, 'pickHelp')),
         ...pk.items.map((it) => { const j = judged.get(it.id)
           return h('section', { class: 'pick-item' }, h('h3', {}, it.title), it.summary ? h('p', {}, it.summary) : null, j ? renderList([j], view()) : h('p', { class: 'meta' }, t(lang, 'pickNoteMissing'))) }))
@@ -1352,12 +1352,14 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
       h('section', { class: 'col', 'data-col': id }, h('h2', { class: 'col-title' }, h('span', {}, title), ...extra), id === 'following' ? lateButton('following') : null, ...nodes)
     const write = signer?.state === 'connected' ? h('button', { type: 'button', class: 'primary write', onClick: startNote }, icon('feather', 16), t(lang, 'newNote').replace(/…$/, '')) : null
     const count = badge > 0 ? h('span', { class: 'badge', 'aria-label': `${badge}` }, badge > 9 ? '9+' : String(badge)) : null
-    const detailOpen = route.name === 'note' || route.name === 'user' || route.name === 'people' || route.name === 'article' || route.name === 'saved' || route.name === 'pick'
+    const detailOpen = route.name === 'note' || route.name === 'user' || route.name === 'people' || route.name === 'article' || route.name === 'saved'
     const detailTitle = route.name === 'pick' ? t(lang, 'pickShort') : route.name === 'saved' ? t(lang, 'savedShort') : route.name === 'article' ? t(lang, 'article') : route.name === 'note' ? t(lang, 'thread') : route.name === 'people' ? t(lang, route.list === 'following' ? 'peopleFollowing' : 'peopleFollowers') : t(lang, 'account')
     return h('div', { class: detailOpen ? 'cols with-detail' : 'cols' },
       column('following', t(lang, 'following'), [panes.following.body], [write]),
       column('mentions', t(lang, 'mentions'), [panes.mentions.body], [count]),
-      route.name === 'search' ? h('section', { class: 'col search-col' }, h('h2', { class: 'col-title' }, h('span', {}, t(lang, 'search')), h('button', { type: 'button', class: 'icon close', 'aria-label': t(lang, 'dismiss'), title: t(lang, 'dismiss'), onClick: () => deps.setHash('') }, '×')), searchPage()) // the search takes the place of Me: four columns would squeeze the others
+      // the Pick of the day takes the place of Me, as the search does (its content is loaded like the panel on the right)
+      route.name === 'pick' ? h('section', { class: 'col pick-col', 'data-col': 'detail' }, h('h2', { class: 'col-title' }, h('span', {}, t(lang, 'pickShort')), h('button', { type: 'button', class: 'icon close', 'aria-label': t(lang, 'dismiss'), title: t(lang, 'dismiss'), onClick: () => deps.setHash('') }, '×')), panes.detail.body)
+      : route.name === 'search' ? h('section', { class: 'col search-col' }, h('h2', { class: 'col-title' }, h('span', {}, t(lang, 'search')), h('button', { type: 'button', class: 'icon close', 'aria-label': t(lang, 'dismiss'), title: t(lang, 'dismiss'), onClick: () => deps.setHash('') }, '×')), searchPage()) // the search takes the place of Me: four columns would squeeze the others
       : column('me', t(lang, 'me'), [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), panes.me.body, h('div', { class: 'foot' }, signOut)]),
       detailOpen ? h('section', { class: 'col detail', 'data-col': 'detail' }, h('h2', { class: 'col-title' }, h('span', {}, detailTitle), h('button', { type: 'button', class: 'icon close', 'aria-label': t(lang, 'dismiss'), title: t(lang, 'dismiss'), onClick: () => deps.setHash('') }, '×')), lateButton('detail'), panes.detail.body) : null)
   }
