@@ -7,7 +7,7 @@ import type { ArticleInfo } from '../data/article.js'
 import type { Child } from './dom.js'
 import type { TrustReason, TrustScore } from '../data/trust.js'
 import { h } from './dom.js'
-import { refs, shortNpub } from '../core/refs.js'
+import { primalArticle, refs, shortNpub } from '../core/refs.js'
 import { avatarOf } from '../core/avatar.js'
 import { showReaction, type ReactionGroup } from '../data/activity.js'
 import type { ProfileInfo } from '../data/profile.js'
@@ -120,6 +120,12 @@ export function renderContent(raw: string, v: View, fromId?: string, vouch: stri
     }
     else for (const seg of segments(part.value)) {
       frag.append(seg.type !== 'link' ? seg.value : v.plainLinks ? plainLink(seg.href, seg.value, v, auto) : isImageUrl(seg.href) ? imageEl(seg.href, v, auto) : isVideoUrl(seg.href) ? videoEl(seg.href, v) : h('a', { class: 'ext', href: seg.href, rel: 'noopener noreferrer nofollow', target: '_blank' }, seg.value))
+      const d = seg.type === 'link' && !v.plainLinks && vouch[0] ? primalArticle(seg.href) : null
+      if (d) { // an article shared as a Primal address: if its author really has one by that name, offer to read it here
+        const title = v.articleTitle?.(vouch[0]!, d)
+        if (title === undefined) v.wantArticle?.(vouch[0]!, d)
+        if (title) frag.append(' ', h('a', { class: 'thread-link article-link', href: `#/article/${nip19.naddrEncode({ kind: 30023, pubkey: vouch[0]!, identifier: d, relays: [] })}` }, icon('article', 14), `${t(v.lang, 'readArticle')}: ${title}`))
+      }
     }
   }
   return frag

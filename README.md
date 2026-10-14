@@ -10,7 +10,7 @@ Live at **<https://quill.hivescope.xyz>**. Paste an `npub` to read; connect a NI
 
 On a computer the three tabs sit side by side, and a thread, an account or a list opens in the place of Me (never a fourth column):
 
-![Quill on a computer: Following and Mentions, with the thread of a note open in the place of Me](docs/screenshot.desktop.png)
+![Quill on a computer: Feeds and Mentions, with the thread of a note open in the place of Me](docs/screenshot.desktop.png)
 <sub>Screenshots with demo data (made-up accounts), not real people.</sub>
 
 ## Three promises
@@ -35,9 +35,9 @@ Principles: behaviour is evidence, **missing data is not** (a key without a prof
 
 ## What it does
 
-- **Following** (with what the people you follow repost, judged by the filter like everything else; a **Follows | Network | Popular | Highlights** switch widens it to the notes of the people they follow, each saying who follows its author, to notes by anyone that your follows reacted to or reposted in the last 24 hours, each saying who, or to Highlights: notes with substance (40+ words of their own) from the last two days that your follows talked about, quoted or shared, talk weighing more than likes), **Mentions** (where the filter earns its keep), **Me** (your account and your description, editable with a signer — only the description changes, the rest of your profile stays as it is —, your Clave connection, the filter settings, your own notes) and any **thread**.
+- **Feeds** (with what the people you follow repost, judged by the filter like everything else; a **Follows | Network | Popular | Highlights** switch widens it to the notes of the people they follow, each saying who follows its author, to notes by anyone that your follows reacted to or reposted in the last 24 hours, each saying who, or to Highlights: notes with substance (40+ words of their own) from the last two days that your follows talked about, quoted or shared, talk weighing more than likes), **Mentions** (where the filter earns its keep), **Me** (your account and your description, editable with a signer — only the description changes, the rest of your profile stays as it is —, your Clave connection, the filter settings, your own notes) and any **thread**.
 - **In-app notifications**: a number on *Mentions*, new notes marked, a list of who reacted to or reposted your notes and of your new followers (accounts not seen following you on an earlier visit; a follower is whoever's newest follow list names you, and people who stop following you are noticed). Me shows how many you follow (exact) and about how many follow you (~: there is no official count, and every app counts its own way).
-- **What your notes got**: under each note of yours, wherever it appears (Me, Following, Mentions, a thread), small numbers for the reactions, reposts and replies it received (nobody counts twice; you and your muted accounts do not count).
+- **What your notes got**: under each note of yours, wherever it appears (Me, Feeds, Mentions, a thread), small numbers for the reactions, reposts and replies it received (nobody counts twice; you and your muted accounts do not count).
 - **Drafts**: what you write is kept on the device as you type, and comes back when you open the same box again.
 - **Zaps** your notes got (⚡ sats, and who sent them) in the numbers under each note of yours, wherever it appears.
 - **Zaps and reply counts on other people's notes** too (never their reaction or repost counts).
@@ -51,7 +51,7 @@ Principles: behaviour is evidence, **missing data is not** (a key without a prof
 - **Search** (the magnifying-glass button): instant, on your device, in the notes and names Quill has already loaded (a single #tag also asks your own relays for its latest notes); “Search in: The network”, in Filters, asks two NIP-50 search relays only when chosen, and shows only what they found.
 - **Account pages**: tap a name, an avatar or an @mention to see that account's profile (as text: its pictures are never loaded), how you are connected to it, **how much the network vouches for it** (a score out of 100 with the reason for every point, the same as nostrclaw's), and its notes and replies; with a signer connected, **follow / unfollow** and **mute / unmute** from there (muting is also in each note's …; your mute list is public, and Quill keeps the rest of it, private part included, as it is).
 - **React** with one tap; **share** (repost) or **quote** a note after a confirmation; what you already reacted to or replied to is marked; **reply** and **write a note** through a review screen that shows the exact text, kind, tags and relays before anything is asked of your signer.
-- **Wide screens**: on a computer (about 1100 px or more) **Following, Mentions and Me sit side by side**, each scrolling on its own, and a thread, an account, a list or the Pick of the day opens in the place of Me (never a fourth column, which squeezed the others; × brings Me back). On a phone it stays one column with the tabs at the bottom.
+- **Wide screens**: on a computer (about 1100 px or more) **Feeds, Mentions and Me sit side by side**, each scrolling on its own, and a thread, an account, a list or the Pick of the day opens in the place of Me (never a fourth column, which squeezed the others; × brings Me back). On a phone it stays one column with the tabs at the bottom.
 - **Help**: a page with folding sections (the filter, writing with Clave, settings, install), behind the ? button, in both languages.
 - **Avatars**: initials on a colour, robots, pixel figures or Halloween creatures (pumpkins, ghosts, bats, skulls, cats, spiders, witches), all drawn from the account's key (nothing is loaded).
 - **Settings**: your own relay list (with a connection test; optionally published on Nostr as your NIP-65 list, and used as the starting point on a new device) and four text sizes, both remembered on the device.

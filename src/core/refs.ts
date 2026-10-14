@@ -47,3 +47,16 @@ export const shortNpub = (pubkey: string): string => {
   const n = nip19.npubEncode(pubkey)
   return `${n.slice(0, 9)}…${n.slice(-4)}`
 }
+
+/** The identifier (`d` tag) of a long-form article linked the way Primal shares them, `https://primal.net/<name>/<identifier>`; null for anything else
+ *  (Primal's own pages, notes `/e/…`, profiles `/p/…` or `/<name>`). Who wrote it is not in the address: the note's author is asked for it. */
+const PRIMAL_PAGES = new Set(['e', 'p', 'a', 'search', 'explore', 'home', 'reads', 'settings', 'notifications', 'messages', 'bookmarks', 'downloads', 'premium', 'feeds', 'help', 'legal'])
+export function primalArticle(href: string): string | null {
+  let u: URL
+  try { u = new URL(href) } catch { return null }
+  if (u.protocol !== 'https:' || !/^(www\.)?primal\.net$/i.test(u.hostname)) return null
+  const parts = u.pathname.split('/').filter(Boolean)
+  if (parts.length !== 2 || PRIMAL_PAGES.has(parts[0]!.toLowerCase())) return null
+  const d = decodeURIComponent(parts[1]!)
+  return /^[\w.~-]{1,200}$/.test(d) ? d : null
+}

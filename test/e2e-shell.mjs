@@ -12,7 +12,7 @@ await p.addInitScript(({ me }) => { localStorage.setItem('me', me); localStorage
 let bad = 0; const say = (ok, m) => { console.log(ok ? 'ok  ' : 'FAIL', m); if (!ok) bad++ }
 const probe = () => p.evaluate(() => { const bar = document.querySelector('nav.tabbar'), main = document.querySelector('main.view'); const r = bar?.getBoundingClientRect(); return { docScrolls: document.scrollingElement.scrollHeight > innerHeight + 1, windowScrollY: scrollY, barBottom: r ? Math.round(r.bottom) : null, vh: innerHeight, mainTop: main ? Math.round(main.scrollTop) : null } })
 await p.goto('http://localhost:4173/', { waitUntil: 'domcontentloaded' }); await p.waitForFunction(() => [...document.querySelectorAll('.note .actions')].some((a) => !a.closest('details:not([open])')), null, { timeout: 40000 }); await new Promise((r) => setTimeout(r, 600))
-let s = await probe(); say(!s.docScrolls && s.barBottom === s.vh, `Following: the page does not scroll and the tab bar sits at the very bottom (bar ${s.barBottom} / viewport ${s.vh})`)
+let s = await probe(); say(!s.docScrolls && s.barBottom === s.vh, `Feeds: the page does not scroll and the tab bar sits at the very bottom (bar ${s.barBottom} / viewport ${s.vh})`)
 // scroll the content, then switch to Mentions and sample the footer all through the loading
 await p.evaluate(() => { document.querySelector('main.view').scrollTop = 2500 }); await new Promise((r) => setTimeout(r, 300))
 s = await probe(); say(s.mainTop > 1000 && s.windowScrollY === 0, `scrolling moves <main> (${s.mainTop}px), never the window (${s.windowScrollY})`)

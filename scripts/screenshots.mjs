@@ -51,7 +51,7 @@ const PORT = 4174
 const srv = spawn('node', ['node_modules/vite/bin/vite.js', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore' })
 for (let i = 0; i < 40; i++) { try { if ((await fetch(`http://localhost:${PORT}/`)).ok) break } catch { /* not up yet */ } await new Promise((r) => setTimeout(r, 250)) }
 const browser = await chromium.launch()
-// the same demo on a computer: Following, Mentions and Me side by side, with the thread of the reader's own note open in the panel on the right
+// the same demo on a computer: Feeds, Mentions and Me side by side, with the thread of the reader's own note open in the panel on the right
 const desktop = async (lang, file) => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 800 }, deviceScaleFactor: 1 }); const p = await ctx.newPage()
   await p.routeWebSocket(`${RELAY}/`, serve)

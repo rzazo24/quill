@@ -1,6 +1,6 @@
 import { nip19 } from 'nostr-tools'
 import { describe, expect, it } from 'vitest'
-import { mentionedKeys, refs, shortNpub } from './refs.js'
+import { mentionedKeys, primalArticle, refs, shortNpub } from './refs.js'
 
 const pk = 'a'.repeat(64), id = 'b'.repeat(64)
 const npub = nip19.npubEncode(pk), nprofile = nip19.nprofileEncode({ pubkey: pk, relays: ['wss://relay.example.net'] })
@@ -42,5 +42,14 @@ describe('a reference to a long-form article', () => {
     expect(refs(`read nostr:${naddr}`)[1]).toEqual({ type: 'article', value: naddr, naddr, pubkey: 'a'.repeat(64), identifier: 'my-post', relays: ['wss://relay.example'] })
     const other = nip19.naddrEncode({ kind: 30078, pubkey: 'a'.repeat(64), identifier: 'x' })
     expect(refs(`nostr:${other}`)).toEqual([{ type: 'text', value: `nostr:${other}` }])
+  })
+})
+
+describe('primalArticle', () => {
+  it('reads the identifier of an article address and nothing else', () => {
+    expect(primalArticle('https://primal.net/ContraMundum/dont-trust-cant-verify')).toBe('dont-trust-cant-verify')
+    expect(primalArticle('https://primal.net/e/note1abc')).toBeNull(); expect(primalArticle('https://primal.net/p/npub1abc')).toBeNull()
+    expect(primalArticle('https://primal.net/ContraMundum')).toBeNull(); expect(primalArticle('https://primal.net/a/b/c')).toBeNull()
+    expect(primalArticle('http://primal.net/x/y')).toBeNull(); expect(primalArticle('https://evil.net/x/y')).toBeNull(); expect(primalArticle('not a url')).toBeNull()
   })
 })

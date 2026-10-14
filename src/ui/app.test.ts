@@ -70,7 +70,7 @@ describe('the app', () => {
   })
   it('starts straight on the feed when it remembers you, in the browser\'s language', async () => {
     const a = boot({ stored: { me }, languages: ['es-ES'] }); await tick(80)
-    expect(a.text()).toContain('Siguiendo'); expect(a.text()).toContain('a post from my friend')
+    expect(a.text()).toContain('Feeds'); expect(a.text()).toContain('a post from my friend')
   })
   it('switching tab does not leave the old tab\'s notes on screen while the new one loads', async () => {
     const a = boot({ stored: { me }, delayMs: 40 }); await tick(400)
@@ -105,12 +105,12 @@ describe('the app', () => {
     const en = boot({}); await tick(40); expect(en.root.querySelector('.login .tagline')!.textContent).toBe('Text first. Tells you why it hides things.')
     const es = boot({ languages: ['es'] }); await tick(40); expect(es.root.querySelector('.login .tagline')!.textContent).toBe('Primero el texto. Te dice por qué oculta cosas.')
   })
-  it('has three tabs at the bottom: Following, Mentions and Me; the current one is marked', async () => {
+  it('has three tabs at the bottom: Feeds, Mentions and Me; the current one is marked', async () => {
     const a = boot({ stored: { me } }); await tick(80)
     const tabs = () => [...a.root.querySelectorAll('nav.tabbar a')].map((x) => `${x.textContent}${x.getAttribute('aria-current') ? '*' : ''}`)
-    expect(tabs()).toEqual(['Following*', 'Mentions', 'Me'])
-    await a.go('#/mentions'); expect(tabs()).toEqual(['Following', 'Mentions*', 'Me'])
-    await a.go('#/me'); expect(tabs()).toEqual(['Following', 'Mentions', 'Me*'])
+    expect(tabs()).toEqual(['Feeds*', 'Mentions', 'Me'])
+    await a.go('#/mentions'); expect(tabs()).toEqual(['Feeds', 'Mentions*', 'Me'])
+    await a.go('#/me'); expect(tabs()).toEqual(['Feeds', 'Mentions', 'Me*'])
     const login = boot({}); await tick(40); expect(login.root.querySelector('nav.tabbar')).toBeNull() // no tabs before you are logged in
   })
   it('the Me page shows who you are, your own notes (replies included) and sign out; the settings are NOT there any more', async () => {
@@ -793,9 +793,9 @@ describe('wide screens: three columns and a panel', () => {
   const wideWorld = (): Event[] => [...world, ev(friend, 'a second post from my friend', { created_at: 8100 })]
   const col = (a: ReturnType<typeof boot>, id: string) => a.root.querySelector(`.col[data-col="${id}"]`) as HTMLElement
   const titles = (a: ReturnType<typeof boot>) => [...a.root.querySelectorAll('.col > .col-title > span')].map((x) => x.textContent)
-  it('shows Following, Mentions and Me side by side, each with its own content, and no tab bar', async () => {
+  it('shows Feeds, Mentions and Me side by side, each with its own content, and no tab bar', async () => {
     const a = boot({ events: wideWorld(), stored: { me }, wide: { value: true } }); await tick(250)
-    expect(titles(a)).toEqual(['Following', 'Mentions', 'Me']); expect(a.root.querySelector('.tabbar')).toBeNull(); expect(a.root.classList.contains('wide')).toBe(true)
+    expect(titles(a)).toEqual(['Feeds', 'Mentions', 'Me']); expect(a.root.querySelector('.tabbar')).toBeNull(); expect(a.root.classList.contains('wide')).toBe(true)
     expect(col(a, 'following').textContent).toContain('a post from my friend')
     expect(col(a, 'mentions').textContent).toContain('a pitch from a stranger')
     expect(col(a, 'me').querySelector('.account')).not.toBeNull(); expect(col(a, 'me').textContent).toContain('My notes')
@@ -813,12 +813,12 @@ describe('wide screens: three columns and a panel', () => {
     const a = boot({ events: wideWorld(), stored: { me }, wide: { value: true } }); await tick(250)
     const first = col(a, 'following').querySelector('article.note')!; const calls = a.calls.n
     await a.go('#/note/' + post.id); await tick(150)
-    expect(titles(a)).toEqual(['Following', 'Mentions', 'Thread']); expect(col(a, 'detail').textContent).toContain('a post from my friend')
+    expect(titles(a)).toEqual(['Feeds', 'Mentions', 'Thread']); expect(col(a, 'detail').textContent).toContain('a post from my friend')
     expect(col(a, 'following').querySelector('article.note')).toBe(first) // the very same card: nothing was rebuilt
     expect(a.calls.n - calls).toBeLessThan(8) // only the thread was asked for
     ;(col(a, 'detail').querySelector('button.close') as HTMLElement).click(); await tick(60)
     expect(a.root.querySelector('.col.detail')).toBeNull(); expect(col(a, 'following').querySelector('article.note')).toBe(first)
-    expect(titles(a)).toEqual(['Following', 'Mentions', 'Me']) // Me is back
+    expect(titles(a)).toEqual(['Feeds', 'Mentions', 'Me']) // Me is back
   })
   it('an account and the lists open in the panel too; Settings and Help take the whole page', async () => {
     const a = boot({ events: wideWorld(), stored: { me }, wide: { value: true } }); await tick(250)
@@ -838,7 +838,7 @@ describe('wide screens: three columns and a panel', () => {
     w.value = false; a.wideChanged.forEach((cb) => cb()); await tick(200)
     expect(a.root.querySelector('.col')).toBeNull(); expect(a.root.querySelector('.tabbar')).not.toBeNull(); expect(a.text()).toContain('a post from my friend')
     w.value = true; a.wideChanged.forEach((cb) => cb()); await tick(250)
-    expect(titles(a)).toEqual(['Following', 'Mentions', 'Me']); expect(a.root.querySelector('.tabbar')).toBeNull()
+    expect(titles(a)).toEqual(['Feeds', 'Mentions', 'Me']); expect(a.root.querySelector('.tabbar')).toBeNull()
   })
   it('Settings and Help keep the header where it is on a wide screen (the screen is wide even when the page is one column)', async () => {
     const a = boot({ events: wideWorld(), stored: { me }, wide: { value: true } }); await tick(250)
@@ -1201,6 +1201,13 @@ describe('long-form articles', () => {
     expect(art.querySelector('h2')!.textContent).toBe('Why relays matter'); expect(art.textContent).toContain('Ana'); expect(art.textContent).toContain('A short take')
     expect(art.querySelector('.article-body h3')!.textContent).toBe('Intro'); expect(art.querySelector('.article-body p')!.textContent).toBe('Some bold text with a link (https://example.com/x).')
     expect([...art.querySelectorAll('.article-body li')].map((x) => x.textContent)).toEqual(['point one', 'point two'])
+  })
+  it('an article shared as a Primal address gets the button too, but only when the note\'s author really has an article by that name', async () => {
+    const naddr = nip19.naddrEncode({ kind: 30023, pubkey: friend, identifier: 'my-post', relays: [] })
+    const a = boot({ events: [...world, article(), ev(friend, 'read it https://primal.net/Ana/my-post', { created_at: 8000 }), ev(friend, 'not mine https://primal.net/Bob/other-post', { created_at: 8100 })], stored: { me } }); await tick(900)
+    const links = [...a.root.querySelectorAll('a.article-link')] as HTMLAnchorElement[]
+    expect(links.map((l) => l.textContent)).toEqual(['Read: Why relays matter']); expect(links[0]!.getAttribute('href')).toBe(`#/article/${naddr}`)
+    expect(a.root.querySelector('a.ext[href="https://primal.net/Ana/my-post"]')).not.toBeNull() // the address itself stays
   })
   it('a missing article says so', async () => {
     const naddr = nip19.naddrEncode({ kind: 30023, pubkey: friend, identifier: 'nope' })
