@@ -142,3 +142,16 @@ describe('your notes, safe: the result of a copy', () => {
     expect(shown([{ relay: 'wss://a.example', ok: 3, failed: 0 }])).not.toContain('their choice')
   })
 })
+
+describe('Show more', () => {
+  const many = Array.from({ length: 70 }, (_, i) => ({ event: ev(pk('a'), `note ${i}`), verdict: { hidden: false, rule: 'default', params: {} } }) as Judged)
+  const cards = (el: HTMLElement) => el.querySelectorAll('article.note').length
+  it('a list drawn again keeps what the reader opened (by its key); another list starts at one page', () => {
+    const pages = new Map<string, number>(), view = { ...v, pages }
+    const first = renderList(many, view, 'mentions')
+    expect(cards(first)).toBe(30); (first.querySelector('button.more') as HTMLButtonElement).click(); expect(cards(first)).toBe(60)
+    const again = renderList(many, view, 'mentions')
+    expect(cards(again)).toBe(60); expect(again.querySelector('button.more')!.textContent).toBe('Show more (10 left)')
+    expect(cards(renderList(many, view, 'me'))).toBe(30); expect(cards(renderList(many, view))).toBe(30)
+  })
+})

@@ -1483,3 +1483,18 @@ describe('your notes, safe (Settings)', () => {
     expect(card().textContent).toContain('3 events saved.')
   })
 })
+
+describe('Show more survives the page being drawn again', () => {
+  it('in Me, the notes opened with Show more stay open when new numbers arrive and the list is drawn again', async () => {
+    const mine = Array.from({ length: 40 }, (_, i) => ev(me, `my note ${i}`, { created_at: 8000 + i })), events = [...world, ...mine]
+    const a = boot({ events, stored: { me }, clock: { now: 9_100_000 } }); await a.go('#/me'); await tick(1200)
+    const cards = () => a.root.querySelectorAll('main.view article.note').length
+    expect(cards()).toBe(30)
+    ;(a.root.querySelector('main.view button.more') as HTMLButtonElement).click(); expect(cards()).toBe(40)
+    a.poll(); await tick(400)
+    events.push(ev(friend, '+', { kind: 7, created_at: 9200, tags: [['e', mine[0]!.id], ['p', me]] }))
+    a.poll(); await tick(1200)
+    expect(a.root.querySelector('main.view .reach')).not.toBeNull() // the list was drawn again with the new number…
+    expect(cards()).toBe(40) // …and what was opened is still open
+  })
+})

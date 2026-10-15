@@ -213,6 +213,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let engagement = new Engagement() // what the reader already did to each note
   const reachMap = new Map<string, Reach>() // what each of the reader's notes got from others (reactions, reposts, replies), filled in after the page is up
   const reachAsked = new Set<string>()
+  const listPages = new Map<string, number>() // how far "Show more" went in each list (a new draw keeps it; Refresh starts again)
   const reachAskedAt = new Map<string, number>() // note -> when its numbers were asked for (unix seconds)
   // notes quoted inside other notes: asked for together once the page is up, then the view is built again with them inside
   const quotedMap = new Map<string, Judged | null>()
@@ -329,7 +330,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const followersSeen = new Set<string>() // everybody seen following you since this page opened (the known ones are in `knownFollowers`)
   /** How many accounts have been seen following the reader: only a lower bound (each relay knows part of them), and it only grows. Null while nothing has been looked at yet. */
   const followerCount = (): number | null => { const k = loadKnown(); return k === null && followersSeen.size === 0 ? null : new Set([...(k ?? []), ...followersSeen]).size }
-  const forgetAccount = () => { rescue = { phase: 'idle' }; rescueLacking = null; rescueSaving = false; pageCache.clear(); myProfile = undefined; zapMap.clear(); zapFlow = null; nwcState = null; nwcError = null; aboutEdit = null; reachMap.clear(); reachAsked.clear(); reachAskedAt.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
+  const forgetAccount = () => { listPages.clear(); rescue = { phase: 'idle' }; rescueLacking = null; rescueSaving = false; pageCache.clear(); myProfile = undefined; zapMap.clear(); zapFlow = null; nwcState = null; nwcError = null; aboutEdit = null; reachMap.clear(); reachAsked.clear(); reachAskedAt.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
   const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
@@ -343,7 +344,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
   /** The lists are built once and reused between redraws, so a bar already on screen keeps what it showed: redo the bar(s) of this note in place. */
   const rebar = (e: NostrEvent) => { for (const old of root.querySelectorAll(`article.note[data-id="${e.id}"] .actions`)) old.replaceWith(barFor(e)) }
-  const view = (): View => ({ lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), wantReach, picture: (pk: string, px: number) => { const u = realAvatars && (pk === me || !!session?.follows.has(pk)) ? pictures.get(pk) : undefined; return u && deps.avatarProxy ? `${deps.avatarProxy}?u=${encodeURIComponent(u)}&s=${px}` : u }, zapsOf: (id: string) => { const z = zapMap.get(id); if (z === undefined) wantZaps(id); return z ?? undefined }, quoted: (id: string) => quotedMap.get(id), wantQuote, suggestPeople: (word: string) => (session ? matchPeople(names, word, ctx(), 50).filter((p) => fold(p.name).split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(fold(word)))).slice(0, 5) : []), articleTitle: (pk: string, d: string) => (articleTitles.has(`${pk}:${d}`) ? articleTitles.get(`${pk}:${d}`) ?? null : undefined), wantArticle, ...(me ? { saved: { has: (id: string) => savedNotes().some((x) => x.event.id === id), toggle: toggleSaved } } : {}), seen: rememberNotes, interests, deleted: deletedIds(), ...(me ? { self: me } : {}), ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk), deleteNote: (e: NostrEvent) => { if (e.pubkey === me && e.kind === 1) { deleteConfirm = e; draw() } } } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
+  const view = (): View => ({ pages: listPages, lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), wantReach, picture: (pk: string, px: number) => { const u = realAvatars && (pk === me || !!session?.follows.has(pk)) ? pictures.get(pk) : undefined; return u && deps.avatarProxy ? `${deps.avatarProxy}?u=${encodeURIComponent(u)}&s=${px}` : u }, zapsOf: (id: string) => { const z = zapMap.get(id); if (z === undefined) wantZaps(id); return z ?? undefined }, quoted: (id: string) => quotedMap.get(id), wantQuote, suggestPeople: (word: string) => (session ? matchPeople(names, word, ctx(), 50).filter((p) => fold(p.name).split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(fold(word)))).slice(0, 5) : []), articleTitle: (pk: string, d: string) => (articleTitles.has(`${pk}:${d}`) ? articleTitles.get(`${pk}:${d}`) ?? null : undefined), wantArticle, ...(me ? { saved: { has: (id: string) => savedNotes().some((x) => x.event.id === id), toggle: toggleSaved } } : {}), seen: rememberNotes, interests, deleted: deletedIds(), ...(me ? { self: me } : {}), ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk), deleteNote: (e: NostrEvent) => { if (e.pubkey === me && e.kind === 1) { deleteConfirm = e; draw() } } } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
   const ctx = () => contextOf(session!, { mutedWords: words, mutedKeys: [] })
   const who = () => (signer?.pubkey ? nameOf(view(), signer.pubkey) : '')
 
@@ -592,7 +593,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       const items = judgeAll(list.map((x) => x.event), ctx(), here)
       await nameThem(items.slice(0, PAGE))
       if (!alive()) return null
-      return h('div', { class: 'stack' }, backLink(), h('h2', { class: 'section' }, t(lang, 'savedTitle', { n: list.length })), h('p', { class: 'meta' }, t(lang, 'savedHelp')), list.length ? renderList(items, view()) : h('p', { class: 'empty' }, t(lang, 'savedNone')))
+      return h('div', { class: 'stack' }, backLink(), h('h2', { class: 'section' }, t(lang, 'savedTitle', { n: list.length })), h('p', { class: 'meta' }, t(lang, 'savedHelp')), list.length ? renderList(items, view(), 'saved') : h('p', { class: 'empty' }, t(lang, 'savedNone')))
     }
     if (route.name === 'article') {
       let e: NostrEvent | null = null
@@ -648,15 +649,15 @@ export function startApp(root: HTMLElement, deps: Deps): void {
           markSeen(); saveKnown(mergeKnown(baseline!, act))
           const block = renderReactionGroups(groupReactions(act, markFrom), view())
           const line = fresh.shown || fresh.hidden ? h('p', { class: 'meta new-line', role: 'status' }, [fresh.shown ? t(lang, 'newItems', { n: fresh.shown }) : '', fresh.hidden ? t(lang, 'newHidden', { n: fresh.hidden }) : ''].filter(Boolean).join(' · ')) : null
-          content = h('div', { class: 'stack' }, renderSummary(tally(items), view(), toggleSettings), line, renderFollowers(fresher, view()), block, renderRepostGroups(groupReposts(act, markFrom), view()), renderList(items, view()))
-        } else if (route.name === 'me') { content = renderList(items, view()); queueReach(items.map((j) => j.event.id)) }
+          content = h('div', { class: 'stack' }, renderSummary(tally(items), view(), toggleSettings), line, renderFollowers(fresher, view()), block, renderRepostGroups(groupReposts(act, markFrom), view()), renderList(items, view(), 'mentions'))
+        } else if (route.name === 'me') { content = renderList(items, view(), 'me'); queueReach(items.map((j) => j.event.id)) }
         else {
           // Following: the people you follow, or the network; in the network an empty list says why (no follow lists arrived, or just nothing new)
           const network = route.name === 'following' && feedMode === 'network'
           const empty = network && !items.length ? h('p', { class: 'empty' }, t(lang, session!.graphInfo.answered === 0 ? 'networkNotLoaded' : 'networkEmpty')) : route.name === 'following' && feedMode === 'popular' && !items.length ? h('p', { class: 'empty' }, t(lang, 'popularEmpty')) : route.name === 'following' && feedMode === 'highlights' && !items.length ? h('p', { class: 'empty' }, t(lang, 'highlightsEmpty')) : null
           if (route.name === 'following' && feedMode === 'follows' && items.length) saveFeedCache(items)
           const pickCard = route.name === 'following' && feedMode === 'highlights' ? await pickCardEl() : null
-          content = h('div', { class: 'stack' }, route.name === 'following' ? renderFeedMode(feedMode, changeFeedMode, view()) : null, pickCard, renderSummary(tally(items), view(), toggleSettings), empty ?? renderList(items, view()))
+          content = h('div', { class: 'stack' }, route.name === 'following' ? renderFeedMode(feedMode, changeFeedMode, view()) : null, pickCard, renderSummary(tally(items), view(), toggleSettings), empty ?? renderList(items, view(), route.name === 'following' ? `feed:${feedMode}` : route.name))
         }
       }
     } catch { content = h('p', { class: 'empty' }, t(lang, 'noNote')) }
@@ -715,7 +716,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       const items = raw.items.filter((j) => j && j.event && j.verdict && typeof j.verdict.hidden === 'boolean' && (deps.verify ?? verifyEvent)({ ...j.event }))
       if (!items.length) return null
       for (const [k, n] of raw.names ?? []) if (typeof k === 'string' && typeof n === 'string' && !names.has(k)) names.set(k, n)
-      return h('div', { class: 'stack' }, renderFeedMode(feedMode, changeFeedMode, view()), renderSummary(tally(items), view(), toggleSettings), renderList(items, view()))
+      return h('div', { class: 'stack' }, renderFeedMode(feedMode, changeFeedMode, view()), renderSummary(tally(items), view(), toggleSettings), renderList(items, view(), `feed:${feedMode}`))
     } catch { return null }
   }
 
@@ -947,7 +948,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
   }
 
   /** Reads everything again from the relays (an installed app has no pull-to-refresh). */
-  function refresh(): void { pickCache = null; pageCache.clear(); fetcher.clear(); profileAsked.clear(); lateNotes.clear(); latePending.clear(); lateWaiting = null; zapMap.clear(); articleTitles.clear(); reachMap.clear(); reachAsked.clear(); reachAskedAt.clear(); quotedMap.clear(); trustMap.clear(); session = null; void load() }
+  function refresh(): void { listPages.clear(); pickCache = null; pageCache.clear(); fetcher.clear(); profileAsked.clear(); lateNotes.clear(); latePending.clear(); lateWaiting = null; zapMap.clear(); articleTitles.clear(); reachMap.clear(); reachAsked.clear(); reachAskedAt.clear(); quotedMap.clear(); trustMap.clear(); session = null; void load() }
 
   const flat = (nodes: ThreadNode[]): Judged[] => nodes.flatMap((n) => [n.item, ...flat(n.children)])
 
@@ -986,7 +987,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     const shown = notes.filter((n) => isReply(n.event) === (profileMode === 'replies'))
     const canFollow = signer?.state === 'connected' && info.pubkey !== me
     return h('div', { class: 'stack' }, backLink(), renderProfileHead(info, relation, view(), canFollow ? { following: session!.follows.has(info.pubkey), muted: session!.muted.has(info.pubkey), busy: !!followFlow || busy, onToggle: () => void startFollow(info.pubkey, session!.follows.has(info.pubkey) ? 'unfollow' : 'follow'), onMute: () => void startFollow(info.pubkey, session!.muted.has(info.pubkey) ? 'unmute' : 'mute') } : undefined), info.pubkey === me ? null : renderTrust(trustMap.get(info.pubkey), view()), renderProfileMode(profileMode, (m) => { profileMode = m; void load() }, view()),
-      shown.length ? renderSummary(tally(shown), view(), toggleSettings) : null, shown.length ? renderList(shown, view()) : h('p', { class: 'empty' }, t(lang, 'profileEmpty')))
+      shown.length ? renderSummary(tally(shown), view(), toggleSettings) : null, shown.length ? renderList(shown, view(), `user:${info.pubkey}:${profileMode}`) : h('p', { class: 'empty' }, t(lang, 'profileEmpty')))
   }
 
   function threadView(th: Thread, source: Judged | null = null, guest = false): HTMLElement {
