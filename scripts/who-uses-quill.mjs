@@ -25,11 +25,11 @@ const page = (url, until) => new Promise((resolve) => {
 
 const tagged = new Map()
 const perRelay = await Promise.all(RELAYS.map(async (url) => {
-  let until, read = 0, reached = false
+  let until, read = 0, reached = false, last = PAGE
   for (let i = 0; i < MAX_PAGES; i++) {
     const events = await page(url, until)
-    if (!events.length) { reached = read === 0; break } // nothing at all: an empty window; nothing more after some pages: the relay stopped there
-    read += events.length
+    if (!events.length) { reached = read === 0 || last < PAGE; break } // empty after a short page: nothing older there; after full pages: the relay stopped answering
+    read += events.length; last = events.length
     for (const e of events) if (e.tags.some((t) => t[0] === 'client' && t[1] === 'Quill')) tagged.set(e.id, e)
     const oldest = Math.min(...events.map((e) => e.created_at))
     if (oldest <= since) { reached = true; break }
