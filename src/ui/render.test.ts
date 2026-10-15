@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { ev, pk } from '../core/testutil.js'
 import type { Judged } from '../core/verdict.js'
 import type { ThreadNode } from '../data/feed.js'
-import { renderContent, renderJudged, renderList, renderSummary, renderTree } from './render.js'
+import { renderContent, renderJudged, renderRescue, renderList, renderSummary, renderTree } from './render.js'
 
 const v = { lang: 'en' as const, names: new Map([[pk('a'), 'Ana']]), nowMs: 1_700_001_000_000 }
 const shown = (e = ev(pk('a'), 'hello')): Judged => ({ event: e, verdict: { hidden: false, rule: 'default', params: {} } })
@@ -131,5 +131,14 @@ describe('a tap on the text opens the conversation', () => {
     expect(location.hash).toBe('#/mentions')
     location.hash = `#/note/${e.id}?from=zz`; tap(card.querySelector('.body')!)
     expect(location.hash).toBe(`#/note/${e.id}?from=zz`); card.remove()
+  })
+})
+
+describe('your notes, safe: the result of a copy', () => {
+  const noop = () => {}
+  const shown = (results: { relay: string; ok: number; failed: number; reason?: string }[]) => renderRescue({ state: { phase: 'copied', results }, saving: false, onScan: noop, onCopy: noop, onSave: noop }, v).textContent!
+  it('says that a relay may refuse notes by its own rules, only when one did', () => {
+    expect(shown([{ relay: 'wss://a.example', ok: 3, failed: 2, reason: 'blocked: web of trust' }])).toContain('That is their choice, not a fault')
+    expect(shown([{ relay: 'wss://a.example', ok: 3, failed: 0 }])).not.toContain('their choice')
   })
 })

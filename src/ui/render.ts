@@ -553,6 +553,7 @@ export function renderRescue(p: RescueProps, v: View): HTMLElement {
   } else if (s.phase === 'copying') body.push(h('p', { class: 'status loading rescue-progress', role: 'status' }, h('span', {}, t(v.lang, 'rescueCopying', { done: s.done, of: s.of }))))
   else {
     body.push(h('ul', { class: 'rescue-relays' }, ...s.results.map((r) => h('li', {}, h('span', { class: 'url' }, host(r.relay)), ' ', h('span', { class: r.failed ? 'meta error' : 'meta' }, r.failed ? t(v.lang, 'rescueCopiedSome', { ok: r.ok, of: r.ok + r.failed, reason: r.reason ?? '' }) : `${r.ok} ✓`)))))
+    if (s.results.some((r) => r.failed)) body.push(h('p', { class: 'meta' }, t(v.lang, 'rescueRefused')))
     body.push(h('p', {}, h('button', { type: 'button', class: 'link', onClick: p.onScan }, t(v.lang, 'rescueAgain'))))
   }
   const saving = p.saving === true ? h('p', { class: 'status loading', role: 'status' }, h('span', {}, t(v.lang, 'rescueSaving')))
