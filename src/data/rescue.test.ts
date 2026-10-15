@@ -52,15 +52,23 @@ describe('your notes, safe', () => {
     expect(cov.lacking.get(B)!.length).toBe(690); expect(cov.lacking.has(C)).toBe(false)
   })
 
-  it('copies each relay what it lacks, oldest first, the notes exactly as signed; a relay that refuses three in a row is left alone', async () => {
+  it('copies each relay what it lacks, newest first, exactly as signed; a relay that asks to slow down gets the note again; one that refuses ten in a row is left alone, one that refuses only some keeps getting the rest', async () => {
     const sent: [string, string][] = []
-    const p: Publisher = { publish: async (e, rs) => { const r = rs![0]!; sent.push([r, e.id]); return { [r]: r === B ? 'blocked: not allowed' : r === C && e.id === n2.id ? 'duplicate: already have it' : 'ok' } } }
-    const lacking = new Map([[A, [n3, n1]], [B, [n1, n2, n3, art]], [C, [n2]]])
+    const old = Array.from({ length: 4 }, (_, i) => ev(me, `old ${i}`, { created_at: 100 + i })), fresh = Array.from({ length: 3 }, (_, i) => ev(me, `new ${i}`, { created_at: 9000 + i }))
+    const blocked = Array.from({ length: 12 }, (_, i) => ev(me, `b ${i}`))
+    let slowOnce = true
+    const p: Publisher = { publish: async (e, rs): Promise<Record<string, string>> => { const r = rs![0]!; sent.push([r, e.id])
+      if (r === A) return { [r]: e.created_at < 1000 ? 'blocked: not in our web of trust' : 'ok' }
+      if (r === B) return { [r]: 'blocked: not allowed' }
+      if (slowOnce) { slowOnce = false; return { [r]: 'rate-limited: slow down' } }
+      return { [r]: e.id === n2.id ? 'duplicate: already have it' : 'ok' } } }
+    const lacking = new Map([[A, [...old, ...fresh]], [B, blocked], [C, [n2, n1]]])
     const progress: number[] = []
     const out = await copyNotes(p, lacking, (d) => progress.push(d), 0)
-    expect(out).toEqual([{ relay: A, sent: 2, ok: 2, failed: 0 }, { relay: B, sent: 3, ok: 0, failed: 3, reason: 'blocked: not allowed' }, { relay: C, sent: 1, ok: 1, failed: 0 }])
-    expect(sent.filter(([r]) => r === A).map(([, id]) => id)).toEqual([n3.id, n1.id])
-    expect(progress.at(-1)).toBe(7) // the note never sent to B still counts as done
+    expect(out).toEqual([{ relay: A, sent: 7, ok: 3, failed: 4, reason: 'blocked: not in our web of trust' }, { relay: B, sent: 10, ok: 0, failed: 10, reason: 'blocked: not allowed' }, { relay: C, sent: 2, ok: 2, failed: 0 }])
+    expect(sent.filter(([r]) => r === A).map(([, id]) => id).slice(0, 3)).toEqual([...fresh].reverse().map((e) => e.id)) // newest first
+    expect(sent.filter(([r]) => r === C)).toHaveLength(3) // the slowed-down note was sent again
+    expect(progress.at(-1)).toBe(21) // the notes never sent to B still count as done
   })
 
   it('the file: everything published, from every relay, the newest of each list only, deleted notes left out', async () => {

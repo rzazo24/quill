@@ -70,18 +70,27 @@ export function coverage(scan: Scan, mine: string[]): Coverage {
 export interface CopyResult { relay: string; sent: number; ok: number; failed: number; reason?: string }
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-/** Sends each relay the notes it lacks, a few per second (relays limit how fast one may publish). A relay that refuses three in a row is left alone. */
+/** Sends each relay the notes it lacks, newest first, a few per second. A relay that says "too fast" is given more time between notes (doubling,
+ *  up to MAX_GAP) and the same note again after a longer pause; that never counts as a refusal. A relay may refuse some notes and take others
+ *  (old ones, for instance), so it is only left alone after GIVE_UP refusals in a row. */
+const GIVE_UP = 10, MAX_GAP = 4000, RETRIES = 4
+const slowDown = (why: string) => /rate|limit|slow|too (many|fast)|try again/i.test(why)
 export async function copyNotes(p: Publisher, lacking: Map<string, Event[]>, onProgress?: (done: number, total: number) => void, gapMs = 250): Promise<CopyResult[]> {
   const total = [...lacking.values()].reduce((n, l) => n + l.length, 0)
   let done = 0
   return Promise.all([...lacking].filter(([, list]) => list.length).map(async ([relay, list]): Promise<CopyResult> => {
     const r: CopyResult = { relay, sent: 0, ok: 0, failed: 0 }
-    let inARow = 0
-    for (const e of list) {
-      const outcome = (await p.publish(e, [relay]))[relay] ?? 'no answer from the relay'
+    let inARow = 0, gap = gapMs
+    for (const e of [...list].sort((a, b) => b.created_at - a.created_at)) {
+      let outcome = (await p.publish(e, [relay]))[relay] ?? 'no answer from the relay'
+      for (let i = 0; i < RETRIES && outcome !== 'ok' && slowDown(outcome); i++) {
+        gap = Math.min(MAX_GAP, Math.max(gap * 2, gapMs ? 500 : 0))
+        await pause(gap * 2 ** (i + 1))
+        outcome = (await p.publish(e, [relay]))[relay] ?? 'no answer from the relay'
+      }
       r.sent++; done++; onProgress?.(done, total)
-      if (outcome === 'ok' || /duplicate|already have/i.test(outcome)) { r.ok++; inARow = 0 } else { r.failed++; r.reason = outcome; if (++inARow >= 3) { done += list.length - r.sent; onProgress?.(done, total); break } }
-      if (gapMs) await pause(gapMs)
+      if (outcome === 'ok' || /duplicate|already have/i.test(outcome)) { r.ok++; inARow = 0 } else { r.failed++; r.reason = outcome; if (++inARow >= GIVE_UP) { done += list.length - r.sent; onProgress?.(done, total); break } }
+      if (gap) await pause(gap)
     }
     return r
   }))

@@ -812,12 +812,19 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
 
   /** Where to look for the reader's notes: their relays, and those of the relay list they published (a few at most). */
   const rescueRelays = () => [...new Set([...relays, ...(published ?? [])])].slice(0, 10)
+  /** While checking or copying, only the counter changes: its text is updated in place (drawing the whole page several times a second moves it under the reader's finger). */
+  function rescueProgress(next: RescueState): void {
+    rescue = next
+    const el = root.querySelector('section.rescue .rescue-progress span')
+    if (el && (next.phase === 'scanning' || next.phase === 'copying')) el.textContent = t(lang, next.phase === 'scanning' ? 'rescueScanning' : 'rescueCopying', { done: next.done, of: next.of })
+    else draw()
+  }
   async function scanRescue(): Promise<void> {
     if (!me || rescue.phase === 'scanning' || rescue.phase === 'copying') return
     const who = me, list = rescueRelays()
     rescue = { phase: 'scanning', done: 0, of: list.length }; draw()
     try {
-      const scan = await scanNotes(deps.fetcher, who, list, (done) => { if (me === who && rescue.phase === 'scanning') { rescue = { ...rescue, done }; draw() } }) // never the remembered answers: this is about what the relays hold NOW
+      const scan = await scanNotes(deps.fetcher, who, list, (done) => { if (me === who && rescue.phase === 'scanning') rescueProgress({ ...rescue, done }) }) // never the remembered answers: this is about what the relays hold NOW
       if (me !== who) return
       const cov = coverage(scan, relays)
       rescueLacking = cov.lacking
@@ -828,8 +835,8 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
   async function copyRescue(): Promise<void> {
     if (!me || !publisher || !rescueLacking || rescue.phase !== 'scanned') return
     const who = me, lacking = rescueLacking
-    rescue = { phase: 'copying', done: 0, of: rescue.toCopy }; draw()
-    const results = await copyNotes(publisher, lacking, (done, of) => { if (me === who) { rescue = { phase: 'copying', done, of }; draw() } })
+    rescue = { phase: 'copying', done: 0, of: rescue.toCopy, from: rescue }; draw()
+    const results = await copyNotes(publisher, lacking, (done, of) => { if (me === who && rescue.phase === 'copying') rescueProgress({ ...rescue, done, of }) })
     if (me !== who) return
     rescueLacking = null; rescue = { phase: 'copied', results }; draw()
   }
