@@ -245,6 +245,7 @@ function renderReview(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement 
     r.target ? h('p', { class: 'meta' }, t(v.lang, r.quote ? 'previewQuoteOf' : 'previewReplyTo', { who: nameOf(v, r.target.pubkey) })) : null,
     r.mentions ? h('p', { class: 'meta' }, t(v.lang, 'previewMentions', { n: r.mentions })) : null,
     h('p', { class: 'meta' }, t(v.lang, 'previewRelays', { n: s.relays.length }), ` · kind ${r.template.kind} (${kind}) · ${r.template.tags.length} tags`),
+    r.template.tags.some((x) => x[0] === 'client') ? h('p', { class: 'meta' }, t(v.lang, 'previewClient')) : null,
     h('p', { class: 'meta' }, t(v.lang, 'previewPublic')),
     h('p', { class: 'buttons' }, h('button', { type: 'button', onClick: hd.publish }, t(v.lang, 'publish')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.back }, t(v.lang, 'backEdit'))),
   )

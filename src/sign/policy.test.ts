@@ -1,6 +1,6 @@
 import { nip19 } from 'nostr-tools'
 import { describe, expect, it } from 'vitest'
-import { canSign, checkTemplate, MAX_NOTE_CHARS, MAX_SIGNATURES_PER_HOUR, recentSignatures, sameTags } from './policy.js'
+import { canSign, checkTemplate, MAX_NOTE_CHARS, withClientTag, MAX_SIGNATURES_PER_HOUR, recentSignatures, sameTags } from './policy.js'
 
 const note = (content: string, tags: string[][] = [], kind = 1) => ({ kind, content, tags, created_at: 1_700_000_000 })
 const id = 'a'.repeat(64)
@@ -71,5 +71,18 @@ describe('quotes', () => {
   })
   it('the usual limits still apply to the whole text, reference included', () => {
     expect(checkTemplate(quote({ content: `${'x'.repeat(990)}\n\n${ref()}` }))).toBe('too-long')
+  })
+})
+
+describe('the client tag (NIP-89)', () => {
+  it('is added once, at the end, to notes and reactions only, and the policy accepts exactly that tag', () => {
+    const n = withClientTag(note('hello', [['p', id]]))
+    expect(n.tags).toEqual([['p', id], ['client', 'Quill']]); expect(checkTemplate(n)).toBeNull()
+    expect(withClientTag(n).tags).toEqual(n.tags) // never twice
+    expect(checkTemplate(withClientTag(note('🦞', [['e', id], ['p', id]], 7)))).toBeNull()
+    expect(withClientTag(note('', [['r', 'wss://a.example']], 10002)).tags).toEqual([['r', 'wss://a.example']]) // lists are left as they are
+    expect(checkTemplate(note('hello', [['client', 'Quill'], ['client', 'Quill']]))).toBe('tags')
+    expect(checkTemplate(note('hello', [['client', 'Other app']]))).toBe('tags')
+    expect(checkTemplate(note('hello', [['client', 'Quill', 'extra']]))).toBe('tags')
   })
 })

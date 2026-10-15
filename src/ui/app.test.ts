@@ -426,10 +426,10 @@ describe('reposts of the people you follow', () => {
 describe('the switches in Settings', () => {
   it('every rule, the reposts and the pictures options is a switch (a checkbox announced as on/off), with the words first and the switch at the end, and one line that says what on and off mean', async () => {
     const a = boot({ stored: { me } }); await tick(80); await a.go('#/settings'); await tick(100)
-    const rows = [...a.root.querySelectorAll('label.check')]; expect(rows).toHaveLength(11) // six rules + reposts + pictures + the Halloween theme + reading people where they write + real profile pictures
+    const rows = [...a.root.querySelectorAll('label.check')]; expect(rows).toHaveLength(12) // six rules + reposts + pictures + the Halloween theme + reading people where they write + real profile pictures + saying you publish from Quill
     for (const r of rows) { const input = r.querySelector('input')!; expect(input.type).toBe('checkbox'); expect(input.getAttribute('role')).toBe('switch'); expect(r.firstElementChild!.tagName).toBe('SPAN'); expect(r.lastElementChild).toBe(input) }
     expect(a.root.querySelector('.settings .meta')!.textContent).toBe('On = the rule hides what meets its condition. Off = it hides nothing.')
-    const rules = rows.filter((r) => !/Halloween|repost|pictures|where they write|profile pictures/.test(r.textContent!)); expect(rules).toHaveLength(6)
+    const rules = rows.filter((r) => !/Halloween|repost|pictures|where they write|profile pictures|from Quill/.test(r.textContent!)); expect(rules).toHaveLength(6)
     expect(rules.map((r) => (r.querySelector('input') as HTMLInputElement).checked)).toEqual([true, true, true, true, true, true]) // all on by default
   })
 })

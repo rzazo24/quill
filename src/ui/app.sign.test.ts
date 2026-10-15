@@ -155,8 +155,17 @@ describe('reacting, one tap', () => {
     expect(a.pub.sent).toHaveLength(1)
     const e = a.pub.sent[0]!.event
     expect(e.kind).toBe(7); expect(e.content).toBe('❤️')
-    expect(e.tags).toEqual([['e', post.id], ['p', friend], ['k', '1']])
+    expect(e.tags).toEqual([['e', post.id], ['p', friend], ['k', '1'], ['client', 'Quill']]) // says it was made with Quill (on unless turned off)
     expect(a.text()).toContain('❤️ → '); expect(a.text()).not.toContain('Published to')
+  })
+  it('with "Say that I publish from Quill" turned off in Settings, nothing says which app was used', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)
+    await a.go('#/settings'); await tick(50)
+    const sw = [...a.root.querySelectorAll('label.check')].find((l) => l.textContent!.includes('Say that I publish from Quill'))!.querySelector('input') as HTMLInputElement
+    expect(sw.checked).toBe(true); sw.checked = false; sw.dispatchEvent(new Event('change')); await tick(50)
+    await a.go('#/'); await tick(100)
+    ;(a.root.querySelector('button[aria-label="React ❤️"]') as HTMLElement).click(); await tick(80)
+    expect(a.pub.sent[0]!.event.tags).toEqual([['e', post.id], ['p', friend], ['k', '1']])
   })
 })
 
@@ -253,7 +262,7 @@ describe('writing a reply', () => {
     await click(a.root, 'Publish'); await tick(60)
     const e = a.pub.sent[0]!.event
     expect(e.kind).toBe(1); expect(e.content).toBe('Thanks #nostr')
-    expect(e.tags).toEqual([['e', post.id, '', 'root'], ['p', friend], ['t', 'nostr']])
+    expect(e.tags).toEqual([['e', post.id, '', 'root'], ['p', friend], ['t', 'nostr'], ['client', 'Quill']])
     expect(a.text()).toContain('Published to 2 of 2 relays'); expect(a.root.querySelector('textarea')).toBeNull()
     await click(a.root, 'Close') // the old draft must not come back once the result is dismissed
     expect(a.root.querySelector('textarea')).toBeNull(); expect(a.root.querySelector('pre.preview')).toBeNull()

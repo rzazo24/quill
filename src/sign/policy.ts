@@ -23,6 +23,11 @@ export interface Template { kind: number; content: string; tags: string[][]; cre
 export type Problem = 'zap' | 'kind' | 'empty' | 'too-long' | 'reaction' | 'tags' | 'reaction-target' | 'relay-list' | 'quote' | 'follow' | 'profile' | 'delete' | RepostProblem
 
 const TAG_NAMES = new Set(['e', 'p', 't', 'k', 'a', 'q'])
+/** NIP-89: says the event was made with Quill (a setting, on by default). Allowed exactly like this, once, on notes and reactions. */
+export const CLIENT_TAG = ['client', 'Quill'] as const
+const isClientTag = (tag: string[]) => tag.length === 2 && tag[0] === CLIENT_TAG[0] && tag[1] === CLIENT_TAG[1]
+/** The template with the client tag at the end, for a note or a reaction that does not carry it yet; anything else as it is. */
+export const withClientTag = <T extends Template>(t: T): T => ((t.kind === 1 || t.kind === 7) && !t.tags.some(isClientTag) ? { ...t, tags: [...t.tags, [...CLIENT_TAG]] } : t)
 const HEX64 = /^[0-9a-f]{64}$/
 
 /** The ids of the notes a text points at with NIP-21 references (nostr:nevent1… / nostr:note1…). */
@@ -54,7 +59,8 @@ export function checkTemplate(t: Template, ctx: CheckContext = {}): Problem | nu
     const ok = t.content === '' && t.tags.length >= 1 && t.tags.length <= MAX_RELAYS && urls.every((u) => u !== '' && normalizeRelay(u) === u) && new Set(urls).size === urls.length
     return ok ? null : 'relay-list'
   }
-  if (t.tags.length > 40 || !t.tags.every((tag) => Array.isArray(tag) && tag.length >= 2 && tag.length <= 4 && tag.every((v) => typeof v === 'string' && v.length <= 300) && TAG_NAMES.has(tag[0]!))) return 'tags'
+  if (t.tags.filter((tag) => Array.isArray(tag) && isClientTag(tag)).length > 1) return 'tags'
+  if (t.tags.length > 40 || !t.tags.every((tag) => Array.isArray(tag) && (isClientTag(tag) || (tag.length >= 2 && tag.length <= 4 && tag.every((v) => typeof v === 'string' && v.length <= 300) && TAG_NAMES.has(tag[0]!))))) return 'tags'
   if (t.kind !== 1 && t.tags.some((x) => x[0] === 'q')) return 'tags'
   if (t.kind === 1) {
     if (t.tags.some((x) => x[0] === 'q') && !checkQuote(t)) return 'quote'
