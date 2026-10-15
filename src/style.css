@@ -202,7 +202,7 @@ button.icon.on { color: var(--accent); border-color: var(--accent); background: 
 
 /* the quill next to the name */
 .top h1 { display: flex; align-items: center } /* no text line (and its strut below the baseline) around the logo: the header centres what you see */
-.top h1 a.wordmark { display: flex; align-items: center; gap: 8px; line-height: 1 }
+.top h1 a.wordmark { display: flex; align-items: center; gap: 0; line-height: 1 } /* the nib almost touches the Q: the quill writes the word */
 .wordmark .logo { flex: none }
 
 /* the note a quoted-note button was tapped from, above the note it opened */
@@ -238,7 +238,7 @@ button.icon.on { color: var(--accent); border-color: var(--accent); background: 
 .top .status.loading { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; pointer-events: none }
 
 /* the logo is as tall as the name is big, whatever the text size */
-.wordmark .logo { width: 1.4em; height: 1.4em }
+.wordmark .logo { width: 1.6em; height: 1.6em; margin-right: -.15em } /* the drawing leaves air in its box: a little larger and pulled in so quill and name read as one mark */
 
 /* the refresh button turns while notes are loading (there is no "Loading…" line any more) */
 button.icon.spinning svg { animation: spin .9s linear infinite }
