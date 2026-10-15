@@ -29,6 +29,7 @@ import { countNew, reactionTarget, groupReactions, groupReposts, loadActivity, m
 import { contextOf, loadGraphInfo, loadOwnLists, pendingGraph, type Session } from '../data/session.js'
 import { DEFAULT_RELAYS, memo, type Fetcher } from '../net/fetcher.js'
 import { failedRelays, type Publisher } from '../net/publisher.js'
+import { backupFile, collectBackup, copyNotes, coverage, scanNotes } from '../data/rescue.js'
 import { PipelineError, signAndPublish, signOnly, type Published, type SignerApi, type Step } from '../sign/pipeline.js'
 import { newestPerAuthor } from '../data/lists.js'
 import { formatSats } from '../core/zap.js'
@@ -36,7 +37,7 @@ import { checkTemplate, MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
 import { cobweb, icon, logo, pumpkin } from './icons.js'
 import { detectLang, problemText, setSpooky, t, type Key, type Lang } from './i18n.js'
-import { PAGE, renderArticle, renderContent, npubEl, renderTrust, renderPeople, renderProfileHead, renderProfileMode, renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
+import { PAGE, renderRescue, type RescueState, renderArticle, renderContent, npubEl, renderTrust, renderPeople, renderProfileHead, renderProfileMode, renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type FollowPanel, type Review } from './sign-ui.js'
 import { installHint, type Env } from './install.js'
 import { halloweenOn, parseScheme, parseTheme, type Scheme, type ThemeChoice, parseAvatars, parseFeedMode, parseFont, parseLang, parseReposts, parseSettings, parseWords, safeGet, safeSet, type AvatarStyle, type FeedMode, type FontSize, type KV } from './store.js'
@@ -55,6 +56,8 @@ export interface Deps {
   zapNet?: { getJson: GetJson; nwc: (c: NwcConnection, method: NwcMethod, params?: Record<string, unknown>) => Promise<Record<string, unknown>> }
   /** Reads the clipboard (needs a tap; may be refused). */
   readClipboard?: () => Promise<string>
+  /** Hands the reader a file to keep (the copy of everything they published). */
+  saveFile?: (name: string, text: string) => void | Promise<void>
   /** Facts about where the page runs (iPhone? installed?), and a hook for "the page came back to the foreground". */
   env?: Env; onVisible?: (cb: () => void) => void
   /** Is there a newer build of the app on the server? Asked at start, whenever the app comes back to the foreground and on every `onTick`. */
@@ -134,6 +137,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const halloween = () => halloweenOn(themeChoice, new Date(deps.nowMs?.() ?? Date.now()))
   let relayError: string | null = null
   const probes = new Map<string, 'testing' | 'up' | 'down'>()
+  // "Your notes, safe" (Settings): the check, the copy and the file
+  let rescue: RescueState = { phase: 'idle' }, rescueLacking: Map<string, NostrEvent[]> | null = null, rescueSaving: boolean | 'failed' | 'done' = false, rescueSaved = 0
   let published: string[] | null | undefined // the relay list on Nostr: undefined = not read (yet), null = none
   let confirmingList = false
   let confirmingDisconnect = false
@@ -324,7 +329,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const followersSeen = new Set<string>() // everybody seen following you since this page opened (the known ones are in `knownFollowers`)
   /** How many accounts have been seen following the reader: only a lower bound (each relay knows part of them), and it only grows. Null while nothing has been looked at yet. */
   const followerCount = (): number | null => { const k = loadKnown(); return k === null && followersSeen.size === 0 ? null : new Set([...(k ?? []), ...followersSeen]).size }
-  const forgetAccount = () => { pageCache.clear(); myProfile = undefined; zapMap.clear(); zapFlow = null; nwcState = null; nwcError = null; aboutEdit = null; reachMap.clear(); reachAsked.clear(); reachAskedAt.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
+  const forgetAccount = () => { rescue = { phase: 'idle' }; rescueLacking = null; rescueSaving = false; pageCache.clear(); myProfile = undefined; zapMap.clear(); zapFlow = null; nwcState = null; nwcError = null; aboutEdit = null; reachMap.clear(); reachAsked.clear(); reachAskedAt.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
   const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
@@ -804,6 +809,43 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     return h('div', { class: 'late-wrap' }, h('button', { type: 'button', class: 'late-notes', onClick: w.show }, '↑ ', t(lang, w.n === 1 ? 'lateNotesOne' : 'lateNotes', { n: w.n })))
   }
 
+
+  /** Where to look for the reader's notes: their relays, and those of the relay list they published (a few at most). */
+  const rescueRelays = () => [...new Set([...relays, ...(published ?? [])])].slice(0, 10)
+  async function scanRescue(): Promise<void> {
+    if (!me || rescue.phase === 'scanning' || rescue.phase === 'copying') return
+    const who = me, list = rescueRelays()
+    rescue = { phase: 'scanning', done: 0, of: list.length }; draw()
+    try {
+      const scan = await scanNotes(deps.fetcher, who, list, (done) => { if (me === who && rescue.phase === 'scanning') { rescue = { ...rescue, done }; draw() } }) // never the remembered answers: this is about what the relays hold NOW
+      if (me !== who) return
+      const cov = coverage(scan, relays)
+      rescueLacking = cov.lacking
+      rescue = { phase: 'scanned', total: cov.total, single: cov.single, missing: cov.missing, toCopy: [...cov.lacking.values()].reduce((n, l) => n + l.length, 0), perRelay: scan.perRelay }
+    } catch { rescue = { phase: 'idle' } }
+    draw()
+  }
+  async function copyRescue(): Promise<void> {
+    if (!me || !publisher || !rescueLacking || rescue.phase !== 'scanned') return
+    const who = me, lacking = rescueLacking
+    rescue = { phase: 'copying', done: 0, of: rescue.toCopy }; draw()
+    const results = await copyNotes(publisher, lacking, (done, of) => { if (me === who) { rescue = { phase: 'copying', done, of }; draw() } })
+    if (me !== who) return
+    rescueLacking = null; rescue = { phase: 'copied', results }; draw()
+  }
+  async function saveRescue(): Promise<void> {
+    if (!me || rescueSaving === true) return
+    const who = me
+    rescueSaving = true; draw()
+    try {
+      const events = await collectBackup(deps.fetcher, who, rescueRelays())
+      if (me !== who) return
+      const file = backupFile(who, events, deps.nowMs?.() ?? Date.now())
+      await deps.saveFile?.(file.name, file.text)
+      rescueSaving = 'done'; rescueSaved = events.length
+    } catch { rescueSaving = 'failed' }
+    draw()
+  }
 
   /** Looks for what is new around my notes since the last visit to Mentions and shows how many things the filter lets through as a number on the tab. */
   async function poll(): Promise<void> {
@@ -1431,7 +1473,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
       : !me ? [...(route.name === 'note' && guestBody ? [guestBody] : []), loginForm, signArea]
       : route.name === 'settings' ? [signArea, renderPrefs({ font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, realAvatars, onRealAvatars: changeRealAvatars, scheme, onScheme: changeScheme, halloween: halloween(), onHalloween: changeTheme, autoImages, onAutoImages: changeAutoImages, interests, onInterests: changeInterests, reposts: showReposts, onReposts: changeReposts, outbox: readOutbox, onOutbox: changeOutbox, nwc: { relay: nwcOf()?.relays[0] ?? null, state: nwcState, error: nwcError, canSign: signer?.state === 'connected' }, onNwcSave: saveNwc, onNwcRemove: removeNwc, onNwcTest: () => void testNwc(), relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
-        onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
+        onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderRescue({ state: rescue, saving: rescueSaving, savedCount: rescueSaved, onScan: () => void scanRescue(), onCopy: () => void copyRescue(), onSave: () => void saveRescue() }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
       : isWide ? [wideView(route, signArea, signOut)]
       : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), body, h('div', { class: 'foot' }, signOut)]
       : [signArea, body]

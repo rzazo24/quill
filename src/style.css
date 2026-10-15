@@ -179,6 +179,11 @@ html[data-font=small] { font-size: 90% } html[data-font=large] { font-size: 112.
 .relay-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 0; border-bottom: 1px solid var(--border) }
 .relay-list .url { flex: 1 1 100%; min-width: 0; overflow-wrap: anywhere }
 .relay-list .probe { font-size: .85rem } .relay-list .probe.up { color: var(--accent) } .relay-list .probe.down { color: var(--red) } .relay-list .probe.testing { color: var(--muted) }
+.rescue-relays { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 2px }
+.rescue-relays li { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--border) }
+.rescue-relays .url { min-width: 0; overflow-wrap: anywhere }
+.rescue-relays .error { color: var(--red) }
+.rescue button svg { vertical-align: -3px; margin-right: 6px }
 .relay-add { display: flex; gap: 8px; margin-top: 8px } .relay-add input { flex: 1; min-width: 0 }
 
 button.icon.on { color: var(--accent); border-color: var(--accent); background: rgba(var(--accent-rgb),.18) }

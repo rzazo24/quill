@@ -29,6 +29,16 @@ startApp(document.getElementById('app')!, {
   setHash: (h) => { location.hash = h },
   copy: (text) => { void navigator.clipboard?.writeText(text).catch(() => {}) },
   readClipboard: () => navigator.clipboard.readText(),
+  // the copy of everything the reader published: on an iPhone or iPad the share sheet ("Save to Files"), since an installed web app cannot download; elsewhere a download
+  saveFile: async (name, text) => {
+    const file = new File([text], name, { type: 'application/json' })
+    const apple = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    if (apple && navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file] }); return } catch (e) { if (e instanceof DOMException && e.name === 'AbortError') return /* the reader closed the sheet */ }
+    }
+    const url = URL.createObjectURL(file), a = Object.assign(document.createElement('a'), { href: url, download: name })
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 30_000)
+  },
   checkVersion: async () => { try { const r = await fetch('/version.json', { cache: 'no-store' }); return isNewer(await r.json(), __BUILD__) } catch { return false } },
   onTick: (cb) => { setInterval(cb, 10 * 60_000) },
   onPoll: (cb) => { setInterval(() => { if (document.visibilityState === 'visible') cb() }, 60_000) },

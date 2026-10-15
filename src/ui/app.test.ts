@@ -18,7 +18,7 @@ const roots: HTMLElement[] = []
 /** A choice in the search Filters (Show / Search in): its buttons are there even while the panel is folded. */
 const pickFilter = (a: { root: HTMLElement }, label: string) => ([...a.root.querySelectorAll('.search-filters button')].find((b) => b.textContent === label) as HTMLButtonElement).click()
 
-function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; copy?: (text: string) => void; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; light?: { value: boolean }; elsewhere?: { relay: string; events: Event[]; delayMs: number }; avatarProxy?: string; pick?: unknown } = {}) {
+function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; copy?: (text: string) => void; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; light?: { value: boolean }; elsewhere?: { relay: string; events: Event[]; delayMs: number }; avatarProxy?: string; pick?: unknown; saveFile?: (name: string, text: string) => void } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
   const mem = new Map(Object.entries(opts.stored ?? {})), visible: (() => void)[] = [], ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], schemeChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs, opts.slowFor, opts.onlyWhenAll), calls = { n: 0 }, filters: Filter[] = []
@@ -26,7 +26,7 @@ function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string
     ...(opts.avatarProxy ? { avatarProxy: opts.avatarProxy } : {}),
     ...(opts.pick !== undefined ? { pickSource: async () => opts.pick } : {}),
     fetcher: { query: async (f, o) => { calls.n++; filters.push(f); if (o?.only) { const el = opts.elsewhere; if (!el || !o.only.includes(el.relay)) return []; await new Promise((r) => setTimeout(r, el.delayMs)); return el.events.filter((e) => answers(f, e)) } return base.query(f, o) } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', prefersLight: () => !!opts.light?.value, onSchemeChange: (cb) => schemeChanged.push(cb), onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
-    copy: opts.copy,
+    copy: opts.copy, saveFile: opts.saveFile,
     searchFetcher: opts.searchable ? { query: async (f: Filter) => opts.searchable!.filter((e) => answers(f, e) && (!(f as { search?: string }).search || e.content.toLowerCase().includes((f as { search: string }).search.toLowerCase()))) } : undefined,
     checkVersion: opts.newer ? async () => { asked.n++; return opts.newer!.value } : undefined, languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
     storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
@@ -1461,5 +1461,25 @@ describe('what your notes got, wherever they are', () => {
     events.push(ev(friend, '+', { kind: 7, created_at: 9200, tags: [['e', mine.id], ['p', me]] }))
     a.poll(); await tick(1200)
     expect(card().querySelector('.reach')!.getAttribute('aria-label')).toBe('1 reaction')
+  })
+})
+
+describe('your notes, safe (Settings)', () => {
+  it('checks where your notes are, offers to copy the missing ones, and hands you a file with everything you published', async () => {
+    const mine1 = ev(me, 'a note only on one relay', { created_at: 9000 }), mine2 = ev(me, 'another', { created_at: 9100 })
+    const saved: { name: string; text: string }[] = []
+    const a = boot({ events: [...world, mine1, mine2], stored: { me }, elsewhere: { relay: 'wss://nos.lol', events: [mine1, mine2, ev(me, '{"name":"me"}', { kind: 0 })], delayMs: 0 }, saveFile: (name, text) => { saved.push({ name, text }) } })
+    await tick(300); await a.go('#/settings'); await tick(100)
+    const card = () => a.root.querySelector('section.rescue')!
+    expect(card().querySelector('h2')!.textContent).toBe('Your notes, safe')
+    const button = (label: string) => [...card().querySelectorAll('button')].find((b) => b.textContent!.startsWith(label)) as HTMLButtonElement
+    button('Check my notes').click(); await tick(300)
+    expect(card().querySelector('.rescue-summary')!.textContent).toBe('2 notes · 2 on a single relay · 2 missing from some of your relays')
+    expect([...card().querySelectorAll('.rescue-relays li')].find((l) => l.textContent!.includes('nos.lol'))!.textContent).toContain('2')
+    expect(button('Copy the missing ones').textContent).toBe('Copy the missing ones (10)') // two notes, five relays without them
+    button('Download the copy').click(); await tick(300)
+    expect(saved).toHaveLength(1); expect(saved[0]!.name).toMatch(/^nostr-backup-[0-9a-f]{8}-\d{4}-\d{2}-\d{2}\.json$/)
+    expect(JSON.parse(saved[0]!.text).events.map((e: Event) => e.id).sort()).toHaveLength(3)
+    expect(card().textContent).toContain('3 events saved.')
   })
 })

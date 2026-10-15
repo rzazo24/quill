@@ -527,3 +527,33 @@ export function renderSettings(p: SettingsPanelProps, v: View): HTMLElement {
     p.graph ? h('p', { class: 'graph' }, p.graph.loaded ? t(v.lang, 'graphInfo', { answered: p.graph.answered, total: p.graph.total }) : t(v.lang, 'graphOff')) : null,
   )
 }
+
+/** "Your notes, safe": what is checked, the answer, the copy and the file. Nothing in it signs; copying sends notes already signed. */
+export type RescueState =
+  | { phase: 'idle' }
+  | { phase: 'scanning'; done: number; of: number }
+  | { phase: 'scanned'; total: number; single: number; missing: number; toCopy: number; perRelay: { relay: string; count: number; failed: boolean }[] }
+  | { phase: 'copying'; done: number; of: number }
+  | { phase: 'copied'; results: { relay: string; ok: number; failed: number; reason?: string }[] }
+export interface RescueProps { state: RescueState; saving: boolean | 'failed' | 'done'; savedCount?: number; onScan: () => void; onCopy: () => void; onSave: () => void }
+
+export function renderRescue(p: RescueProps, v: View): HTMLElement {
+  const s = p.state, host = (u: string) => u.replace(/^wss:\/\//, '')
+  const body: Child[] = []
+  if (s.phase === 'idle') body.push(h('p', {}, h('button', { type: 'button', onClick: p.onScan }, t(v.lang, 'rescueScan'))))
+  else if (s.phase === 'scanning') body.push(h('p', { class: 'status loading', role: 'status' }, h('span', {}, t(v.lang, 'rescueScanning', { done: s.done, of: s.of }))))
+  else if (s.phase === 'scanned') {
+    body.push(h('p', { class: 'rescue-summary' }, h('strong', {}, t(v.lang, s.total === 1 ? 'rescueTotalOne' : 'rescueTotal', { n: s.total })), s.total ? ` · ${t(v.lang, 'rescueSingle', { n: s.single })} · ${t(v.lang, 'rescueMissing', { n: s.missing })}` : ''))
+    body.push(h('ul', { class: 'rescue-relays' }, ...s.perRelay.map((r) => h('li', {}, h('span', { class: 'url' }, host(r.relay)), ' ', h('span', { class: r.failed ? 'meta error' : 'meta' }, r.failed ? t(v.lang, 'rescueNoAnswer') : String(r.count))))))
+    body.push(s.toCopy ? h('p', {}, h('button', { type: 'button', class: 'primary', onClick: p.onCopy }, t(v.lang, 'rescueCopy', { n: s.toCopy })), ' ', h('button', { type: 'button', class: 'link', onClick: p.onScan }, t(v.lang, 'rescueAgain')))
+      : h('p', {}, h('span', { class: 'meta' }, t(v.lang, s.total ? 'rescueAllGood' : 'rescueNothing')), ' ', h('button', { type: 'button', class: 'link', onClick: p.onScan }, t(v.lang, 'rescueAgain'))))
+  } else if (s.phase === 'copying') body.push(h('p', { class: 'status loading', role: 'status' }, h('span', {}, t(v.lang, 'rescueCopying', { done: s.done, of: s.of }))))
+  else {
+    body.push(h('ul', { class: 'rescue-relays' }, ...s.results.map((r) => h('li', {}, h('span', { class: 'url' }, host(r.relay)), ' ', h('span', { class: r.failed ? 'meta error' : 'meta' }, r.failed ? t(v.lang, 'rescueCopiedSome', { ok: r.ok, of: r.ok + r.failed, reason: r.reason ?? '' }) : `${r.ok} ✓`)))))
+    body.push(h('p', {}, h('button', { type: 'button', class: 'link', onClick: p.onScan }, t(v.lang, 'rescueAgain'))))
+  }
+  const saving = p.saving === true ? h('p', { class: 'status loading', role: 'status' }, h('span', {}, t(v.lang, 'rescueSaving')))
+    : h('p', {}, h('button', { type: 'button', onClick: p.onSave }, icon('download', 16), t(v.lang, 'rescueSave')), p.saving === 'failed' ? h('span', { class: 'error' }, ' ', t(v.lang, 'rescueSaveFailed')) : p.saving === 'done' ? h('span', { class: 'meta' }, ' ', t(v.lang, 'rescueSaved', { n: p.savedCount ?? 0 })) : null)
+  return h('section', { class: 'card rescue' }, h('h2', {}, t(v.lang, 'rescueTitle')), h('p', { class: 'meta' }, t(v.lang, 'rescueHelp')), ...body,
+    h('h3', {}, t(v.lang, 'rescueFileTitle')), h('p', { class: 'meta' }, t(v.lang, 'rescueFileHelp')), saving)
+}
