@@ -27,7 +27,8 @@ import { getJson, payInfo, zapInvoice, ZapError, type GetJson } from '../net/lnu
 import { nwcCall, type NwcMethod } from '../net/nwc.js'
 import { countNew, reactionTarget, groupReactions, groupReposts, loadActivity, mergeKnown, newFollowers, parseKnown, type Activity } from '../data/activity.js'
 import { contextOf, loadGraphInfo, loadOwnLists, pendingGraph, type Session } from '../data/session.js'
-import { DEFAULT_RELAYS, memo, type Fetcher } from '../net/fetcher.js'
+import { DEFAULT_RELAYS, memo, queryAuthors, type Fetcher } from '../net/fetcher.js'
+import { fromOutbox } from '../data/outbox.js'
 import { failedRelays, type Publisher } from '../net/publisher.js'
 import { backupFile, collectBackup, copyNotes, coverage, scanNotes } from '../data/rescue.js'
 import { PipelineError, signAndPublish, signOnly, type Published, type SignerApi, type Step } from '../sign/pipeline.js'
@@ -128,7 +129,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   type ZapFlow = { target: NostrEvent; sats: number; comment: string; stage: 'choose' | 'working' | 'failed'; step?: 'address' | 'signing' | 'invoice' | 'paying'; error?: string }
   let zapFlow: ZapFlow | null = null
   // notes from people's own relays that came while the reader was further down the page: a button at the top says how many, and brings them in
-  let lateWaiting: { key: string; paneId: 'following' | 'detail' | null; n: number; show: () => void } | null = null
+  let lateWaiting: { key: string; paneId: 'following' | 'detail' | null; n: number; ids: Set<string>; show: () => void } | null = null
   let autoImages = safeGet(kv, 'autoImages') === '1' // off unless chosen: a picture tells its site the reader's IP address
   let profileMode: 'notes' | 'replies' = 'notes' // what an account's page shows
   let avatarStyle: AvatarStyle = parseAvatars(safeGet(kv, 'avatars'))
@@ -785,16 +786,21 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     }
     setTimeout(() => void (async () => {
       if (await redraw(false) || !alive()) return
-      // the reader is reading further down: nothing moves; a button at the top says how many of these notes would be added
+      // the reader is reading further down: nothing moves. What is older than the top of the page goes into its place next time the page is
+      // drawn, without a word; what is newer than the top waits for a button there, like any client's "new notes"
+      const fresh = latePending.get(key) ?? []
       const notes = [...root.querySelectorAll<HTMLElement>('article.note[data-id]')]
       const onScreen = new Set(notes.map((a) => a.dataset.id!))
-      // only what would land among what is loaded: notes older than the oldest one on the page would not show up anyway
       const times = notes.map((a) => Date.parse(a.querySelector('time')?.getAttribute('datetime') ?? '') / 1000).filter((x) => Number.isFinite(x))
-      const oldest = times.length ? Math.min(...times) : 0
+      const newest = times.length ? Math.max(...times) : 0
       const theirs = (e: NostrEvent) => (route.name === 'user' ? e.pubkey === route.pubkey : !!session?.follows.has(e.pubkey))
-      const n = new Set([...(latePending.get(key) ?? [])].filter((e) => e.kind === 1 && !isReply(e) && theirs(e) && !onScreen.has(e.id) && e.created_at >= oldest).map((e) => e.id)).size
+      const ids = new Set([...(lateWaiting?.key === key ? lateWaiting.ids : []), ...fresh.filter((e) => e.kind === 1 && !isReply(e) && theirs(e) && !onScreen.has(e.id) && e.created_at > newest).map((e) => e.id)])
+      // the older ones are taken in now (any later drawing of the page shows them in their place); the newer ones stay out until the button
+      const older = fresh.filter((e) => !ids.has(e.id))
+      lateNotes.set(key, [...(lateNotes.get(key) ?? []), ...older].slice(-500)); latePending.set(key, fresh.filter((e) => ids.has(e.id)))
+      const n = ids.size
       if (!n) return
-      lateWaiting = { key, paneId, n, show: () => {
+      lateWaiting = { key, paneId, n, ids, show: () => {
         const box = paneId ? root.querySelector<HTMLElement>(`.col[data-col="${paneId}"]`) : root.querySelector<HTMLElement>('main.view')
         if (box) box.scrollTop = 0
         lateWaiting = null; status = t(lang, 'loadingFeed'); draw()
@@ -872,6 +878,22 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
       if (seenAt === null) { markSeen(); draw(); return } // first run: start counting from now, do not greet with a pile
       const n = countNew(a, seenAt, knownFollowers!).shown
       if (n !== badge || followerCount() !== before) { badge = n; draw() }
+    } catch { /* a failed look says nothing */ }
+  }
+
+  /** Following, newest first, is a page people come back to: every minute (and on coming back to the app) a look for notes newer than its top.
+   *  They come in like late ones: drawn at once at the top of the page, or a button there while the reader is further down. */
+  async function checkNewNotes(): Promise<void> {
+    const route = parseRoute(deps.location.hash)
+    if (!me || !session || busy || feedMode !== 'follows' || (route.name !== 'following' && !wide())) return
+    const key = JSON.stringify({ name: 'following' }), box = wide() ? root.querySelector('.col[data-col="following"]') : shownRoute === key ? root.querySelector('main.view') : null
+    const times = [...(box?.querySelectorAll('article.note[data-id] time') ?? [])].map((t) => Date.parse(t.getAttribute('datetime') ?? '') / 1000).filter((x) => Number.isFinite(x))
+    if (!times.length) return
+    const filter = { kinds: [1], since: Math.max(...times) + 1, until: nowSec() + 60, limit: 100 } // (until: each look is a new question, never a remembered answer)
+    try {
+      const [own, elsewhere] = await Promise.all([queryAuthors(fetcher, filter, [...new Set([me, ...session.follows])]), readOutbox ? fromOutbox(fetcher, filter, [...session.follows], relays).catch(() => []) : []])
+      const found = [...own, ...elsewhere].filter((e) => !isReply(e))
+      if (found.length) topUp({ name: 'following' }, () => true, found)
     } catch { /* a failed look says nothing */ }
   }
 
@@ -1535,10 +1557,10 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
   deps.onVisible?.((awayMs) => {
     void checkUpdate()
     if (awayMs > 20_000) fetcher.reconnect()
-    if (me && !busy && (deps.nowMs?.() ?? Date.now()) - lastLoadAt > 120_000) refresh(); else if (!busy && awayMs > 20_000) void poll()
+    if (me && !busy && (deps.nowMs?.() ?? Date.now()) - lastLoadAt > 120_000) refresh(); else if (!busy && awayMs > 20_000) void poll().then(checkNewNotes)
   })
   deps.onTick?.(() => { void checkUpdate() })
-  deps.onPoll?.(() => { if (!busy) void poll() })
+  deps.onPoll?.(() => { if (!busy) void poll().then(checkNewNotes) })
   void checkUpdate()
   draw()
   void load()

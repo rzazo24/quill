@@ -1363,9 +1363,22 @@ describe('notes from people\'s own relays that arrive late', () => {
     Object.defineProperty(main, 'scrollTop', { configurable: true, get: () => 900, set: () => {} }) // reading further down
     await tick(900)
     expect(a.text()).not.toContain('written where only I write')
-    const btn = a.root.querySelector('button.late-notes') as HTMLElement; expect(btn.textContent).toBe('↑ 1 more note from someone you follow')
+    const btn = a.root.querySelector('button.late-notes') as HTMLElement; expect(btn.textContent).toBe('↑ 1 new note')
     btn.click(); await tick(1500)
     expect(a.text()).toContain('written where only I write'); expect(a.root.querySelector('button.late-notes')).toBeNull()
+  })
+  it('every minute, notes newer than the top of Following come in: at the top at once, or behind a button when the reader is further down', async () => {
+    const events = [...world]
+    const a = boot({ events, stored: { me } }); await tick(500)
+    events.push(ev(friend, 'brand new while reading', { created_at: 2_100_000_000 })); a.poll(); await tick(400)
+    expect(a.text()).toContain('brand new while reading') // at the top: drawn straight away
+    const main = a.root.querySelector('main.view') as HTMLElement
+    Object.defineProperty(main, 'scrollTop', { configurable: true, get: () => 900, set: () => {} })
+    events.push(ev(friend, 'another one later', { created_at: 2_100_000_100 })); a.poll(); await tick(400)
+    expect(a.text()).not.toContain('another one later')
+    const btn = a.root.querySelector('button.late-notes') as HTMLElement; expect(btn.textContent).toBe('↑ 1 new note')
+    btn.click(); await tick(1500)
+    expect(a.text()).toContain('another one later'); expect(a.root.querySelector('button.late-notes')).toBeNull()
   })
   it('with the switch off, nobody else\'s relay is asked', async () => {
     const a = boot({ events: w, stored: { me, outbox: '0' }, elsewhere: { relay: 'wss://far.example', events: [late], delayMs: 10 } }); await tick(600)
