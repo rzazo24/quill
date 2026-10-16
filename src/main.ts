@@ -7,6 +7,15 @@ import { probeRelay } from './net/relays.js'
 import { Signer } from './sign/signer.js'
 import { startApp } from './ui/app.js'
 import { detectEnv } from './ui/install.js'
+
+/** Installed on an iPhone, the page may stop short of the bottom of the screen (the strip under it belongs to the home indicator): style.css then
+ *  drops the bar's own room for the indicator and paints the strip like the bar. Only in the installed app: in a browser, toolbars take that room. */
+function markEdgeGap(): void {
+  const installed = matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true
+  const tall = innerHeight >= innerWidth ? Math.max(screen.height, screen.width) : Math.min(screen.height, screen.width)
+  document.documentElement.classList.toggle('edge-gap', installed && tall - innerHeight > 20)
+}
+markEdgeGap(); addEventListener('resize', markEdgeGap)
 import { isNewer } from './ui/update.js'
 
 const storage = ((): Storage | undefined => { try { return window.localStorage } catch { return undefined } })()
