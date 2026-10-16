@@ -6,6 +6,7 @@ html { color-scheme: dark; -webkit-text-size-adjust: 100%; height: 100%; backgro
 /* Some installed iPhone apps end the page above the home indicator and paint the strip below with the body's colour: there the tab bar needs no room
    for the indicator (it is already in that strip), and the strip takes the bar's colour. main.ts sets the class when the page is shorter than the screen. */
 html.edge-gap { --tab-safe:0px; --tab-lift:0px }
+html.edge-gap .tabbar .tab { padding-top: 14px } /* the labels sit in the lower part of the bar, close to the strip that continues it */
 html.edge-gap body { background: var(--panel) } html.edge-gap #app { background: var(--bg) }
 body { margin: 0; background: var(--bg); color: var(--text); font: 1rem/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   /* An app shell: the PAGE never scrolls, only <main> does. A page that scrolls makes iPhone Safari show and hide its toolbar, which pushes fixed bars
