@@ -152,3 +152,9 @@ describe('who follows you is decided by their NEWEST list', () => {
     const a = await loadActivity(f, sess(), undefined, { known: new Set([other]), verifyKnown: true }); expect(a.followers).toEqual([stranger]); expect(a.gone).toEqual([other])
   })
 })
+
+describe('custom emoji reactions', () => {
+  it('show as ✨, never as their bare name', () => {
+    expect(showReaction(':partyblob_sm:')).toBe('✨'); expect(showReaction(':peepoHey:')).toBe('✨'); expect(showReaction('🤙')).toBe('🤙'); expect(showReaction('+')).toBe('👍')
+  })
+})

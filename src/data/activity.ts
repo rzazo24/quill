@@ -131,7 +131,9 @@ export interface ReactionGroup {
   fresh: boolean
 }
 
-export const showReaction = (content: string): string => (content === '+' ? '👍' : content === '-' ? '👎' : content || '👍')
+/** How a reaction is shown. A custom emoji (NIP-30, `:name:`) is a picture from wherever its author keeps it: Quill does not load it (that would tell
+ *  that server who is reading), so it shows as ✨, one mark for all of them, instead of its bare name. */
+export const showReaction = (content: string): string => (content === '+' ? '👍' : content === '-' ? '👎' : /^:[\w-]+:$/.test(content.trim()) ? '✨' : content || '👍')
 
 /** The visible reactions to the reader's notes, grouped by note, the most recent group first. */
 export function groupReactions(a: Activity, seenAt: number): ReactionGroup[] {
