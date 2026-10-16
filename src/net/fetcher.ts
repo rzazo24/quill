@@ -12,6 +12,9 @@ export interface QueryOptions { quick?: boolean; grace?: number; also?: string[]
 
 export interface Fetcher {
   query(filter: Filter, options?: QueryOptions): Promise<Event[]>
+  /** Drops every open connection, so the next question opens fresh ones. A phone that put the app in the background may have cut them without
+   *  telling it: a question sent down such a connection only times out, and "nothing came" would read as "nothing new". */
+  reconnect?(): void
 }
 
 export const DEFAULT_RELAYS = [
@@ -119,6 +122,7 @@ export function poolFetcher(relays: string[] | (() => string[]) = DEFAULT_RELAYS
       if (!list.length) return [] // the only relays asked for are resting: nothing to ask
       return check(filter, options?.quick ?? isQuick(filter) ? await collectQuick(subscribe, list, filter, { maxWait, ...(options?.grace !== undefined ? { grace: options.grace } : {}) }) : await pool.querySync(list, filter, { maxWait }))
     },
+    reconnect: () => { try { pool.close([...pool.listConnectionStatus()].filter(([, open]) => open).map(([url]) => url)) } catch { /* nothing open */ } }, // (one still connecting is fresh anyway)
   }
 }
 
@@ -132,7 +136,7 @@ export async function queryAuthors(f: Fetcher, base: Filter, authors: string[], 
 }
 
 /** Remembers answers for the life of the page, so changing a filter setting re-judges without asking the relays again. `clear()` is "refresh". */
-export function memo(f: Fetcher): Fetcher & { clear(): void } {
+export function memo(f: Fetcher): Fetcher & { clear(): void; reconnect(): void } {
   const cache = new Map<string, Promise<Event[]>>()
   return {
     query: (filter, options) => {
@@ -141,6 +145,7 @@ export function memo(f: Fetcher): Fetcher & { clear(): void } {
       if (!hit) { hit = f.query(filter, options); hit.catch(() => cache.delete(key)); cache.set(key, hit) }
       return hit
     },
+    reconnect: () => f.reconnect?.(),
     clear: () => cache.clear(),
   }
 }

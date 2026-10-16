@@ -49,5 +49,5 @@ startApp(document.getElementById('app')!, {
   isWide: () => matchMedia('(min-width: 1100px)').matches,
   onWide: (cb) => matchMedia('(min-width: 1100px)').addEventListener('change', cb),
   env: detectEnv(navigator as Navigator & { standalone?: boolean }, matchMedia('(display-mode: standalone)').matches),
-  onVisible: (cb) => document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') cb() }),
+  onVisible: (cb) => { let hiddenAt = 0; document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') hiddenAt = Date.now(); else cb(hiddenAt ? Date.now() - hiddenAt : 0) }) },
 })

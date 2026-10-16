@@ -59,7 +59,7 @@ export interface Deps {
   /** Hands the reader a file to keep (the copy of everything they published). */
   saveFile?: (name: string, text: string) => void | Promise<void>
   /** Facts about where the page runs (iPhone? installed?), and a hook for "the page came back to the foreground". */
-  env?: Env; onVisible?: (cb: () => void) => void
+  env?: Env; onVisible?: (cb: (awayMs: number) => void) => void
   /** Is there a newer build of the app on the server? Asked at start, whenever the app comes back to the foreground and on every `onTick`. */
   /** Tells the code that talks to relays which list to use now (called at start and whenever the reader changes it). */
   setRelays?: (relays: string[]) => void; /** Does something answer at this address? */ probeRelay?: (url: string) => Promise<boolean>
@@ -1531,7 +1531,12 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
   deps.onSchemeChange?.(() => { if (scheme === 'auto') { applyTheme(); draw() } })
   deps.onWide?.(() => { shownRoute = ''; barsHidden = false; root.classList.remove('bars-hidden'); void load() })
   // Coming back to the app after a while (an installed app stays alive in the background): show fresh notes, not what was there hours ago.
-  deps.onVisible?.(() => { void checkUpdate(); if (me && !busy && (deps.nowMs?.() ?? Date.now()) - lastLoadAt > 120_000) refresh() })
+  // back from the background: a phone may have cut the relay connections meanwhile, so fresh ones, and a look at what is new right away
+  deps.onVisible?.((awayMs) => {
+    void checkUpdate()
+    if (awayMs > 20_000) fetcher.reconnect()
+    if (me && !busy && (deps.nowMs?.() ?? Date.now()) - lastLoadAt > 120_000) refresh(); else if (!busy && awayMs > 20_000) void poll()
+  })
   deps.onTick?.(() => { void checkUpdate() })
   deps.onPoll?.(() => { if (!busy) void poll() })
   void checkUpdate()
