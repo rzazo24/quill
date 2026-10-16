@@ -5,7 +5,7 @@ import { readZap, ZAP_RECEIPT_KIND } from '../core/zap.js'
 import { COMMENT_KIND, threadRefs } from '../core/thread.js'
 import type { Context } from '../core/verdict.js'
 import type { Fetcher } from '../net/fetcher.js'
-import { reactionTarget, showReaction } from './activity.js'
+import { reactionTarget, showReaction, SLOW_OK } from './activity.js'
 
 const HEX64 = /^[0-9a-f]{64}$/
 
@@ -65,7 +65,7 @@ export async function loadReach(f: Fetcher, ids: readonly string[], ctx: Pick<Co
   const chunks: string[][] = []
   for (let i = 0; i < unique.length; i += CHUNK) chunks.push(unique.slice(i, i + CHUNK))
   const answers = await Promise.all(chunks.flatMap((c) => [
-    f.query({ kinds: [7], '#e': c, limit: 500 }), f.query({ kinds: [6, 16], '#e': c, limit: 300 }), f.query({ kinds: [1, COMMENT_KIND], '#e': c, limit: 300 }), f.query({ kinds: [1], '#q': c, limit: 100 }), f.query({ kinds: [ZAP_RECEIPT_KIND], '#e': c, limit: 300 }),
+    f.query({ kinds: [7], '#e': c, limit: 500 }, SLOW_OK), f.query({ kinds: [6, 16], '#e': c, limit: 300 }, SLOW_OK), f.query({ kinds: [1, COMMENT_KIND], '#e': c, limit: 300 }, SLOW_OK), f.query({ kinds: [1], '#q': c, limit: 100 }, SLOW_OK), f.query({ kinds: [ZAP_RECEIPT_KIND], '#e': c, limit: 300 }),
   ].map((p) => p.catch(() => [] as Event[]))))
   const seen = new Set<string>()
   return reachOf(answers.flat().filter((e) => !seen.has(e.id) && seen.add(e.id)), unique, ctx, verify)
