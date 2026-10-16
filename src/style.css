@@ -17,6 +17,9 @@ body { margin: 0; background: var(--bg); color: var(--text); font: 1rem/1.5 syst
 #app { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; position: relative } /* the column of the app shell: header, scrolling <main>, tab bar */
 a { color: var(--accent) }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+/* iOS shades whatever is tapped with a grey veil (invisible on the dark themes, a smudge on the light one): instead, what is pressed fades a little */
+a, button, label, summary, [role=button] { -webkit-tap-highlight-color: transparent }
+a:active, button:active:not(:disabled), summary:active, [role=button]:active { opacity: .7 }
 h2, h3 { margin: 0 }
 
 /* header and tab bar */
