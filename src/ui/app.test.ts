@@ -1332,6 +1332,18 @@ describe('the network search, on its own', () => {
   })
 })
 
+describe('while the reader is scrolling', () => {
+  it('the page is not rebuilt under their finger: it waits until the scroll stops', async () => {
+    const a = boot({ stored: { me } }); await tick(500)
+    expect(a.text()).toContain('Text first')
+    a.root.dispatchEvent(new Event('touchmove'))
+    ;[...a.root.querySelectorAll('button')].find((b) => b.textContent === 'ES')!.click(); await tick(400)
+    expect(a.text()).toContain('Text first') // still the old page: drawing now would stop the scroll
+    a.root.dispatchEvent(new Event('touchend')); await tick(800)
+    expect(a.text()).not.toContain('Text first')
+  })
+})
+
 describe('reading people where they write', () => {
   it('is on by default; the switch in Settings turns it off, is remembered, and the account page still loads', async () => {
     const a = boot({ stored: { me } }); await tick(80); await a.go('#/settings'); await tick(100)

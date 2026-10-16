@@ -297,6 +297,9 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   // what changes how a list is drawn: a kept page is only shown again if none of it changed (a signer connected, the language, the avatars…)
   const pageStamp = () => JSON.stringify([signer?.state ?? '', signer?.pubkey ?? '', lang, avatarStyle, realAvatars, autoImages, showReposts, readOutbox, settings, !!nwcOf()])
   let restoreScroll: number | null = null
+  // the reader's finger or a page still gliding: drawing then would swap the scrolling <main> under them and stop the scroll (on iOS, every time)
+  let dragging = false, scrolledAt = 0, drawnAt = 0, drawLater: ReturnType<typeof setTimeout> | undefined
+  let loudLoad = false // the next load of the page on screen shows that it is loading (the reader asked for it); the others are quiet
   const pageKey = (key: string) => (key === JSON.stringify({ name: 'following' }) ? `${key}:${feedMode}` : key) // Following is a different list in each mode
   let updateReady = false
   // activity around my notes: what is new since the last time the Mentions tab was open
@@ -748,7 +751,10 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     }
     if (key !== shownRoute) { body = null; shownRoute = key; lateWaiting = null; scrollToTop = true; profileMode = 'notes'; if (route.name !== 'mentions') { markFrom = null; followersMark = null } }
     if (route.name === 'settings' || route.name === 'help') { pageCache.clear(); status = null; body = null; draw(); return } // a change made there must show in every list
-    status = t(lang, 'loadingFeed'); draw()
+    // the same page again (the graph came, or numbers, or a title): quiet, it is only drawn once it is ready
+    const quiet = key === shownRoute && body !== null && !scrollToTop && !loudLoad
+    loudLoad = false
+    if (!quiet) { status = t(lang, 'loadingFeed'); draw() }
     const content = await buildContent(route, () => mine === run)
     if (content === null) return
     status = null; body = content; lastLoadAt = deps.nowMs?.() ?? Date.now(); draw(); afterFirstPaint()
@@ -971,7 +977,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
   }
 
   /** Reads everything again from the relays (an installed app has no pull-to-refresh). */
-  function refresh(): void { listPages.clear(); pickCache = null; pageCache.clear(); fetcher.clear(); profileAsked.clear(); lateNotes.clear(); latePending.clear(); lateWaiting = null; zapMap.clear(); articleTitles.clear(); reachMap.clear(); reachAsked.clear(); reachAskedAt.clear(); quotedMap.clear(); trustMap.clear(); session = null; void load() }
+  function refresh(): void { listPages.clear(); pickCache = null; pageCache.clear(); fetcher.clear(); profileAsked.clear(); lateNotes.clear(); latePending.clear(); lateWaiting = null; zapMap.clear(); articleTitles.clear(); reachMap.clear(); reachAsked.clear(); reachAskedAt.clear(); quotedMap.clear(); trustMap.clear(); session = null; loudLoad = true; void load() }
 
   const flat = (nodes: ThreadNode[]): Judged[] => nodes.flatMap((n) => [n.item, ...flat(n.children)])
 
@@ -1447,6 +1453,15 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
   }
 
   function draw(): void {
+    const moving = () => dragging || Date.now() - scrolledAt < 350
+    if (!scrollToTop && restoreScroll === null && moving()) {
+      if (drawLater === undefined) { const wait = () => { drawLater = setTimeout(() => { if (moving()) wait(); else { drawLater = undefined; drawNow() } }, 200) }; wait() }
+      return
+    }
+    clearTimeout(drawLater); drawLater = undefined
+    drawNow(); drawnAt = Date.now()
+  }
+  function drawNow(): void {
     // <main> is the only thing that scrolls and it is rebuilt on every draw. Read where the reader was FIRST: building the new one moves the list out of
     // the old one, which then collapses to zero.
     const kept = root.querySelector('main.view')?.scrollTop ?? 0
@@ -1549,6 +1564,9 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     scrollToTop = false
   }
 
+  root.addEventListener('touchmove', () => { dragging = true }, { passive: true })
+  for (const end of ['touchend', 'touchcancel']) root.addEventListener(end, () => { if (dragging) { dragging = false; scrolledAt = Date.now() } }, { passive: true })
+  root.addEventListener('scroll', () => { if (Date.now() - drawnAt > 150) scrolledAt = Date.now() }, { passive: true, capture: true }) // (not the scroll a draw itself puts back)
   deps.onHash(() => { void load('route') })
   deps.onSchemeChange?.(() => { if (scheme === 'auto') { applyTheme(); draw() } })
   deps.onWide?.(() => { shownRoute = ''; barsHidden = false; root.classList.remove('bars-hidden'); void load() })
