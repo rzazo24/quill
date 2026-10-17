@@ -450,3 +450,8 @@ textarea.interests { width: 100%; box-sizing: border-box; font: inherit; padding
 .pick-card strong { display: inline-flex; align-items: center; gap: 6px; font-size: 1.05rem } .pick-card strong svg { color: var(--accent) }
 .pick-card .meta { font-size: .9rem } .pick-card > svg { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: var(--accent) }
 .pick-item h3 { margin: 18px 0 4px; font-size: 1.05rem; color: var(--text) } .pick-item > p { margin: 0 0 8px; color: var(--muted) }
+
+/* a quoted poll: a small label, then the question and its options */
+.poll-tag { display: block; font-size: .8rem; margin-bottom: 2px }
+.poll-options { margin: 6px 0; padding-left: 1.2em }
+.poll-options li { margin: 2px 0 }

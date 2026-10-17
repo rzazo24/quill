@@ -42,9 +42,14 @@ export function threadChip(href: string, v: View, label: 'thread' | 'quotedNote'
 /** `fromId`: the note this text belongs to; a quoted-note chip carries it so the page it opens can show where you came from. */
 /** A quoted note shown inside the one that quotes it: its author and its text (a quote inside it stays a button: no endless nesting). Judged like any note:
  *  if the filter hides it, only the reason is shown. A tap opens it. */
+export const POLL_KIND = 1068
 function quoteCard(j: Judged, v: View, href: string, vouch: string[]): HTMLElement {
   const inner: View = { ...v, quoted: undefined, wantQuote: undefined, plainLinks: true }
   const head = h('span', { class: 'quote-head' }, avatarEl(j.event.pubkey, v), h('strong', {}, nameOf(v, j.event.pubkey)), ' ', h('time', { datetime: new Date(j.event.created_at * 1000).toISOString() }, ago(v.lang, j.event.created_at, v.nowMs)))
+  if (j.event.kind === POLL_KIND) { // a poll (NIP-88): its question and its options, as text; voting is for another client (it opens nowhere here)
+    const options = j.event.tags.filter((x) => x[0] === 'option' && x[2]).slice(0, 12).map((x) => h('li', {}, x[2]!))
+    return h('div', { class: 'quote' }, head, j.verdict.hidden ? h('span', { class: 'quote-hidden' }, `${t(v.lang, 'hiddenBy')}: `, reason(v.lang, j.verdict)) : h('span', { class: 'quote-body' }, h('span', { class: 'poll-tag meta' }, t(v.lang, 'poll'), ' · ', t(v.lang, 'pollElsewhere')), renderContent(j.event.content, inner, undefined, [j.event.pubkey, ...vouch]), options.length ? h('ul', { class: 'poll-options' }, ...options) : null))
+  }
   return h('a', { class: 'quote', href }, head, j.verdict.hidden ? h('span', { class: 'quote-hidden' }, `${t(v.lang, 'hiddenBy')}: `, reason(v.lang, j.verdict)) : h('span', { class: 'quote-body' }, renderContent(j.event.content, inner, undefined, [j.event.pubkey, ...vouch])))
 }
 

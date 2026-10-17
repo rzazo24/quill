@@ -38,7 +38,7 @@ import { checkTemplate, MAX_NOTE_CHARS, withClientTag, type Template } from '../
 import { h } from './dom.js'
 import { cobweb, icon, logo, pumpkin } from './icons.js'
 import { detectLang, problemText, setSpooky, t, type Key, type Lang } from './i18n.js'
-import { PAGE, renderRescue, type RescueState, renderArticle, renderContent, npubEl, renderTrust, renderPeople, renderProfileHead, renderProfileMode, renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
+import { PAGE, POLL_KIND, renderRescue, type RescueState, renderArticle, renderContent, npubEl, renderTrust, renderPeople, renderProfileHead, renderProfileMode, renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type FollowPanel, type Review } from './sign-ui.js'
 import { installHint, type Env } from './install.js'
 import { halloweenOn, parseScheme, parseTheme, type Scheme, type ThemeChoice, parseAvatars, parseFeedMode, parseFont, parseLang, parseReposts, parseSettings, parseWords, safeGet, safeSet, type AvatarStyle, type FeedMode, type FontSize, type KV } from './store.js'
@@ -267,13 +267,13 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (!ids.length || !session || !me) return
     const who = me
     let found: NostrEvent[] = []
-    try { found = await fetcher.query({ ids, kinds: [1], limit: ids.length }) } catch { /* not found: the button stays */ }
+    try { found = await fetcher.query({ ids, kinds: [1, POLL_KIND], limit: ids.length }) } catch { /* not found: the button stays */ }
     // the quick question stops at a majority of the relays: a note held by only one of them (or by the relay its quote names) is asked for again,
     // this time waiting for every relay and asking those named relays too
     const missing = ids.filter((id) => !found.some((e) => e.id === id))
     if (missing.length && me === who) {
       const also = [...new Set(missing.flatMap((id) => quoteHints.get(id) ?? []))].slice(0, 4)
-      try { found = [...found, ...await fetcher.query({ ids: missing, kinds: [1], limit: missing.length }, { quick: false, also })] } catch { /* still not found */ }
+      try { found = [...found, ...await fetcher.query({ ids: missing, kinds: [1, POLL_KIND], limit: missing.length }, { quick: false, also })] } catch { /* still not found */ }
     }
     if (me !== who || !session) return
     const judged = judgeAll(found.filter((e) => ids.includes(e.id)), ctx(), settings)

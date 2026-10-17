@@ -1014,6 +1014,17 @@ describe('a quoted note is shown inside the note that quotes it', () => {
   })
 })
 
+describe('a quoted poll (NIP-88)', () => {
+  it('shows its question and options as text, says voting is elsewhere, and opens nowhere', async () => {
+    const poll = ev(friend, 'Favourite client?', { kind: 1068, created_at: 7000, tags: [['option', 'a', 'Quill'], ['option', 'b', 'Damus']] })
+    const quoting = ev(friend, `vote nostr:${nip19.noteEncode(poll.id)}`, { created_at: 8000 })
+    const a = boot({ events: [...world, poll, quoting], stored: { me } }); await tick(800)
+    const card = [...a.root.querySelectorAll('article.note')].find((n) => n.querySelector('.body')!.textContent!.startsWith('vote'))!
+    const q = card.querySelector('div.quote')!; expect(q).not.toBeNull()
+    expect(q.textContent).toContain('Poll'); expect(q.textContent).toContain('Favourite client?'); expect([...q.querySelectorAll('li')].map((x) => x.textContent)).toEqual(['Quill', 'Damus']); expect(q.textContent).toContain('another client')
+  })
+})
+
 describe('pictures linked in a note', () => {
   it('wait for a tap on a button naming their site; tapped, the picture loads without a referrer and a tap on it opens it whole, not the thread', async () => {
     const a = boot({ events: [...world, ev(friend, 'my desk https://m.primal.net/abc.jpg and a page https://example.com/x.html', { created_at: 8000 })], stored: { me } }); await tick(800)
