@@ -643,7 +643,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         const baseline = act ? (loadKnown() ?? new Set(act.followers)) : null
         if (act) for (const k of act.followers) followersSeen.add(k)
         if (act && followersMark === null) followersMark = baseline
-        const fresher = act ? newFollowers(act, followersMark!) : []
+        const fresher = act ? newFollowers(act, followersMark!, markFrom ?? seenAt ?? undefined) : []
         // the names of what is on the first page come first; the rest are asked for once it is on screen (a card of a later page is built when "Show more" is tapped, by then they are in)
         await nameThem(act ? [...items.slice(0, PAGE), ...act.reactions, ...act.reposts] : items.slice(0, PAGE), fresher.slice(0, 8))
         if (items.length > PAGE) setTimeout(() => { void nameThem(items.slice(PAGE)) }, 300)

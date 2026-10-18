@@ -158,3 +158,10 @@ describe('custom emoji reactions', () => {
     expect(showReaction(':partyblob_sm:')).toBe('✨'); expect(showReaction(':peepoHey:')).toBe('✨'); expect(showReaction('🤙')).toBe('🤙'); expect(showReaction('+')).toBe('👍')
   })
 })
+
+describe('a follower who was following already', () => {
+  it('is not new when their list named the reader before the last look (a relay only missed them then)', () => {
+    const a = { followers: ['aa', 'bb'], listedAt: new Map([['aa', 100], ['bb', 500]]) }
+    expect(newFollowers(a, new Set(), 300)).toEqual(['bb']); expect(newFollowers(a, new Set())).toEqual(['aa', 'bb'])
+  })
+})

@@ -23,6 +23,8 @@ export interface Activity {
   targets: Map<string, Event>
   /** Accounts whose NEWEST follow list names the reader (newest list first), not the reader and not muted. Relays each hold only part of them, so this is what the ones asked returned. */
   followers: string[]
+  /** For each follower, the oldest follow list seen that names the reader (unix seconds): they followed the reader at least since then. */
+  listedAt?: Map<string, number>
   /** Accounts that were known followers and whose newest follow list no longer names the reader: they stopped following. */
   gone: string[]
 }
@@ -44,7 +46,7 @@ export const SLOW_OK = { quick: true, grace: 2000 }
 
 export async function loadActivity(f: Fetcher, ctx: Context, settings: Settings = DEFAULT_SETTINGS, opts: ActivityOptions = {}): Promise<Activity> {
   const since = opts.since !== undefined ? { since: opts.since } : {}
-  const [mentions, reacts, lists, reposted] = await Promise.all([f.query({ kinds: [1, COMMENT_KIND], '#p': [ctx.me], limit: LIMIT, ...since }, SLOW_OK), f.query({ kinds: [7], '#p': [ctx.me], limit: LIMIT, ...since }, SLOW_OK), f.query({ kinds: [3], '#p': [ctx.me], limit: FOLLOWER_LIMIT, ...since }, { quick: true, grace: 600 }).catch(() => []) /* the followers are approximate anyway: a majority of the relays is enough */, f.query({ kinds: [6, 16], '#p': [ctx.me], limit: LIMIT, ...since }, SLOW_OK).catch(() => [])])
+  const [mentions, reacts, lists, reposted] = await Promise.all([f.query({ kinds: [1, COMMENT_KIND], '#p': [ctx.me], limit: LIMIT, ...since }, SLOW_OK), f.query({ kinds: [7], '#p': [ctx.me], limit: LIMIT, ...since }, SLOW_OK), f.query({ kinds: [3], '#p': [ctx.me], limit: FOLLOWER_LIMIT, ...since }, opts.since !== undefined ? { quick: true, grace: 600 } : SLOW_OK).catch(() => []) /* the full look waits for the slower relays too: one that holds many lists (Primal) and answered late left followers out of what is known, and they showed up as "new" later */, f.query({ kinds: [6, 16], '#p': [ctx.me], limit: LIMIT, ...since }, SLOW_OK).catch(() => [])])
   const notes = mentions.filter((e) => e.pubkey !== ctx.me).sort(byNewest)
   // Anyone can put the reader's key in a `p` tag of a reaction to somebody else's note: only reactions to notes the reader really wrote count.
   const candidate = reacts.filter((e) => e.pubkey !== ctx.me && reactionTarget(e))
@@ -60,7 +62,9 @@ export async function loadActivity(f: Fetcher, ctx: Context, settings: Settings 
   // a repost carries a copy of the reader's own note: it is judged by who reposted, not by that text
   const judgedRepost = (e: Event): Judged => ({ event: e, verdict: judge({ ...e, content: '' }, ctx, signals, settings) })
   const { followers, gone } = await checkedFollowers(f, ctx, followersOf(lists, ctx), opts)
-  return { notes: notes.map(judged), reactions: reactions.map(judged), reposts: reposts.map(judgedRepost), targets, followers, gone }
+  const listedAt = new Map<string, number>()
+  for (const e of lists) if (e.kind === 3 && e.tags.some((t) => t[0] === 'p' && t[1] === ctx.me)) listedAt.set(e.pubkey, Math.min(listedAt.get(e.pubkey) ?? Infinity, e.created_at))
+  return { notes: notes.map(judged), reactions: reactions.map(judged), reposts: reposts.map(judgedRepost), targets, followers, gone, listedAt }
 }
 
 /** Who follows the reader: the author of each follow list (kind 3) that really names them in a `p` tag. The newest list of each author counts once. */
@@ -101,7 +105,7 @@ export async function checkedFollowers(f: Fetcher, ctx: Pick<Context, 'me' | 'mu
  *  `known`: the followers already seen on an earlier visit; each follower not in it counts as one new thing (a follower is never "hidden": only muted accounts are left out). */
 export function countNew(a: Activity, seenAt: number, known?: ReadonlySet<string>): { shown: number; hidden: number } {
   let shown = 0, hidden = 0
-  if (known) shown += newFollowers(a, known).length
+  if (known) shown += newFollowers(a, known, seenAt).length
   const seen = new Set<string>()
   const tally = (isHidden: boolean) => { if (isHidden) hidden++; else shown++ }
   for (const { event, verdict } of a.notes) if (event.created_at > seenAt) tally(verdict.hidden)
@@ -166,8 +170,10 @@ export function groupReposts(a: Activity, seenAt: number): ReactionGroup[] {
   return [...groups.values()].sort((x, y) => y.latest - x.latest)
 }
 
-/** The followers that were not known before, in the order of the lists (newest first). */
-export const newFollowers = (a: Pick<Activity, 'followers'>, known: ReadonlySet<string>): string[] => a.followers.filter((k) => !known.has(k))
+/** The followers that were not known before, in the order of the lists (newest first). With `seenAt` (the last look), not one whose list already named the
+ *  reader back then: they were following already, and only a relay that answered late (or not at all) that time kept them out of what was known. */
+export const newFollowers = (a: Pick<Activity, 'followers' | 'listedAt'>, known: ReadonlySet<string>, seenAt?: number): string[] =>
+  a.followers.filter((k) => !known.has(k) && !(seenAt !== undefined && (a.listedAt?.get(k) ?? Infinity) <= seenAt))
 
 /** The set of followers ever seen: it only grows, so a relay that does not return somebody today cannot make them look new tomorrow. */
 export const MAX_KNOWN_FOLLOWERS = 20_000
