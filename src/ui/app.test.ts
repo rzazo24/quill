@@ -535,6 +535,15 @@ describe('new followers', () => {
     const a = start([...base(), follower(1), follower(2)]); await tick(250)
     expect(badge(a)).toBeNull(); expect(known(a)!.sort()).toEqual([follower(1).pubkey, follower(2).pubkey].sort()); await a.go('#/mentions'); await tick(200); expect(a.root.querySelector('.followers')).toBeNull()
   })
+  it('a new follower is dated by their list; the ones of the first look have no date; the followers page says "since"', async () => {
+    const events = [...base(), follower(1), profile(follower(1).pubkey, 'Ana')]; const a = start(events); await tick(250)
+    const newcomer = follower(2, 9500); events.push(newcomer, profile(newcomer.pubkey, 'Berta')); a.poll(); await tick(250)
+    await a.go('#/mentions'); await tick(250)
+    expect(JSON.parse(a.mem.get(`followersSince:${me}`)!)).toEqual({ [newcomer.pubkey]: 9500 })
+    await a.go('#/me/followers'); await tick(300)
+    const row = (name: string) => [...a.root.querySelectorAll('ul.people li')].find((l) => l.textContent!.includes(name))!
+    expect(row('Berta').querySelector('.tag')!.textContent).toMatch(/^since /); expect(row('Ana').querySelector('.tag')).toBeNull()
+  })
   it('somebody new is a number on Mentions, then a "New followers" card with their name, then part of the known ones', async () => {
     const events = [...base(), follower(1), profile(follower(1).pubkey, 'Ana')]; const a = start(events); await tick(250); expect(badge(a)).toBeNull()
     const newcomer = follower(2); events.push(newcomer, profile(newcomer.pubkey, 'Berta')); a.poll(); await tick(250); expect(badge(a)).toBe('1')

@@ -313,7 +313,19 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let knownFollowers: Set<string> | null = null
   let followersMark: ReadonlySet<string> | null = null
   const loadKnown = () => { knownFollowers ??= parseKnown(safeGet(kv, followersKey())); return knownFollowers }
-  const saveKnown = (s: Set<string>) => { knownFollowers = s; safeSet(kv, followersKey(), JSON.stringify([...s])) }
+  // when Quill first saw each follower (unix seconds): only for those that came after the first look (the ones already there then have no date)
+  const sinceKey = () => `followersSince:${me}`
+  const loadSince = (): Record<string, number> => { try { const v = JSON.parse(safeGet(kv, sinceKey()) ?? '{}') as unknown; return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, number>) : {} } catch { return {} } }
+  const saveKnown = (s: Set<string>, fresh: readonly string[] = [], when?: ReadonlyMap<string, number>) => { // `fresh`: the ones counted as new followers (the only ones dated: a follower a relay
+    const before = loadKnown()                                              // had missed before is not new, and gets no date)
+    if (before && fresh.length) {
+      const since = loadSince(), now = nowSec(); let changed = false
+      for (const k of fresh) if (s.has(k) && !before.has(k) && typeof since[k] !== 'number') { since[k] = Math.min(now, when?.get(k) ?? now); changed = true } // the date of their list, if known: when they followed, not when Quill was opened
+      if (changed) safeSet(kv, sinceKey(), JSON.stringify(since))
+    }
+    if (before) { const since = loadSince(), gone = Object.keys(since).filter((k) => !s.has(k)); if (gone.length) { for (const k of gone) delete since[k]; safeSet(kv, sinceKey(), JSON.stringify(since)) } } // stopped following: a return is a new date
+    knownFollowers = s; safeSet(kv, followersKey(), JSON.stringify([...s]))
+  }
   /** Switching account: nothing remembered about the notifications of the previous one may leak into the next. */
   // the newest list of every known follower is checked now and then (not at every look): that is how somebody who stopped following is noticed
   const VERIFY_EVERY_MS = 30 * 60_000
@@ -652,7 +664,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         if (act) {
           if (markFrom === null) markFrom = seenAt ?? nowSec() // first ever visit: nothing is "new"
           const fresh = countNew(act, markFrom, followersMark!)
-          markSeen(); saveKnown(mergeKnown(baseline!, act))
+          markSeen(); saveKnown(mergeKnown(baseline!, act), fresher, act.listedAt)
           const block = renderReactionGroups(groupReactions(act, markFrom), view())
           const line = fresh.shown || fresh.hidden ? h('p', { class: 'meta new-line', role: 'status' }, [fresh.shown ? t(lang, 'newItems', { n: fresh.shown }) : '', fresh.hidden ? t(lang, 'newHidden', { n: fresh.hidden }) : ''].filter(Boolean).join(' · ')) : null
           content = h('div', { class: 'stack' }, renderSummary(tally(items), view(), toggleSettings), line, renderFollowers(fresher, view()), block, renderRepostGroups(groupReposts(act, markFrom), view()), renderList(items, view(), 'mentions'))
@@ -1356,7 +1368,10 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     const followers = [...new Set([...(loadKnown() ?? []), ...followersSeen])] // oldest seen first
     const followerSet = new Set(followers)
     const keys = (list === 'following' ? [...session!.follows] : followers).reverse() // newest first
-    const rows = keys.map((k) => ({ pubkey: k, tag: list === 'following' ? (followerSet.has(k) ? t(lang, 'followsYou') : null) : (session!.follows.has(k) ? t(lang, 'youFollow') : null) }))
+    const since = list === 'followers' ? loadSince() : {}
+    const day = (unix: number) => new Date(unix * 1000).toLocaleDateString(lang, { day: 'numeric', month: 'short', ...(new Date(unix * 1000).getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) })
+    const tagOf = (k: string) => list === 'following' ? (followerSet.has(k) ? t(lang, 'followsYou') : null) : [session!.follows.has(k) ? t(lang, 'youFollow') : '', typeof since[k] === 'number' ? t(lang, 'followerSince', { date: day(since[k]!) }) : ''].filter(Boolean).join(' · ') || null
+    const rows = keys.map((k) => ({ pubkey: k, tag: tagOf(k) }))
     await nameKeys(rows.slice(0, PAGE).map((r) => r.pubkey))
     return h('div', { class: 'stack' }, backLink(), renderPeople(rows, view(), {
       title: t(lang, list === 'following' ? 'peopleFollowing' : 'peopleFollowers'), count: rows.length,
