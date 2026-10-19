@@ -101,7 +101,7 @@ node test/e2e.mjs <npub>               # todo el flujo de lectura contra los rel
 npm run e2e:sign                       # el apretón de manos de conexión con un Clave simulado (QUILL_URL=… prueba una copia desplegada)
 npm run e2e:pwa                        # ¿es instalable?, ¿está bien el manifiesto?, ¿funciona el aviso de versión?
 node test/e2e-shell.mjs <clave hex>    # la estructura: la página no se desplaza, solo el contenido; la barra de pestañas no se mueve
-node test/e2e-align.mjs <clave hex>    # alineación en escritorio con barras de desplazamiento clásicas visibles
+node test/e2e-align.mjs <clave hex>    # alineación en escritorio (ventana estrecha y las tres columnas) con barras de desplazamiento clásicas visibles
 npm run probe -- <npub>                # la capa de datos contra los relés reales: qué haría el filtro
 npm run screenshots                    # regenera docs/screenshot*.png con datos de demostración inventados (antes, npm run build)
 ```

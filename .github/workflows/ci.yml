@@ -5,7 +5,7 @@ on:
   pull_request:
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # pinned: ubuntu-latest moves to 26.04, which would change the browsers and system libraries under the tests without warning
     steps:
       - uses: actions/checkout@v7
       # The signer tests run against a real relay, built from its repository (default branch).

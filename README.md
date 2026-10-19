@@ -101,7 +101,7 @@ node test/e2e.mjs <npub>               # the whole reading flow against the real
 npm run e2e:sign                       # connection handshake with a pretend Clave (QUILL_URL=… tests a deployed copy)
 npm run e2e:pwa                        # is the page installable, is the manifest right, does the update notice work
 node test/e2e-shell.mjs <hex pubkey>   # the layout: the page never scrolls, only the content; the tab bar never moves
-node test/e2e-align.mjs <hex pubkey>   # desktop alignment with classic scrollbars shown
+node test/e2e-align.mjs <hex pubkey>   # desktop alignment (narrow window and the three columns) with classic scrollbars shown
 npm run probe -- <npub>                # the data layer against the real relays: what the filter would do
 npm run screenshots                    # regenerates docs/screenshot*.png from made-up demo data (run npm run build first)
 ```

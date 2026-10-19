@@ -1,4 +1,5 @@
-// Desktop alignment: header, feed and tab bar must share the same column even when the browser shows a classic scrollbar (Playwright hides scrollbars by
+// Desktop alignment: on a narrow window, header, feed and tab bar must share the same column; on a wide one (the three columns), the header must start
+// where the first column starts and end where the last one ends. Both even when the browser shows a classic scrollbar (Playwright hides scrollbars by
 // default, which once hid a 10-15px misalignment). Usage: node test/e2e-align.mjs <public key in hex> (needs `npm run build`)
 import { chromium } from 'playwright'
 import { spawn } from 'node:child_process'
@@ -13,11 +14,21 @@ for (const [w, h] of [[1440, 900], [1100, 800], [900, 700]]) {
   const p = await (await b.newContext({ viewport: { width: w, height: h } })).newPage()
   await p.addInitScript(({ me }) => { localStorage.setItem('me', me); localStorage.setItem('lang', 'es') }, { me: ME })
   await p.goto('http://localhost:4173/', { waitUntil: 'domcontentloaded' }); await p.waitForSelector('.summary', { timeout: 40000 }); await new Promise((r) => setTimeout(r, 600))
-  const m = await p.evaluate(() => { const box = (s) => { const r = document.querySelector(s)?.getBoundingClientRect(); return r ? { l: Math.round(r.left * 10) / 10, r: Math.round(r.right * 10) / 10 } : null }
-    const main = document.querySelector('main.view'); return { scrollbar: main.offsetWidth - main.clientWidth, bar: box('nav.tabbar'), card: box('.summary'), brand: box('.top .brand'), controls: box('.top .lang'), vw: innerWidth } })
-  const dl = Math.abs(m.bar.l - m.card.l), dr = Math.abs(m.bar.r - m.card.r), db = Math.abs(m.brand.l - m.card.l)
-  const ok = dl <= 1 && dr <= 1 && db <= 1
-  console.log(`${w}px (scrollbar ${m.scrollbar}px): tab bar ${m.bar.l}..${m.bar.r} | feed card ${m.card.l}..${m.card.r} | brand starts ${m.brand.l} -> ${ok ? 'aligned' : 'OFF by ' + Math.max(dl, dr, db) + 'px'}`)
+  const m = await p.evaluate(() => { const box = (el) => { const r = el?.getBoundingClientRect(); return r ? { l: Math.round(r.left * 10) / 10, r: Math.round(r.right * 10) / 10 } : null }
+    const cols = [...document.querySelectorAll('.col[data-col]')], main = document.querySelector('main.view'), buttons = [...document.querySelectorAll('header.top > button, header.top > .lang')]
+    return { wide: cols.length > 0, scrollbar: cols.length ? cols[0].offsetWidth - cols[0].clientWidth : main.offsetWidth - main.clientWidth, bar: box(document.querySelector('nav.tabbar')), card: box(document.querySelector('.summary')), brand: box(document.querySelector('.top .brand')),
+      first: box(cols[0]), last: box(cols[cols.length - 1]), end: Math.max(...buttons.map((b) => b.getBoundingClientRect().right)) } })
+  let ok, line
+  if (m.wide) {
+    const dl = Math.abs(m.brand.l - m.first.l), dr = Math.abs(m.end - m.last.r)
+    ok = dl <= 1 && dr <= 1
+    line = `columns ${m.first.l}..${m.last.r} | header ${m.brand.l}..${Math.round(m.end * 10) / 10} -> ${ok ? 'aligned' : 'OFF by ' + Math.max(dl, dr) + 'px'}`
+  } else {
+    const dl = Math.abs(m.bar.l - m.card.l), dr = Math.abs(m.bar.r - m.card.r), db = Math.abs(m.brand.l - m.card.l)
+    ok = dl <= 1 && dr <= 1 && db <= 1
+    line = `tab bar ${m.bar.l}..${m.bar.r} | feed card ${m.card.l}..${m.card.r} | brand starts ${m.brand.l} -> ${ok ? 'aligned' : 'OFF by ' + Math.max(dl, dr, db) + 'px'}`
+  }
+  console.log(`${w}px ${m.wide ? 'wide' : 'narrow'} (scrollbar ${m.scrollbar}px): ${line}`)
   if (!ok) bad++
 }
 await b.close(); srv.kill(); process.exit(bad ? 1 : 0)
