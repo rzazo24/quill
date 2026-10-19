@@ -31,6 +31,7 @@ import { DEFAULT_RELAYS, memo, queryAuthors, type Fetcher } from '../net/fetcher
 import { fromOutbox } from '../data/outbox.js'
 import { failedRelays, type Publisher } from '../net/publisher.js'
 import { backupFile, collectBackup, copyNotes, coverage, scanNotes } from '../data/rescue.js'
+import { isLockedError } from '../sign/signer.js'
 import { PipelineError, signAndPublish, signOnly, type Published, type SignerApi, type Step } from '../sign/pipeline.js'
 import { newestPerAuthor } from '../data/lists.js'
 import { formatSats } from '../core/zap.js'
@@ -1121,7 +1122,14 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
   if (signer && me && signer.hasSavedSession()) {
     const resumed = signer.resume(me) // instant for sessions saved by this version; older ones ask the signer, which can take a while
     if (signer.state === 'connecting') say('info', t(lang, 'resuming'))
-    void resumed.then((ok) => { if (!ok) flash = null; draw() })
+    void resumed.then((ok) => { if (!ok) flash = null; draw(); if (ok) void checkLocked() })
+  }
+  // HiveScope Bunker comes back locked after its server restarts: said once, as soon as it is known, not at the first failed signature
+  let lockedSaid = false
+  async function checkLocked(): Promise<void> {
+    if (!signer?.locked) return
+    const locked = await signer.locked(8000)
+    if (locked && !lockedSaid) { lockedSaid = true; say('error', t(lang, 'e_locked_now')); draw() } else if (!locked) lockedSaid = false
   }
 
   function openConnect(): void { if (!signer) return; connectOpen = true; flash = null; draw() }
@@ -1148,6 +1156,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
 
   const sayPipelineError = (e: unknown): void => {
     if (e instanceof PipelineError && e.code === 'cancelled') say('info', t(lang, 'cancelledSigning'))
+    else if (e instanceof PipelineError && isLockedError(e.message)) { lockedSaid = true; say('error', t(lang, 'e_locked')) }
     else if (e instanceof PipelineError) say('error', t(lang, e.code === 'rate' ? 'e_rate' : e.code === 'no-signer' ? 'e_no_signer' : /did not answer within/.test(e.message) ? 'e_asleep' : 'e_not_signed', { why: e.message.trim() || t(lang, 'noReason') }))
     else say('error', t(lang, 'e_not_signed', { why: (e instanceof Error ? e.message : String(e)).trim() || t(lang, 'noReason') }))
   }
@@ -1634,7 +1643,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
   // back from the background: a phone may have cut the relay connections meanwhile, so fresh ones, and a look at what is new right away
   deps.onVisible?.((awayMs) => {
     void checkUpdate()
-    if (awayMs > 20_000) fetcher.reconnect()
+    if (awayMs > 20_000) { fetcher.reconnect(); void checkLocked() }
     if (me && !busy && (deps.nowMs?.() ?? Date.now()) - lastLoadAt > 120_000) refresh(); else if (!busy && awayMs > 20_000) void poll().then(checkNewNotes)
   })
   deps.onTick?.(() => { void checkUpdate() })

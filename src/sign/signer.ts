@@ -23,6 +23,9 @@ const RESUME_WAIT_MS = 150_000
 const RESUME_ATTEMPT_MS = 20_000
 
 const asError = (e: unknown): Error => (e instanceof Error ? e : new Error(typeof e === 'string' ? e : JSON.stringify(e)))
+/** The answer of a locked HiveScope Bunker. */
+export const isLockedError = (e: unknown): boolean => /bunker is locked/i.test(e instanceof Error ? e.message : String(e))
+
 function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`${what} did not answer within ${Math.round(ms / 1000)} s`)), ms)
@@ -243,6 +246,15 @@ export class Signer {
     try { await oldBunker?.close() } catch { /* it was dead anyway */ }
     await closePool(oldPool, saved.relays)
     return true
+  }
+
+  /**
+   * HiveScope Bunker starts locked after every restart of its server, and then refuses every signature. Asked quietly (who do you sign as?): true only
+   * when it answers that it is locked. Only for a signer reached through relay.hivescope.xyz: other signer apps may ask their user to approve the question.
+   */
+  async locked(ms: number): Promise<boolean> {
+    if (this.state !== 'connected' || !this.bunker || !this.load()?.relays?.some((r) => /^wss:\/\/relay\.hivescope\.xyz\/?$/.test(r))) return false
+    try { await withTimeout(this.bunker.sendRequest('get_public_key', []), ms, 'the signer'); return false } catch (e) { return isLockedError(e) }
   }
 
   /** Ask before bothering the user: is the signer awake, on this connection or on a fresh one? */

@@ -782,6 +782,20 @@ describe('starting with the signer already connected', () => {
   })
 })
 
+describe('a locked HiveScope Bunker', () => {
+  it('is said at start, once, before any signature fails; a signature refused as locked says how to unlock it', async () => {
+    const sg = fakeSigner({ saved: true, signError: 'the bunker is locked' }); const raw = sg.raw as unknown as { resume: () => Promise<boolean>; approve: () => void; locked: () => Promise<boolean> }
+    raw.resume = () => { raw.approve(); return Promise.resolve(true) }
+    raw.locked = async () => true
+    const a = boot({ events: world, signer: sg, stored: { me } }); await tick(300)
+    expect(a.text()).toContain('HiveScope Bunker) is locked'); expect(a.text()).toContain('hivescope-bunker unlock')
+    expect(sg.log.filter((x) => x.startsWith('sign'))).toEqual([]) // known without trying to sign
+    ;(a.root.querySelector('p.error button') as HTMLElement).click(); await tick(20)
+    ;([...a.root.querySelectorAll('.actions button.react')].find((b) => b.textContent === '👍') as HTMLElement).click(); await tick(300)
+    expect(a.text()).toContain('Nothing was published'); expect(a.text()).toContain('hivescope-bunker unlock')
+  })
+})
+
 describe('deleting your own note', () => {
   const open = async (events: Event[]) => { const sg = fakeSigner(); const a = boot({ events, signer: sg }); await tick(100); await connectClave(a, sg); await a.go('#/me'); await tick(400); return { a, sg } }
   const menu = (n: Element) => { (n.querySelector('.more-btn') as HTMLButtonElement).click(); return [...n.querySelectorAll('.more-list button')].map((b) => b.textContent) }

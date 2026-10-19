@@ -6,7 +6,7 @@ import { safeGet, safeSet, type KV } from '../ui/store.js'
 import { allowanceOf, canSign, recentSignatures, type Template } from './policy.js'
 import type { Signer } from './signer.js'
 
-export type SignerApi = Pick<Signer, 'state' | 'pubkey' | 'lastError' | 'authUrl' | 'onChange' | 'startConnect' | 'connectBunker' | 'resume' | 'sign' | 'disconnect' | 'hasSavedSession'>
+export type SignerApi = Pick<Signer, 'state' | 'pubkey' | 'lastError' | 'authUrl' | 'onChange' | 'startConnect' | 'connectBunker' | 'resume' | 'sign' | 'disconnect' | 'hasSavedSession'> & Partial<Pick<Signer, 'locked'>>
 
 /** How long to wait for the signer to sign. A request made while the signer app is closed is never picked up later, so a long wait only hides the problem. */
 export const SIGN_WAIT_MS = 90_000
