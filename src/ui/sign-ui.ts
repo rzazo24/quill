@@ -261,9 +261,10 @@ function renderResult(r: Published, relays: string[], hd: SignUiHandlers, v: Vie
   const failed = failedRelays(r.outcomes)
   const ok = Object.keys(r.outcomes).length - failed.length
   return h('div', { class: 'result', role: 'status' },
-    h('p', { class: failed.length === Object.keys(r.outcomes).length ? 'error' : 'status' }, ok ? t(v.lang, 'published', { ok, total: Object.keys(r.outcomes).length }) : t(v.lang, 'publishedNone')),
+    h('div', { class: 'result-head' }, h('p', { class: failed.length === Object.keys(r.outcomes).length ? 'error' : 'status' }, ok ? t(v.lang, 'published', { ok, total: Object.keys(r.outcomes).length }) : t(v.lang, 'publishedNone')),
+      h('button', { type: 'button', class: 'icon close', 'aria-label': t(v.lang, 'dismiss'), title: t(v.lang, 'dismiss'), onClick: hd.dismissResult }, '×')),
     h('ul', {}, ...relays.map((url) => h('li', {}, `${r.outcomes[url] === 'ok' ? '✓' : '✗'} ${url.replace(/^wss:\/\//, '')}`, r.outcomes[url] === 'ok' ? null : ` — ${r.outcomes[url] ?? ''}`))),
-    h('p', { class: 'buttons' }, failed.length ? h('button', { type: 'button', onClick: hd.retry }, t(v.lang, 'retryFailed')) : null, ' ', h('button', { type: 'button', class: 'link', onClick: hd.dismissResult }, t(v.lang, 'dismiss'))),
+    failed.length ? h('p', { class: 'buttons' }, h('button', { type: 'button', onClick: hd.retry }, t(v.lang, 'retryFailed'))) : null,
   )
 }
 

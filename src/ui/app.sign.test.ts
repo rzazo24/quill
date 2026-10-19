@@ -264,7 +264,7 @@ describe('writing a reply', () => {
     expect(e.kind).toBe(1); expect(e.content).toBe('Thanks #nostr')
     expect(e.tags).toEqual([['e', post.id, '', 'root'], ['p', friend], ['t', 'nostr'], ['client', 'Quill']])
     expect(a.text()).toContain('Published to 2 of 2 relays'); expect(a.root.querySelector('textarea')).toBeNull()
-    await click(a.root, 'Close') // the old draft must not come back once the result is dismissed
+    ;(a.root.querySelector('.result button[aria-label="Close"]') as HTMLElement).click(); await tick() // the old draft must not come back once the result is dismissed
     expect(a.root.querySelector('textarea')).toBeNull(); expect(a.root.querySelector('pre.preview')).toBeNull()
   })
   it('Back returns to the editor with the text intact', async () => {
