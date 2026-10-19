@@ -35,13 +35,13 @@ describe('where a quoted note can be found', () => {
 })
 
 describe('a reference to a long-form article', () => {
-  it('a naddr of kind 30023 is an article (author, identifier, tidy relay hints); other kinds stay text', async () => {
+  it('a naddr of kind 30023 is an article (author, identifier, tidy relay hints); other kinds are named by their kind', async () => {
     const { refs } = await import('./refs.js')
     const { nip19 } = await import('nostr-tools')
     const naddr = nip19.naddrEncode({ kind: 30023, pubkey: 'a'.repeat(64), identifier: 'my-post', relays: ['wss://Relay.Example/'] })
     expect(refs(`read nostr:${naddr}`)[1]).toEqual({ type: 'article', value: naddr, naddr, pubkey: 'a'.repeat(64), identifier: 'my-post', relays: ['wss://relay.example'] })
     const other = nip19.naddrEncode({ kind: 30078, pubkey: 'a'.repeat(64), identifier: 'x' })
-    expect(refs(`nostr:${other}`)).toEqual([{ type: 'text', value: `nostr:${other}` }])
+    expect(refs(`nostr:${other}`)).toEqual([{ type: 'other', value: other, kind: 30078 }])
   })
 })
 

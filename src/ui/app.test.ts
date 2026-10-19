@@ -1025,6 +1025,23 @@ describe('a quoted poll (NIP-88)', () => {
   })
 })
 
+describe('quoting what is not a note', () => {
+  it('an article shows its title, a comment its text, anything else says what it is; an address of another kind is named too', async () => {
+    const art = ev(far, 'long text', { kind: 30023, created_at: 7000, tags: [['d', 'my-post'], ['title', 'Why relays matter'], ['summary', 'A short look.']] })
+    const comment = ev(friend, 'a comment on a video', { kind: 1111, created_at: 7001, tags: [['E', 'a'.repeat(64)], ['e', 'a'.repeat(64)]] })
+    const live = ev(far, '', { kind: 30311, created_at: 7002, tags: [['d', 'stream']] })
+    const naddr = nip19.naddrEncode({ kind: 31922, pubkey: far, identifier: 'meetup', relays: [] })
+    const quoting = ev(friend, `see nostr:${nip19.noteEncode(art.id)} and nostr:${nip19.noteEncode(comment.id)} and nostr:${nip19.noteEncode(live.id)} and nostr:${naddr}`, { created_at: 8000 })
+    const a = boot({ events: [...world, art, comment, live, quoting], stored: { me } }); await tick(800)
+    const card = [...a.root.querySelectorAll('article.note')].find((n) => n.querySelector('.body')!.textContent!.startsWith('see'))!
+    const quotes = [...card.querySelectorAll('.quote')].map((q) => q.textContent ?? '')
+    expect(quotes[0]).toContain('Why relays matter'); expect(quotes[0]).toContain('A short look.')
+    expect(quotes[1]).toContain('a comment on a video')
+    expect(quotes[2]).toContain('a live stream (kind 30311)')
+    expect(card.querySelector('.other-kind')!.textContent).toContain('a calendar event (kind 31922)')
+  })
+})
+
 describe('pictures linked in a note', () => {
   it('wait for a tap on a button naming their site; tapped, the picture loads without a referrer and a tap on it opens it whole, not the thread', async () => {
     const a = boot({ events: [...world, ev(friend, 'my desk https://m.primal.net/abc.jpg and a page https://example.com/x.html', { created_at: 8000 })], stored: { me } }); await tick(800)

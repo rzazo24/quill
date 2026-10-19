@@ -267,13 +267,13 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (!ids.length || !session || !me) return
     const who = me
     let found: NostrEvent[] = []
-    try { found = await fetcher.query({ ids, kinds: [1, POLL_KIND], limit: ids.length }) } catch { /* not found: the button stays */ }
+    try { found = await fetcher.query({ ids, limit: ids.length }) } catch { /* not found: the button stays */ } // any kind: what is not a note is named in its place
     // the quick question stops at a majority of the relays: a note held by only one of them (or by the relay its quote names) is asked for again,
     // this time waiting for every relay and asking those named relays too
     const missing = ids.filter((id) => !found.some((e) => e.id === id))
     if (missing.length && me === who) {
       const also = [...new Set(missing.flatMap((id) => quoteHints.get(id) ?? []))].slice(0, 4)
-      try { found = [...found, ...await fetcher.query({ ids: missing, kinds: [1, POLL_KIND], limit: missing.length }, { quick: false, also })] } catch { /* still not found */ }
+      try { found = [...found, ...await fetcher.query({ ids: missing, limit: missing.length }, { quick: false, also })] } catch { /* still not found */ }
     }
     if (me !== who || !session) return
     const judged = judgeAll(found.filter((e) => ids.includes(e.id)), ctx(), settings)

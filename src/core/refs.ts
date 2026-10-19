@@ -8,6 +8,8 @@ export type Part =
   | { type: 'note'; value: string; id: string; /** where the reference says the note can be found (nevent), tidy secure addresses only */ relays?: string[] }
   /** a long-form article (NIP-23, kind 30023), named by its author and its `d` identifier (naddr); `naddr` is the bech32 string itself, for links */
   | { type: 'article'; value: string; naddr: string; pubkey: string; identifier: string; relays?: string[] }
+  /** an address of any other kind (a live stream, a calendar event, a list…): Quill names what it is, it does not show it */
+  | { type: 'other'; value: string; kind: number }
 
 const REF = /nostr:(npub1[a-z0-9]{58}|nprofile1[a-z0-9]+|note1[a-z0-9]{58}|nevent1[a-z0-9]+|naddr1[a-z0-9]+)/g
 export const ARTICLE_KIND = 30023
@@ -21,6 +23,7 @@ function decode(ref: string): Part | null {
     if (d.type === 'note') return { type: 'note', value: ref, id: d.data }
     if (d.type === 'nevent') { const hints = [...new Set((d.data.relays ?? []).map((r) => normalizeRelay(r)).filter((r): r is string => !!r))].slice(0, 3); return { type: 'note', value: ref, id: d.data.id, ...(hints.length ? { relays: hints } : {}) } }
     if (d.type === 'naddr' && d.data.kind === ARTICLE_KIND && /^[0-9a-f]{64}$/.test(d.data.pubkey)) { const hints = tidy(d.data.relays); return { type: 'article', value: ref, naddr: ref, pubkey: d.data.pubkey, identifier: d.data.identifier, ...(hints.length ? { relays: hints } : {}) } }
+    if (d.type === 'naddr') return { type: 'other', value: ref, kind: d.data.kind }
   } catch { /* a malformed reference stays plain text */ }
   return null
 }

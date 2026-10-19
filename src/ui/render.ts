@@ -3,11 +3,12 @@ import { nip19 } from 'nostr-tools'
 import { interestsIn } from '../core/interests.js'
 import { formatSats } from '../core/zap.js'
 import { markdownBlocks } from '../core/markdown.js'
-import type { ArticleInfo } from '../data/article.js'
+import { articleInfo, type ArticleInfo } from '../data/article.js'
+import { COMMENT_KIND } from '../core/thread.js'
 import type { Child } from './dom.js'
 import type { TrustReason, TrustScore } from '../data/trust.js'
 import { h } from './dom.js'
-import { primalArticle, refs, shortNpub } from '../core/refs.js'
+import { ARTICLE_KIND, primalArticle, refs, shortNpub } from '../core/refs.js'
 import { avatarOf } from '../core/avatar.js'
 import { showReaction, type ReactionGroup } from '../data/activity.js'
 import type { ProfileInfo } from '../data/profile.js'
@@ -23,7 +24,7 @@ import type { Judged, RuleId, Settings } from '../core/verdict.js'
 import { noteId, noteLink } from '../core/compose.js'
 import type { ThreadNode } from '../data/feed.js'
 import { hasReach, reactionTotal, type Reach } from '../data/reach.js'
-import { ago, reason, t, tallyLabel, type Lang } from './i18n.js'
+import { ago, otherKind, reason, t, tallyLabel, type Lang } from './i18n.js'
 
 export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; /** The Halloween theme is on: extra reactions. */ halloween?: boolean; /** What a note of the reader's got from others (reactions, reposts, replies), once it is known. */ reach?: (id: string) => Reach | undefined; /** A note quoted in a text, once it is known (undefined: not yet asked; null: not found); `wantQuote` asks for it. */ quoted?: (id: string) => Judged | null | undefined; wantQuote?: (id: string, relays?: string[]) => void; /** An article's title once it is known (undefined: not asked yet; null: not found); `wantArticle` asks for it. */ articleTitle?: (pubkey: string, identifier: string) => string | null | undefined; wantArticle?: (pubkey: string, identifier: string, relays?: string[]) => void; /** Pictures linked in a note by this author load by themselves (the reader's setting); otherwise each waits for a tap. */ autoImages?: (pubkey: string) => boolean; /** Inside a quoted note (itself one link): addresses are plain text, no links or buttons inside the link. */ plainLinks?: boolean; /** Told about every note handed to a list or drawn, so the search can find it later. */ seen?: (notes: Judged[]) => void; /** The topics the reader cares about: a note that talks about one is marked. */ interests?: readonly string[]; /** With a signer: the "…" menu offers to mute (or unmute) the author. */ mute?: (pubkey: string) => void; isMuted?: (pubkey: string) => boolean; /** With a signer: the "…" of the reader's own notes offers to delete them. */ deleteNote?: (e: Judged['event']) => void; /** One of the reader's notes is on screen without its numbers: ask for them (the view batches the questions). */ wantReach?: (id: string) => void; /** A real profile picture for this key, when the reader wants them and follows it (undefined: the drawn avatar). */ picture?: (pubkey: string, px: number) => string | undefined; /** The zaps of someone else's note, once asked (undefined: not known yet; asking is the view's business). */ zapsOf?: (id: string) => Reach | undefined; /** Notes the reader deleted: shown as a line that says so. */ deleted?: ReadonlySet<string>; /** The reader's key: their own notes offer Delete, the others Mute. */ self?: string; /** Notes saved for later (this device): the "…" offers Save / Remove. */ saved?: { has: (id: string) => boolean; toggle: (e: Judged['event']) => void }; /** Accounts to offer while typing "@name" in the composer (people you follow first). */ suggestPeople?: (word: string) => { pubkey: string; name: string; relation: 'follow' | 'network' | 'none' }[]; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** The relays put in a copied id/link as places to look for the note. */ hints?: readonly string[]; /** How far "Show more" went in each list, by its key. */ pages?: Map<string, number>; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
 
@@ -46,6 +47,12 @@ export const POLL_KIND = 1068
 function quoteCard(j: Judged, v: View, href: string, vouch: string[]): HTMLElement {
   const inner: View = { ...v, quoted: undefined, wantQuote: undefined, plainLinks: true }
   const head = h('span', { class: 'quote-head' }, avatarEl(j.event.pubkey, v), h('strong', {}, nameOf(v, j.event.pubkey)), ' ', h('time', { datetime: new Date(j.event.created_at * 1000).toISOString() }, ago(v.lang, j.event.created_at, v.nowMs)))
+  // notes and comments are text; a long-form article shows its title and summary; anything else is named, not shown (its content may not be text at all)
+  if (j.event.kind === ARTICLE_KIND) {
+    const info = articleInfo(j.event)
+    return h('a', { class: 'quote', href: `#/article/${nip19.naddrEncode({ kind: ARTICLE_KIND, pubkey: j.event.pubkey, identifier: j.event.tags.find((x) => x[0] === 'd')?.[1] ?? '', relays: [] })}` }, head, h('span', { class: 'quote-body' }, h('span', { class: 'poll-tag meta' }, t(v.lang, 'article')), h('strong', {}, info.title || t(v.lang, 'article')), info.summary ? h('span', { class: 'quote-summary' }, ' ', info.summary.slice(0, 200)) : null))
+  }
+  if (j.event.kind !== 1 && j.event.kind !== COMMENT_KIND && j.event.kind !== POLL_KIND) return h('div', { class: 'quote' }, head, h('span', { class: 'quote-body meta' }, otherKind(v.lang, j.event.kind)))
   if (j.event.kind === POLL_KIND) { // a poll (NIP-88): its question and its options, as text; voting is for another client (it opens nowhere here)
     const options = j.event.tags.filter((x) => x[0] === 'option' && x[2]).slice(0, 12).map((x) => h('li', {}, x[2]!))
     return h('div', { class: 'quote' }, head, j.verdict.hidden ? h('span', { class: 'quote-hidden' }, `${t(v.lang, 'hiddenBy')}: `, reason(v.lang, j.verdict)) : h('span', { class: 'quote-body' }, h('span', { class: 'poll-tag meta' }, t(v.lang, 'poll'), ' · ', t(v.lang, 'pollElsewhere')), renderContent(j.event.content, inner, undefined, [j.event.pubkey, ...vouch]), options.length ? h('ul', { class: 'poll-options' }, ...options) : null))
@@ -117,6 +124,7 @@ export function renderContent(raw: string, v: View, fromId?: string, vouch: stri
       const label = title ? `${t(v.lang, 'readArticle')}: ${title}` : t(v.lang, 'article')
       frag.append(v.plainLinks ? h('span', { class: 'meta' }, `[${label}]`) : h('a', { class: 'thread-link article-link', href: `#/article/${part.naddr}` }, icon('article', 14), label))
     }
+    else if (part.type === 'other') frag.append(h('span', { class: 'meta other-kind' }, `[${otherKind(v.lang, part.kind)}]`))
     else if (part.type === 'note' && v.plainLinks) frag.append(h('span', { class: 'meta' }, `[${t(v.lang, 'quotedNote')}]`))
     else if (part.type === 'note') {
       const href = `#/note/${part.id}${fromId && fromId !== part.id ? `?from=${fromId}` : ''}`, q = v.quoted?.(part.id)
