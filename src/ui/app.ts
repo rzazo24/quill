@@ -35,7 +35,7 @@ import { PipelineError, signAndPublish, signOnly, type Published, type SignerApi
 import { newestPerAuthor } from '../data/lists.js'
 import { formatSats } from '../core/zap.js'
 import { checkTemplate, MAX_NOTE_CHARS, withClientTag, type Template } from '../sign/policy.js'
-import { h } from './dom.js'
+import { adopt, h, markDrawn, place, reuseNotes } from './dom.js'
 import { cobweb, icon, logo, pumpkin } from './icons.js'
 import { ago, detectLang, problemText, setSpooky, t, type Key, type Lang } from './i18n.js'
 import { PAGE, POLL_KIND, renderRescue, type RescueState, renderArticle, renderContent, npubEl, renderTrust, renderPeople, renderProfileHead, renderProfileMode, renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
@@ -300,6 +300,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let goToNote: string | null = null // a thread opened at one of its replies (from Mentions, say): once it is drawn, it is brought into view
   // the reader's finger or a page still gliding: drawing then would swap the scrolling <main> under them and stop the scroll (on iOS, every time)
   let dragging = false, scrolledAt = 0, drawnAt = 0, drawLater: ReturnType<typeof setTimeout> | undefined
+  const watched = new WeakSet<Element>() // the scrolling box is kept between drawings: its listener goes on once
   let loudLoad = false // the next load of the page on screen shows that it is loading (the reader asked for it); the others are quiet
   const pageKey = (key: string) => (key === JSON.stringify({ name: 'following' }) ? `${key}:${feedMode}` : key) // Following is a different list in each mode
   let updateReady = false
@@ -1574,7 +1575,11 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     ]
     // put the reader back where they were (unless this is a new view)
     if (scrollToTop || flash || composer || review || result || followFlow || shareConfirm || deleteConfirm || connectOpen) barsHidden = false // a new view, or something that talks to you: the bars stay
-    root.replaceChildren(...page.filter((x): x is HTMLElement => x !== null))
+    // the box that scrolls stays from one drawing to the next (only what is inside it changes), and a note drawn again just as it was keeps its node
+    const fresh = page.filter((x): x is HTMLElement => x !== null), oldMain = root.querySelector(':scope > main.view') ?? undefined, newMain = fresh.find((x) => x.matches('main.view'))
+    const cached = [...pageCache.values()].map((p) => p.body)
+    if (oldMain && newMain && !cached.some((b) => oldMain.contains(b))) reuseNotes(oldMain, newMain)
+    place(root, fresh.map((x) => (x === newMain ? adopt(oldMain, x) : x))); markDrawn(root)
     if (searching && searchInput!.isConnected) searchInput!.focus({ preventScroll: true })
     if (editingAbout && aboutBox?.isConnected) aboutBox.focus({ preventScroll: true })
     if (keep) { const again = root.querySelector<HTMLTextAreaElement>(`[data-keep-focus="${keep.key}"]`); if (again && root.ownerDocument.activeElement !== again) { again.focus({ preventScroll: true }); try { again.setSelectionRange(keep.start ?? again.value.length, keep.end ?? again.value.length) } catch { /* not a text box */ } } }
@@ -1595,9 +1600,11 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     const opened = route.name === 'note' ? [...root.querySelectorAll<HTMLElement>(`.reply > article.note[data-id="${route.id}"]`)] : []
     for (const a of opened) a.classList.add('here')
     if (goToNote && opened.length && goToNote === (route as { id?: string }).id) opened[0]!.scrollIntoView?.({ block: 'center' }) // again on each drawing while what is above it fills in, until the reader moves the page
-    if (main && !isWide) {
+    if (main && !isWide && !watched.has(main)) {
+      watched.add(main) // the box is kept between drawings: one listener
       let last = main.scrollTop
       main.addEventListener('scroll', () => {
+        if (root.classList.contains('wide')) return
         const top = main.scrollTop, d = top - last
         if (Math.abs(d) < SCROLL_STEP_PX) return // small moves do not count; a slow drag adds up because `last` stays
         last = top

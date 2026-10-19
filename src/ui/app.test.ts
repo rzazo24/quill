@@ -519,6 +519,13 @@ describe('the refresh button while loading', () => {
     const a = boot({ stored: { me }, delayMs: 40 }); await tick(1200); const before = a.calls.n
     refresh(a).click(); await tick(20); expect(refresh(a).classList.contains('spinning')).toBe(true); await tick(1200); expect(refresh(a).classList.contains('spinning')).toBe(false); expect(a.calls.n).toBeGreaterThan(before)
   })
+  it('reading everything again keeps the scrolling box and the notes that did not change: only what changed is put in', async () => {
+    const a = boot({ stored: { me } }); await tick(1200)
+    const main = a.root.querySelector('main.view')!, card = a.root.querySelector('article.note[data-id]')!
+    refresh(a).click(); await tick(1200)
+    expect(a.root.querySelector('main.view')).toBe(main) // the same box: the place, a gliding page, a selection stay
+    expect(a.root.querySelector(`article.note[data-id="${(card as HTMLElement).dataset.id}"]`)).toBe(card) // the same card, not one built again
+  })
 })
 
 describe('new followers', () => {
