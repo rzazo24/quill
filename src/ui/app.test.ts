@@ -1343,6 +1343,22 @@ describe('the network search, on its own', () => {
   })
 })
 
+describe('a thread opened at one of its replies', () => {
+  it('brings that reply into view and marks it; the root is not marked', async () => {
+    const top = ev(me, 'the root of the thread', { created_at: 7000 })
+    const answer = ev(friend, 'the reply I was told about', { created_at: 7100, tags: [['e', top.id, '', 'root'], ['p', me]] })
+    const seen: string[] = []
+    const orig = HTMLElement.prototype.scrollIntoView
+    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) { seen.push(this.dataset.id ?? '') }
+    try {
+      const a = boot({ events: [...world, top, answer], stored: { me } }); await tick(300); await a.go(`#/note/${answer.id}`); await tick(400)
+      expect(a.root.querySelector('article.note.here')?.getAttribute('data-id')).toBe(answer.id)
+      expect(seen.length).toBeGreaterThan(0); expect(new Set(seen)).toEqual(new Set([answer.id]))
+      await a.go(`#/note/${top.id}`); await tick(400); expect(a.root.querySelector('article.note.here')).toBeNull()
+    } finally { HTMLElement.prototype.scrollIntoView = orig }
+  })
+})
+
 describe('while the reader is scrolling', () => {
   it('the page is not rebuilt under their finger: it waits until the scroll stops', async () => {
     const a = boot({ stored: { me } }); await tick(500)

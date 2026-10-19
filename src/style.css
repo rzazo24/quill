@@ -455,3 +455,6 @@ textarea.interests { width: 100%; box-sizing: border-box; font: inherit; padding
 .poll-tag { display: block; font-size: .8rem; margin-bottom: 2px }
 .poll-options { margin: 6px 0; padding-left: 1.2em }
 .poll-options li { margin: 2px 0 }
+
+/* in a thread, the reply it was opened at (from Mentions, a link…) */
+article.note.here { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) }

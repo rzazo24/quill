@@ -297,6 +297,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   // what changes how a list is drawn: a kept page is only shown again if none of it changed (a signer connected, the language, the avatars…)
   const pageStamp = () => JSON.stringify([signer?.state ?? '', signer?.pubkey ?? '', lang, avatarStyle, realAvatars, autoImages, showReposts, readOutbox, settings, !!nwcOf()])
   let restoreScroll: number | null = null
+  let goToNote: string | null = null // a thread opened at one of its replies (from Mentions, say): once it is drawn, it is brought into view
   // the reader's finger or a page still gliding: drawing then would swap the scrolling <main> under them and stop the scroll (on iOS, every time)
   let dragging = false, scrolledAt = 0, drawnAt = 0, drawLater: ReturnType<typeof setTimeout> | undefined
   let loudLoad = false // the next load of the page on screen shows that it is loading (the reader asked for it); the others are quiet
@@ -749,7 +750,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       if (back) pageCache.delete(pageKey(key))
       if (back && now - back.at < PAGE_KEEP_MS && back.stamp === pageStamp()) { body = back.body; shownRoute = key; lateWaiting = null; restoreScroll = back.scroll; status = null; markFrom = null; followersMark = null; draw(); return } // (leaving Mentions ends its visit, as below)
     }
-    if (key !== shownRoute) { body = null; shownRoute = key; lateWaiting = null; scrollToTop = true; profileMode = 'notes'; if (route.name !== 'mentions') { markFrom = null; followersMark = null } }
+    if (key !== shownRoute) { body = null; shownRoute = key; lateWaiting = null; scrollToTop = true; profileMode = 'notes'; goToNote = route.name === 'note' ? route.id : null; if (route.name !== 'mentions') { markFrom = null; followersMark = null } }
     if (route.name === 'settings' || route.name === 'help') { pageCache.clear(); status = null; body = null; draw(); return } // a change made there must show in every list
     // the same page again (the graph came, or numbers, or a title): quiet, it is only drawn once it is ready
     const quiet = key === shownRoute && body !== null && !scrollToTop && !loudLoad
@@ -1549,6 +1550,10 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     const main = root.querySelector('main.view')
     if (main && !isWide) { if (restoreScroll !== null) main.scrollTop = restoreScroll; else { main.scrollTop = scrollToTop ? 0 : kept; if (!scrollToTop) keepAt(main, mainAnchor) } }
     restoreScroll = null
+    // the note the thread was opened at: marked wherever it is drawn, and, the first time it is there, brought into view (a reply, not the root at the top)
+    const opened = route.name === 'note' ? [...root.querySelectorAll<HTMLElement>(`.reply > article.note[data-id="${route.id}"]`)] : []
+    for (const a of opened) a.classList.add('here')
+    if (goToNote && opened.length && goToNote === (route as { id?: string }).id) opened[0]!.scrollIntoView?.({ block: 'center' }) // again on each drawing while what is above it fills in, until the reader moves the page
     if (main && !isWide) {
       let last = main.scrollTop
       main.addEventListener('scroll', () => {
@@ -1564,7 +1569,8 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     scrollToTop = false
   }
 
-  root.addEventListener('touchmove', () => { dragging = true }, { passive: true })
+  root.addEventListener('touchmove', () => { dragging = true; goToNote = null }, { passive: true })
+  root.addEventListener('wheel', () => { goToNote = null }, { passive: true })
   for (const end of ['touchend', 'touchcancel']) root.addEventListener(end, () => { if (dragging) { dragging = false; scrolledAt = Date.now() } }, { passive: true })
   root.addEventListener('scroll', () => { if (Date.now() - drawnAt > 150) scrolledAt = Date.now() }, { passive: true, capture: true }) // (not the scroll a draw itself puts back)
   deps.onHash(() => { void load('route') })
