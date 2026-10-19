@@ -6,7 +6,7 @@ import { analyse, judge, judgeAll, type Context, type Judged, type Settings, DEF
 import { newestPerAuthor, nameOf, pictureOf } from './lists.js'
 import { queryAuthors, type Fetcher } from '../net/fetcher.js'
 import { fetchOriginals, loadRepostRefs, mergeFeed } from './reposts.js'
-import { fromOutbox, withinPatience } from './outbox.js'
+import { fromOutbox, repliesFromInbox, withinPatience } from './outbox.js'
 
 export const FEED_LIMIT = 100
 const byNewest = (a: Event, b: Event) => b.created_at - a.created_at || (a.id < b.id ? -1 : 1)
@@ -43,7 +43,7 @@ export async function loadMine(f: Fetcher, ctx: Context, settings: Settings = DE
 }
 
 export interface ThreadNode { item: Judged; children: ThreadNode[] }
-export interface Thread { root: Judged | null; rootId: string; replies: ThreadNode[]; total: number }
+export interface Thread { root: Judged | null; rootId: string; replies: ThreadNode[]; total: number; /** Of those, found only on relays of the note's author that are not the reader's. */ elsewhere: number }
 
 /** Builds the reply tree. A reply whose parent is missing hangs from the root: it is not lost. Oldest first. */
 export function buildTree(rootId: string, replies: Judged[]): ThreadNode[] {
@@ -70,15 +70,19 @@ function createsCycle(nodes: Map<string, ThreadNode>, from: ThreadNode, id: stri
 }
 
 /** A thread from any of its notes: finds the root, fetches the replies, judges all of them together. */
-export async function loadThread(f: Fetcher, id: string, ctx: Context, settings: Settings = DEFAULT_SETTINGS): Promise<Thread | null> {
+/** `inbox`: also look for replies on the relays where the note's author reads (replies are sent there), given the reader's relays; waits at most `patience` ms for them. */
+export async function loadThread(f: Fetcher, id: string, ctx: Context, settings: Settings = DEFAULT_SETTINGS, inbox?: { mine: string[]; patience?: number }): Promise<Thread | null> {
   const [first] = await f.query({ ids: [id], kinds: [1, COMMENT_KIND], limit: 1 })
   if (!first) return null
   const rootId = threadRefs(first).root ?? first.id
   const rootEvent = rootId === first.id ? first : (await f.query({ ids: [rootId], kinds: [1], limit: 1 }))[0]
   // replies (kind 1) and NIP-22 comments (kind 1111) name the root in a lower-case e tag; a comment further down names it in an upper-case E
-  const [direct, comments] = await Promise.all([f.query({ kinds: [1, COMMENT_KIND], '#e': [rootId], limit: 300 }), f.query({ kinds: [COMMENT_KIND], '#E': [rootId], limit: 300 })])
+  const away = inbox && rootEvent ? withinPatience(Promise.resolve(null), repliesFromInbox(f, rootId, rootEvent.pubkey, inbox.mine), inbox.patience ?? 1500).then(([, e]) => e) : Promise.resolve([] as Event[])
+  const [direct, comments, far] = await Promise.all([f.query({ kinds: [1, COMMENT_KIND], '#e': [rootId], limit: 300 }), f.query({ kinds: [COMMENT_KIND], '#E': [rootId], limit: 300 }), away])
   const seenIds = new Set<string>()
   const replies = [...direct, ...comments].filter((e) => e.id !== rootId && !seenIds.has(e.id) && seenIds.add(e.id) && threadRefs(e).root === rootId)
+  const fromAway = far.filter((e) => e.id !== rootId && !seenIds.has(e.id) && seenIds.add(e.id) && threadRefs(e).root === rootId)
+  replies.push(...fromAway)
   // some apps start a new "root" at the reply they answer (its replies name it, not the real root): those branches are asked for too, by the notes
   // of the thread (the one opened included), and kept when their root is one of them; buildTree then hangs each under its parent
   const inThread = new Set([rootId, first.id, ...replies.map((e) => e.id)])
@@ -99,6 +103,7 @@ export async function loadThread(f: Fetcher, id: string, ctx: Context, settings:
     root: rootEvent ? { event: rootEvent, verdict: judge(rootEvent, ctx, signals, settings) } : null,
     replies: buildTree(rootId, judged),
     total: judged.length,
+    elsewhere: fromAway.length,
   }
 }
 

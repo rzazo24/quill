@@ -17,6 +17,27 @@ export function writeRelays(e: Event): string[] {
   return out
 }
 
+/** The relays a list says its author reads (their "inbox": where others are meant to send them replies): `r` tags marked "read" or unmarked. */
+export function readRelays(e: Event): string[] {
+  const out: string[] = []
+  for (const t of e.tags) if (t[0] === 'r' && (t[2] === undefined || t[2] === '' || t[2] === 'read')) { const u = normalizeRelay(t[1] ?? ''); if (u && !out.includes(u)) out.push(u) }
+  return out
+}
+
+export const MAX_INBOX_RELAYS = 3 // a thread looks for replies on at most this many of its author's relays besides the reader's
+
+/** Replies to a note sent where its author reads, on the ones of those relays that are not the reader's. A relay that fails or is slow adds nothing. */
+export async function repliesFromInbox(f: Fetcher, rootId: string, author: string, mine: string[]): Promise<Event[]> {
+  const own = new Set(mine.map((u) => normalizeRelay(u) ?? u))
+  const lists = await queryAuthors(f, { kinds: [RELAY_LIST_KIND] }, [author], 10, { quick: true, grace: 300 })
+  const list = newestPerAuthor(lists.filter((e) => e.kind === RELAY_LIST_KIND && e.pubkey === author)).get(author)
+  const extra = list ? readRelays(list).filter((u) => !own.has(u)).slice(0, MAX_INBOX_RELAYS) : []
+  if (!extra.length) return []
+  const parts = await Promise.all([{ kinds: [1, 1111], '#e': [rootId], limit: 300 }, { kinds: [1111], '#E': [rootId], limit: 300 }].map((base) => f.query(base, { only: extra, quick: true }).catch(() => [] as Event[])))
+  const seen = new Set<string>()
+  return parts.flat().filter((e) => !seen.has(e.id) && seen.add(e.id))
+}
+
 /** Where each of these people writes (only those with a list). */
 export async function loadWriteRelays(f: Fetcher, pubkeys: string[]): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>()

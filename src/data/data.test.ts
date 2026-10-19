@@ -136,6 +136,20 @@ describe('views', () => {
     expect(t.replies[0]!.children.map((n) => n.item.event.id)).toEqual([r2.id])
     expect(await loadThread(f, 'e'.repeat(64), ctx)).toBeNull()
   })
+  it('a thread also looks where its author reads (their inbox relays, not the reader\'s) and says how many replies came only from there', async () => {
+    const root = ev(a, 'the root of it all')
+    const here = ev(c, 'a reply on my relays', { tags: [['e', root.id, '', 'root']], created_at: 2000 })
+    const there = ev(b, 'a reply only on their inbox', { tags: [['e', root.id, '', 'root']], created_at: 3000 })
+    const relayList = list(a, 10002, [['r', 'wss://mine.example'], ['r', 'wss://inbox.example', 'read'], ['r', 'wss://out.example', 'write']])
+    const asked: (string[] | undefined)[] = []
+    const base = fake([...world, root, here, relayList])
+    const f: Fetcher = { query: async (filter, opts) => { if (opts?.only) { asked.push(opts.only); return opts.only.includes('wss://inbox.example') && answers(filter, there) ? [there] : [] } return base.query(filter, opts) } }
+    const ctx = contextOf(await loadSession(f, me))
+    const t = (await loadThread(f, root.id, ctx, undefined, { mine: ['wss://mine.example'] }))!
+    expect(t.total).toBe(2); expect(t.elsewhere).toBe(1)
+    expect(asked.every((o) => o!.length === 1 && o![0] === 'wss://inbox.example')).toBe(true) // only the reading relay that is not the reader's (never the write-only one)
+    expect((await loadThread(f, root.id, ctx))!.elsewhere).toBe(0) // the setting off: only the reader's relays
+  })
   it('a branch whose replies name a reply as their "root" (as some apps do) is found and hangs under it, from the real root or from that reply', async () => {
     const root = ev(a, 'the root of it all')
     const r1 = ev(c, 'a reply', { tags: [['e', root.id, '', 'root'], ['e', root.id, '', 'reply']], created_at: 2000 })

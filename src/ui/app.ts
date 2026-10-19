@@ -631,7 +631,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     let content: HTMLElement
     try {
       if (route.name === 'note') {
-        const [th, source] = await Promise.all([loadThread(fetcher, route.id, ctx(), settings), route.from ? loadNote(fetcher, route.from, ctx(), settings).catch(() => null) : Promise.resolve(null)])
+        const [th, source] = await Promise.all([loadThread(fetcher, route.id, ctx(), settings, readOutbox ? { mine: relays } : undefined), route.from ? loadNote(fetcher, route.from, ctx(), settings).catch(() => null) : Promise.resolve(null)])
         if (!alive()) return null
         if (!th) content = h('div', { class: 'stack' }, sourceCard(source), h('p', { class: 'empty' }, t(lang, 'noNote')))
         else { await nameThem([...(th.root ? [th.root] : []), ...flat(th.replies), ...(source ? [source] : [])]); content = threadView(th, source) }
@@ -1041,6 +1041,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
       guest ? null : renderSummary(tally(all), view(), toggleSettings),
       th.root ? renderJudged(th.root, view()) : null,
       h('h3', {}, th.total === 1 ? t(lang, 'reachRepliesOne') : t(lang, 'reachReplies', { n: th.total })),
+      th.elsewhere ? h('p', { class: 'meta elsewhere' }, t(lang, th.elsewhere === 1 ? 'repliesElsewhereOne' : 'repliesElsewhere', { n: th.elsewhere })) : null,
       ...renderTree(th.replies, view()),
     )
   }
