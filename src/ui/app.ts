@@ -37,7 +37,7 @@ import { formatSats } from '../core/zap.js'
 import { checkTemplate, MAX_NOTE_CHARS, withClientTag, type Template } from '../sign/policy.js'
 import { h } from './dom.js'
 import { cobweb, icon, logo, pumpkin } from './icons.js'
-import { detectLang, problemText, setSpooky, t, type Key, type Lang } from './i18n.js'
+import { ago, detectLang, problemText, setSpooky, t, type Key, type Lang } from './i18n.js'
 import { PAGE, POLL_KIND, renderRescue, type RescueState, renderArticle, renderContent, npubEl, renderTrust, renderPeople, renderProfileHead, renderProfileMode, renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type FollowPanel, type Review } from './sign-ui.js'
 import { installHint, type Env } from './install.js'
@@ -1373,6 +1373,32 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     return h('div', { class: 'meta counts' }, h('a', { href: '#/me/following' }, t(lang, 'followingN', { n: session.follows.size })), followers ? ' · ' : null, followers ? h('a', { href: '#/me/followers' }, followers) : null, savedNotes().length ? ' · ' : null, savedNotes().length ? h('a', { href: '#/me/saved' }, t(lang, 'savedN', { n: savedNotes().length })) : null)
   }
 
+  /** The drafts kept on this device (a reply, a quote or a new note left half written), newest first: each can be opened again or thrown away. */
+  function draftsCard(): HTMLElement | null {
+    const list = Object.entries(readDrafts()).filter(([, d]) => d && typeof d.text === 'string' && d.text.trim()).sort((a, b) => b[1].at - a[1].at)
+    if (!list.length) return null
+    const canWrite = signer?.state === 'connected'
+    const open = async (key: string) => {
+      const [mode, id] = key.split(':') as [Composer['mode'], string]
+      if (mode === 'note') { startNote(); root.querySelector('main.view')?.scrollTo?.({ top: 0 }); return }
+      let target: NostrEvent | undefined
+      try { target = (await fetcher.query({ ids: [id], limit: 1 })).find((e) => e.id === id) } catch { /* not found */ }
+      if (!target) { say('error', t(lang, 'draftTargetMissing')); draw(); return }
+      if (mode === 'quote') startQuote(target); else startReply(target)
+      root.querySelector('main.view')?.scrollTo?.({ top: 0 })
+    }
+    return h('section', { class: 'drafts card' }, h('h2', {}, t(lang, 'draftsTitle', { n: list.length })),
+      h('ul', {}, ...list.map(([key, d]) => {
+        const mode = key.split(':')[0]
+        return h('li', {},
+          h('p', { class: 'meta' }, t(lang, mode === 'reply' ? 'draftReply' : mode === 'quote' ? 'draftQuote' : 'draftNote'), ' · ', ago(lang, d.at, deps.nowMs?.())),
+          h('p', { class: 'draft-text' }, d.text.length > 140 ? d.text.slice(0, 140) + '…' : d.text),
+          h('div', { class: 'row' },
+            canWrite ? h('button', { type: 'button', class: 'primary', onClick: () => void open(key) }, t(lang, 'draftOpen')) : null,
+            h('button', { type: 'button', onClick: () => { writeDraft(key, null); draw() } }, t(lang, 'draftDiscard'))))
+      })),
+      canWrite ? null : h('p', { class: 'meta' }, t(lang, 'draftNeedSigner')))
+  }
   function accountCard(): HTMLElement {
     const head = h('div', { class: 'account-top' }, avatarEl(me!, view(), 'lg'), h('div', {}, h('strong', {}, nameOf(view(), me!)), npubEl(me!, view()), countsLine()))
     return h('section', { class: 'account card' }, head, aboutArea())
@@ -1523,7 +1549,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
         onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderRescue({ state: rescue, saving: rescueSaving, savedCount: rescueSaved, onScan: () => void scanRescue(), onCopy: () => void copyRescue(), onSave: () => void saveRescue() }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
       : isWide ? [wideView(route, signArea, signOut)]
-      : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, h('h2', { class: 'section' }, t(lang, 'myNotes')), body, h('div', { class: 'foot' }, signOut)]
+      : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, draftsCard(), h('h2', { class: 'section' }, t(lang, 'myNotes')), body, h('div', { class: 'foot' }, signOut)]
       : [signArea, body]
     const page: (HTMLElement | null)[] = [
       h('header', { class: 'top' }, halloween() ? h('span', { class: 'cobweb', 'aria-hidden': 'true' }, cobweb()) : null, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('div', { class: 'brand' }, h('h1', {}, h('a', { href: '#/', class: 'wordmark' }, logo(26, halloween()), 'Quill', halloween() ? pumpkin(22) : null)), h('span', { class: 'tag' }, t(lang, 'tagline'))), me && wide() ? h('button', { type: 'button', class: route.name === 'search' ? 'icon on' : 'icon', 'aria-label': t(lang, 'search'), title: t(lang, 'search'), 'aria-pressed': String(route.name === 'search'), onClick: () => deps.setHash(route.name === 'search' ? '' : '#/search') }, icon('search', 18)) : null, me ? h('button', { type: 'button', class: status ? 'icon spinning' : 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), ...(status ? { 'aria-busy': 'true' } : {}), onClick: refresh }, icon('refresh', 18)) : null, pills, me ? h('button', { type: 'button', class: route.name === 'settings' ? 'icon on' : 'icon', 'aria-label': t(lang, 'prefsTitle'), title: t(lang, 'prefsTitle'), 'aria-pressed': String(route.name === 'settings'), onClick: () => deps.setHash(route.name === 'settings' ? '' : '#/settings') }, icon('gear', 18)) : null, h('button', { type: 'button', class: route.name === 'help' ? 'icon on' : 'icon', 'aria-label': t(lang, 'helpTitle'), title: t(lang, 'helpTitle'), 'aria-pressed': String(route.name === 'help'), onClick: () => deps.setHash(route.name === 'help' ? '' : '#/help') }, icon('help', 18)), statusEl),

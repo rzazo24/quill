@@ -458,3 +458,10 @@ textarea.interests { width: 100%; box-sizing: border-box; font: inherit; padding
 
 /* in a thread, the reply it was opened at (from Mentions, a link…) */
 article.note.here { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) }
+
+/* Me: drafts kept on this device */
+.drafts ul { list-style: none; margin: 0; padding: 0 }
+.drafts li { padding: 10px 0; border-top: 1px solid var(--line, rgba(127,127,127,.2)) }
+.drafts li:first-child { border-top: none }
+.drafts .draft-text { margin: 4px 0 8px; white-space: pre-wrap; overflow-wrap: anywhere }
+.drafts .row { display: flex; gap: 8px; flex-wrap: wrap }

@@ -862,6 +862,20 @@ describe('drafts', () => {
     await click(b.root, 'Review'); await tick(60); await click(b.root, 'Publish'); await tick(400)
     expect(b.pub.sent[0]!.event.content).toBe('written before a crash'); expect(b.mem.has(`drafts:${me}`)).toBe(false)
   })
+  it('Me lists the drafts: a reply opens again with its text, and one can be thrown away', async () => {
+    const a = await open()
+    const card = [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('a note to answer'))!
+    await click(card as HTMLElement, 'Reply'); await tick(60); type(a, 'my unfinished reply'); await click(a.root, 'Cancel')
+    a.root.querySelector<HTMLElement>('button.fab')!.click(); await tick(60); type(a, 'a loose idea'); await click(a.root, 'Cancel')
+    await a.go('#/me'); await tick(300)
+    const box = a.root.querySelector('section.drafts')!; expect(box.querySelector('h2')!.textContent).toBe('Drafts (2)')
+    expect(box.textContent).toContain('my unfinished reply'); expect(box.textContent).toContain('a loose idea')
+    const item = (text: string) => [...box.querySelectorAll('li')].find((l) => l.textContent!.includes(text)) as HTMLElement
+    await click(item('a loose idea'), 'Discard'); await tick(60)
+    expect(a.root.querySelector('section.drafts h2')!.textContent).toBe('Drafts (1)')
+    await click([...a.root.querySelectorAll('section.drafts li')][0] as HTMLElement, 'Keep writing'); await tick(300)
+    expect(area(a).value).toBe('my unfinished reply'); expect(a.root.querySelector('.composer')!.textContent).toContain('a note to answer')
+  })
   it('a reply has its own draft, apart from a new note', async () => {
     const a = await open()
     a.root.querySelector<HTMLElement>('button.fab')!.click(); await tick(60); type(a, 'a new note'); await click(a.root, 'Cancel')
