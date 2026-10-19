@@ -663,7 +663,7 @@ describe('messages do not stay fixed at the bottom', () => {
     const a = await fail(300); expect(a.root.querySelector('.toast .error')).not.toBeNull(); await tick(400); expect(a.root.querySelector('.toast .error')).toBeNull()
   })
   it('an error can be closed with its button, at once', async () => {
-    const a = await fail(); const bar = a.root.querySelector('.toast .error')!; expect(bar.querySelector('button')!.textContent).toBe('Close')
+    const a = await fail(); const bar = a.root.querySelector('.toast .error-box')!; expect(bar.querySelector('button')!.getAttribute('aria-label')).toBe('Close')
     ;(bar.querySelector('button') as HTMLElement).click(); await tick(60); expect(a.root.querySelector('.toast .error')).toBeNull()
   })
   it('a newer message is not cleared by the timer of an older one', async () => {
@@ -790,7 +790,7 @@ describe('a locked HiveScope Bunker', () => {
     const a = boot({ events: world, signer: sg, stored: { me } }); await tick(300)
     expect(a.text()).toContain('HiveScope Bunker) is locked'); expect(a.text()).toContain('hivescope-bunker unlock')
     expect(sg.log.filter((x) => x.startsWith('sign'))).toEqual([]) // known without trying to sign
-    ;(a.root.querySelector('p.error button') as HTMLElement).click(); await tick(20)
+    ;(a.root.querySelector('.error-box button') as HTMLElement).click(); await tick(20)
     ;([...a.root.querySelectorAll('.actions button.react')].find((b) => b.textContent === '👍') as HTMLElement).click(); await tick(300)
     expect(a.text()).toContain('Nothing was published'); expect(a.text()).toContain('hivescope-bunker unlock')
   })

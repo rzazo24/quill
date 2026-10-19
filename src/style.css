@@ -466,3 +466,6 @@ article.note.here { border-color: var(--accent); box-shadow: 0 0 0 1px var(--acc
 .drafts .draft-text { margin: 4px 0 8px; white-space: pre-wrap; overflow-wrap: anywhere }
 .drafts .row { display: flex; gap: 8px; flex-wrap: wrap }
 [role="alertdialog"]:focus:not(:focus-visible) { outline: none; }
+.sign .toast .error-box { display: flex; gap: 10px; align-items: flex-start; border-left: 3px solid var(--red); padding-left: 10px }
+.sign .toast .error-box .error { flex: 1; color: var(--text); font-size: .95rem; line-height: 1.45 }
+.sign .toast .error-box .close { flex: none }

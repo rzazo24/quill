@@ -72,7 +72,7 @@ export function renderSignArea(s: SignUiState, hd: SignUiHandlers, v: View, sign
   const parts: (HTMLElement | null)[] = []
   const toast: (HTMLElement | null)[] = []
   // a plain notice is a small popup that fades by itself; an error stays in the bar until something else happens
-  if (s.flash?.kind === 'error') toast.push(h('p', { class: 'error', role: 'alert' }, s.flash.text, ' ', h('button', { type: 'button', class: 'link', onClick: hd.dismissFlash }, t(v.lang, 'dismiss'))))
+  if (s.flash?.kind === 'error') toast.push(h('div', { class: 'error-box', role: 'alert' }, h('p', { class: 'error' }, s.flash.text), h('button', { type: 'button', class: 'icon close', 'aria-label': t(v.lang, 'dismiss'), title: t(v.lang, 'dismiss'), onClick: hd.dismissFlash }, '×')))
   else if (s.flash) parts.push(h('div', { class: 'popup', role: 'status' }, h('span', {}, s.flash.text)))
   if (where === 'feed' && s.signer !== 'connected') parts.push(h('p', { class: 'hint' }, h('a', { href: '#/me' }, t(v.lang, 'connectToWrite'))))
   if (where === 'me' && s.signer === 'disconnected' && !s.connectOpen) parts.push(h('p', {}, h('button', { type: 'button', onClick: hd.openConnect }, t(v.lang, 'connectSigner'))))
