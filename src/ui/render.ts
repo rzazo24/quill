@@ -267,11 +267,19 @@ export function renderList(items: Judged[], v: View, key?: string): HTMLElement 
   if (!items.length) { box.append(h('p', { class: 'empty' }, t(v.lang, 'empty'))); return box }
   let shown = 0
   const more = h('button', { type: 'button', class: 'more' }, '')
+  // the next page comes on its own as the reader nears the end: a card a few before the last one is watched (the scrolling box clips the
+  // button itself until it is on screen, so watching the button would only start once the reader got there). The button stays, for keyboards.
+  const watch = typeof IntersectionObserver === 'function' ? new IntersectionObserver((seen) => { if (seen.some((x) => x.isIntersecting)) add(PAGE) }) : null
+  // a mark, not the card: a card drawn again just as it was is swapped for its old node, and the watched one would be gone
+  const mark = h('div', { class: 'more-mark', 'aria-hidden': 'true' })
   const add = (n: number) => {
-    for (const j of items.slice(shown, shown + n)) box.insertBefore(renderJudged(j, v), more)
+    mark.remove()
+    const cards = items.slice(shown, shown + n).map((j) => renderJudged(j, v))
+    for (const c of cards) box.insertBefore(c, more)
     shown = Math.min(items.length, shown + n)
     if (key) v.pages?.set(key, Math.max(shown, v.pages.get(key) ?? 0))
-    if (shown >= items.length) more.remove(); else more.textContent = t(v.lang, 'showMore', { n: items.length - shown })
+    watch?.disconnect()
+    if (shown >= items.length) more.remove(); else { more.textContent = t(v.lang, 'showMore', { n: items.length - shown }); const near = cards[Math.max(0, cards.length - 8)]; if (near && watch) { mark.remove(); box.insertBefore(mark, near); watch.observe(mark) } }
   }
   more.addEventListener('click', () => add(PAGE))
   box.append(more); add(Math.max(PAGE, key ? v.pages?.get(key) ?? 0 : 0))

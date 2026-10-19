@@ -101,6 +101,21 @@ describe('lists come in pages', () => {
     expect([...el.querySelectorAll('.body')].map((n) => n.textContent)[69]).toBe('note 69') // order kept
     el.remove()
   })
+  it('the next page comes on its own when the reader nears the end (a mark a few cards before the last is watched)', () => {
+    const watched: { cb: (x: { isIntersecting: boolean }[]) => void; els: Element[] }[] = []
+    const real = (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver
+    ;(globalThis as { IntersectionObserver?: unknown }).IntersectionObserver = class { els: Element[] = []; constructor(cb: (x: { isIntersecting: boolean }[]) => void) { watched.push({ cb, els: this.els }) } observe(e: Element) { this.els.push(e) } disconnect() { this.els.length = 0 } }
+    try {
+      const items = Array.from({ length: 70 }, (_, i) => shown(ev(pk('a'), `note ${i}`)))
+      const el = renderList(items, v)
+      const mark = watched[0]!.els[0]!
+      expect(mark.classList.contains('more-mark')).toBe(true)
+      expect([...el.children].indexOf(mark)).toBe(22) // 8 cards before the end of the first 30
+      watched[0]!.cb([{ isIntersecting: true }]); expect(el.querySelectorAll('article.note').length).toBe(60)
+      watched[0]!.cb([{ isIntersecting: true }]); expect(el.querySelectorAll('article.note').length).toBe(70)
+      expect(el.querySelector('.more-mark, button.more')).toBeNull() // all there: nothing left to watch
+    } finally { (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver = real }
+  })
   it('a short list has no button; an empty one says so', () => {
     expect(renderList([shown()], v).querySelector('button.more')).toBeNull()
     expect(renderList([], v).textContent).toBe('Nothing here yet.')
