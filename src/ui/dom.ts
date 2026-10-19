@@ -62,3 +62,15 @@ export function reuseNotes(from: Element, into: Element): void {
   }
 }
 export function markDrawn(page: Element): void { for (const a of page.querySelectorAll('article.note[data-id]')) drawn.add(a) }
+
+/** Keys inside a small menu or panel: arrows (and Home/End) move between its buttons, Escape closes it and gives the focus back to `back`. */
+export function menuKeys(box: Element, back: () => HTMLElement | null, close: () => void, grid = false): void {
+  box.addEventListener('keydown', (ev) => {
+    const e = ev as KeyboardEvent, items = [...box.querySelectorAll<HTMLElement>('button:not([hidden])')], i = items.indexOf(e.target as HTMLElement)
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); back()?.focus(); return }
+    const step = e.key === 'ArrowDown' || (grid && e.key === 'ArrowRight') ? 1 : e.key === 'ArrowUp' || (grid && e.key === 'ArrowLeft') ? -1 : 0
+    const to = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : step && i >= 0 ? (i + step + items.length) % items.length : -1
+    if (to < 0 || !items.length) return
+    e.preventDefault(); items[to]!.focus()
+  })
+}

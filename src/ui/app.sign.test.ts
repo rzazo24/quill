@@ -793,6 +793,7 @@ describe('deleting your own note', () => {
     ;([...card.querySelectorAll('.more-list button')].find((b) => b.textContent === 'Delete note') as HTMLButtonElement).click(); await tick(30)
     const sheet = a.root.querySelector('.sheet')!; expect(sheet.querySelector('h2')!.textContent).toBe('Delete this note?'); expect(sheet.textContent).toContain('a note with a typo'); expect(sheet.textContent).toContain('not an eraser')
     expect(a.pub.sent).toEqual([])
+    expect(a.root.ownerDocument.activeElement).toBe(sheet.querySelector('[role="alertdialog"]')) // the question has the focus (not its Delete button: Enter must not delete)
     await click(sheet as HTMLElement, 'Delete'); await tick(500)
     const e = a.pub.sent[0]!.event; expect(e.kind).toBe(5); expect(e.tags).toEqual([['e', mine.id], ['k', '1']])
     expect(a.text()).toContain('You deleted this note.'); expect(a.text()).not.toContain('a note with a typo')

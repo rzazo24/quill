@@ -10,7 +10,7 @@ import { failedRelays } from '../net/publisher.js'
 import type { Published, Step } from '../sign/pipeline.js'
 import { MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { MAX_ZAP_COMMENT, MAX_ZAP_SATS, ZAP_AMOUNTS } from '../core/zapsend.js'
-import { h } from './dom.js'
+import { h, menuKeys } from './dom.js'
 import { t } from './i18n.js'
 import { icon } from './icons.js'
 import { avatarEl, nameOf, type View } from './render.js'
@@ -160,6 +160,11 @@ function renderComposer(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElemen
     } }, avatarEl(p.pubkey, v), h('span', { class: 'mention-name' }, p.name), p.relation === 'none' ? null : h('small', { class: 'meta' }, t(v.lang, p.relation === 'follow' ? 'relFollow' : 'relNetwork')))))
   }
   area.addEventListener('input', offer); area.addEventListener('click', offer); area.addEventListener('keyup', (e) => { if (e.key.startsWith('Arrow')) offer() })
+  // with a keyboard: arrow down from the box goes into the names, arrows move among them, Escape goes back to the text without choosing
+  if (suggest) {
+    area.addEventListener('keydown', (e) => { if (e.key === 'ArrowDown' && !suggest.hidden) { const first = suggest.querySelector<HTMLElement>('button'); if (first) { e.preventDefault(); first.focus() } } else if (e.key === 'Escape' && !suggest.hidden) { e.preventDefault(); suggest.hidden = true } })
+    menuKeys(suggest, () => area, () => { suggest.hidden = true })
+  }
   // the emoji picker (wide screens): a button that opens a grid; a tap puts the emoji where the cursor is
   const insert = (emoji: string) => {
     const at = area.selectionStart ?? area.value.length, to = area.selectionEnd ?? at
@@ -169,6 +174,7 @@ function renderComposer(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElemen
   }
   const picker = s.emojiPicker ? h('div', { class: 'emoji-panel', role: 'group', 'aria-label': t(v.lang, 'emojis'), hidden: true }, ...EMOJI_GROUPS.flatMap((g) => g).map((e) => h('button', { type: 'button', onClick: () => insert(e) }, e))) : null
   const toggle = picker ? h('button', { type: 'button', class: 'emoji-toggle', 'aria-label': t(v.lang, 'emojis'), title: t(v.lang, 'emojis'), 'aria-expanded': 'false', onClick: () => { picker.hidden = !picker.hidden; toggle!.setAttribute('aria-expanded', String(!picker.hidden)) } }, '🙂') : null
+  if (picker && toggle) menuKeys(picker, () => toggle, () => { picker.hidden = true; toggle.setAttribute('aria-expanded', 'false') }, true)
   return h('div', { class: 'composer' },
     (c.mode === 'reply' || c.mode === 'quote') && c.target ? h('p', { class: 'replying' }, t(v.lang, c.mode === 'quote' ? 'quotingTo' : 'replyingTo', { who: nameOf(v, c.target.pubkey) }), ': ', h('q', {}, excerpt(c.target))) : null,
     c.restored ? h('p', { class: 'meta draft-line' }, t(v.lang, 'draftRestored'), ' ', h('button', { type: 'button', class: 'link', onClick: hd.discardDraft }, t(v.lang, 'draftDiscard'))) : null,
@@ -268,7 +274,9 @@ const VISIBLE_REACTIONS = 3
 function moreReactions(chips: HTMLElement[], v: View): HTMLElement {
   const box = h('span', { class: 'more-reactions' })
   const toggle = h('button', { type: 'button', class: 'react more-toggle', 'aria-expanded': 'false', 'aria-label': t(v.lang, 'moreReactions'), title: t(v.lang, 'moreReactions'), onClick: () => { const open = box.classList.toggle('open'); toggle.setAttribute('aria-expanded', String(open)) } }, '+')
-  box.append(toggle, h('span', { class: 'more-reactions-list' }, ...chips))
+  const list = h('span', { class: 'more-reactions-list' }, ...chips)
+  menuKeys(list, () => toggle, () => { box.classList.remove('open'); toggle.setAttribute('aria-expanded', 'false') }, true)
+  box.append(toggle, list)
   return box
 }
 

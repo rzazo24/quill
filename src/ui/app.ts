@@ -300,6 +300,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let goToNote: string | null = null // a thread opened at one of its replies (from Mentions, say): once it is drawn, it is brought into view
   // the reader's finger or a page still gliding: drawing then would swap the scrolling <main> under them and stop the scroll (on iOS, every time)
   let dragging = false, scrolledAt = 0, drawnAt = 0, drawLater: ReturnType<typeof setTimeout> | undefined
+  let askedLast: string | null = null // the question on screen at the last drawing (by its label): a new one gets the focus
   const watched = new WeakSet<Element>() // the scrolling box is kept between drawings: its listener goes on once
   let loudLoad = false // the next load of the page on screen shows that it is loading (the reader asked for it); the others are quiet
   const pageKey = (key: string) => (key === JSON.stringify({ name: 'following' }) ? `${key}:${feedMode}` : key) // Following is a different list in each mode
@@ -1583,6 +1584,10 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     place(root, fresh.map((x) => (x === newMain ? adopt(oldMain, x) : x))); markDrawn(root)
     if (searching && searchInput!.isConnected) searchInput!.focus({ preventScroll: true })
     if (editingAbout && aboutBox?.isConnected) aboutBox.focus({ preventScroll: true })
+    // a question that just appeared (delete? share? zap?) gets the focus, so a keyboard or a screen reader lands on it; not while typing elsewhere
+    const ask = root.querySelector<HTMLElement>('[role="alertdialog"]'), askKey = ask?.getAttribute('aria-label') ?? null
+    if (ask && askKey !== askedLast && !keep && !searching && !editingAbout) { ask.tabIndex = -1; ask.focus({ preventScroll: true }) } // the question itself, not its first button: Enter must not delete or pay by accident
+    askedLast = askKey
     if (keep) { const again = root.querySelector<HTMLTextAreaElement>(`[data-keep-focus="${keep.key}"]`); if (again && root.ownerDocument.activeElement !== again) { again.focus({ preventScroll: true }); try { again.setSelectionRange(keep.start ?? again.value.length, keep.end ?? again.value.length) } catch { /* not a text box */ } } }
     root.classList.toggle('bars-hidden', barsHidden && !isWide)
     root.classList.toggle('wide', isWide)

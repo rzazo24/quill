@@ -170,3 +170,18 @@ describe('Show more', () => {
     expect(cards(renderList(many, view, 'me'))).toBe(30); expect(cards(renderList(many, view))).toBe(30)
   })
 })
+
+describe('the "…" menu with a keyboard', () => {
+  it('opening it puts the focus on the first choice, arrows move round it, Escape closes it and gives the focus back to "…"', () => {
+    const shown = { event: ev(pk('a'), 'hello'), verdict: { hidden: false, rule: 'followed', reasons: [] } } as unknown as Judged
+    const el = renderJudged(shown, { ...v, copy: () => {} }); document.body.append(el)
+    const menu = el.querySelector('.more-menu')!, btn = menu.querySelector('.more-btn') as HTMLElement, items = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+    const key = (k: string) => document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }))
+    btn.click(); expect(menu.classList.contains('open')).toBe(true); expect(document.activeElement).toBe(items[0])
+    key('ArrowDown'); expect(document.activeElement).toBe(items[1])
+    key('ArrowUp'); key('ArrowUp'); expect(document.activeElement).toBe(items[items.length - 1]) // round from the first to the last
+    key('Home'); expect(document.activeElement).toBe(items[0])
+    key('Escape'); expect(menu.classList.contains('open')).toBe(false); expect(document.activeElement).toBe(btn)
+    el.remove()
+  })
+})

@@ -7,7 +7,7 @@ import { articleInfo, type ArticleInfo } from '../data/article.js'
 import { COMMENT_KIND } from '../core/thread.js'
 import type { Child } from './dom.js'
 import type { TrustReason, TrustScore } from '../data/trust.js'
-import { h } from './dom.js'
+import { h, menuKeys } from './dom.js'
 import { ARTICLE_KIND, primalArticle, refs, shortNpub } from '../core/refs.js'
 import { avatarOf } from '../core/avatar.js'
 import { showReaction, type ReactionGroup } from '../data/activity.js'
@@ -193,8 +193,11 @@ function moreMenu(event: Judged['event'], v: View): HTMLElement | null {
   const toggle = h('button', { type: 'button', class: 'more-btn', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': t(v.lang, 'more'), title: t(v.lang, 'more'), onClick: () => (box.classList.contains('open') ? close() : open()) }, icon('more', 22))
   const away = (e: Event) => { if (!box.contains(e.target as Node)) close() }
   const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
-  function open() { box.classList.add('open'); toggle.setAttribute('aria-expanded', 'true'); setTimeout(() => { document.addEventListener('click', away); document.addEventListener('keydown', esc) }, 0) }
+  // with a keyboard: the focus goes to the first choice, arrows move, Escape gives it back to "…", and leaving the menu with Tab closes it
+  function open() { box.classList.add('open'); toggle.setAttribute('aria-expanded', 'true'); list.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true }); setTimeout(() => { document.addEventListener('click', away); document.addEventListener('keydown', esc) }, 0) }
   function close() { box.classList.remove('open'); toggle.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', away); document.removeEventListener('keydown', esc) }
+  menuKeys(list, () => toggle, close)
+  box.addEventListener('focusout', (e) => { const to = (e as FocusEvent).relatedTarget as Node | null; if (to && !box.contains(to)) close() })
   box.append(toggle, list)
   return box
 }
