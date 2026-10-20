@@ -442,8 +442,9 @@ export function startApp(root: HTMLElement, deps: Deps): void {
         if (me !== who || session !== s) return
         for (const [id, r] of found) reachMap.set(id, r)
         if (!found.size) return
+        void load('all') // the numbers at once; the names of who reacted are only needed when the list is opened
         await nameKeys([...new Set([...found.values()].flatMap((r) => [...(r.who?.reactions.flatMap(([, k]) => k) ?? []), ...(r.who?.reposts ?? [])]))].slice(0, 300)).catch(() => {}) // the names the list of who reacted needs
-        void load('all') // wherever those notes are on screen (the answers are remembered: nothing is asked again)
+        void load('all') // again, with the names (the answers are remembered: nothing is asked again)
       }).catch(() => { /* a failed count only means no numbers */ })
     }, 150)
   }

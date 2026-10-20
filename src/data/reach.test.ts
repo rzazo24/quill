@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ev, pk } from '../core/testutil.js'
-import { hasReach, reachOf } from './reach.js'
+import { hasReach, loadOthersReach, loadReach, reachOf } from './reach.js'
+import type { QueryOptions } from '../net/fetcher.js'
 
 const me = pk('1'), a = pk('a'), b = pk('b'), c = pk('c'), muted = pk('d')
 const mine = ev(me, 'my note'), other = ev(me, 'another note of mine'), quiet = ev(me, 'nobody noticed')
@@ -27,4 +28,9 @@ describe('what a note got', () => {
     expect(r.size).toBe(0)
   })
   it('knows when there is nothing to show', () => { expect(hasReach(undefined)).toBe(false); expect(hasReach({ reactions: new Map(), reposts: 0, replies: 0 })).toBe(false); expect(hasReach({ reactions: new Map(), reposts: 1, replies: 0 })).toBe(true) })
+  it('every question for the numbers stops waiting for a slow relay soon after the others answered (zaps too: they used to wait for every relay)', async () => {
+    const asked: (QueryOptions | undefined)[] = [], f = { query: async (_: unknown, o?: QueryOptions) => { asked.push(o); return [] } }
+    await loadReach(f, [mine.id], ctx); await loadOthersReach(f, [mine.id], ctx)
+    expect(asked.length).toBe(7); expect(asked.every((o) => o?.quick === true)).toBe(true)
+  })
 })

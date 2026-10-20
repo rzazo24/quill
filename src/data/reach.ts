@@ -65,7 +65,7 @@ export async function loadReach(f: Fetcher, ids: readonly string[], ctx: Pick<Co
   const chunks: string[][] = []
   for (let i = 0; i < unique.length; i += CHUNK) chunks.push(unique.slice(i, i + CHUNK))
   const answers = await Promise.all(chunks.flatMap((c) => [
-    f.query({ kinds: [7], '#e': c, limit: 500 }, SLOW_OK), f.query({ kinds: [6, 16], '#e': c, limit: 300 }, SLOW_OK), f.query({ kinds: [1, COMMENT_KIND], '#e': c, limit: 300 }, SLOW_OK), f.query({ kinds: [1], '#q': c, limit: 100 }, SLOW_OK), f.query({ kinds: [ZAP_RECEIPT_KIND], '#e': c, limit: 300 }),
+    f.query({ kinds: [7], '#e': c, limit: 500 }, SLOW_OK), f.query({ kinds: [6, 16], '#e': c, limit: 300 }, SLOW_OK), f.query({ kinds: [1, COMMENT_KIND], '#e': c, limit: 300 }, SLOW_OK), f.query({ kinds: [1], '#q': c, limit: 100 }, SLOW_OK), f.query({ kinds: [ZAP_RECEIPT_KIND], '#e': c, limit: 300 }, SLOW_OK), // like the rest: a slow relay must not hold all the numbers back
   ].map((p) => p.catch(() => [] as Event[]))))
   const seen = new Set<string>()
   return reachOf(answers.flat().filter((e) => !seen.has(e.id) && seen.add(e.id)), unique, ctx, verify)
@@ -77,7 +77,7 @@ export async function loadOthersReach(f: Fetcher, ids: readonly string[], ctx: P
   const unique = [...new Set(ids)].filter((i) => HEX64.test(i))
   const chunks: string[][] = []
   for (let i = 0; i < unique.length; i += CHUNK) chunks.push(unique.slice(i, i + CHUNK))
-  const answers = await Promise.all(chunks.flatMap((c) => [f.query({ kinds: [ZAP_RECEIPT_KIND], '#e': c, limit: 500 }), f.query({ kinds: [1, COMMENT_KIND], '#e': c, limit: 500 })].map((p) => p.catch(() => [] as Event[]))))
+  const answers = await Promise.all(chunks.flatMap((c) => [f.query({ kinds: [ZAP_RECEIPT_KIND], '#e': c, limit: 500 }, SLOW_OK), f.query({ kinds: [1, COMMENT_KIND], '#e': c, limit: 500 }, SLOW_OK)].map((p) => p.catch(() => [] as Event[]))))
   const seen = new Set<string>()
   return reachOf(answers.flat().filter((e) => (e.kind === ZAP_RECEIPT_KIND || e.kind === 1 || e.kind === COMMENT_KIND) && !seen.has(e.id) && seen.add(e.id)), unique, ctx, verify, { countMyZaps: true, countMyReplies: true })
 }
