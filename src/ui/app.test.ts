@@ -951,6 +951,13 @@ describe('what each of my notes got, shown in Me', () => {
     expect([...panel.querySelectorAll('a')].find((l) => l.textContent === '1 reply')!.getAttribute('href')).toBe(`#/note/${mineA.id}`)
     r.click(); expect(panel.hidden).toBe(true)
   })
+  it('a tap right on the replies number opens the conversation instead of the list of people', async () => {
+    const a = boot({ events: events(), stored: { me } }); await tick(150); await a.go('#/me'); await tick(500)
+    const r = reachOfNote(a, 'my first note')!, panel = r.parentElement!.querySelector('.reach-who') as HTMLElement
+    ;(r.querySelector('.reach-replies svg') as unknown as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(location.hash).toBe(`#/note/${mineA.id}`); expect(panel.hidden).toBe(true)
+    location.hash = ''
+  })
   it('works in the Me column of a wide screen too, and the numbers are asked for only once', async () => {
     const a = boot({ events: events(), stored: { me }, wide: { value: true } }); await tick(700)
     expect(a.root.querySelector('.col[data-col="me"] .reach')).not.toBeNull()

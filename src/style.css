@@ -333,6 +333,7 @@ html[data-theme=halloween] ::selection { background: rgba(var(--accent-rgb), .35
 /* what a note of yours got: reactions, reposts and replies, small and quiet under the text */
 .reach { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; color: var(--muted); font-size: .85rem }
 .reach-item { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap } .reach-item .icon { color: var(--muted) }
+a.reach-item { color: inherit; text-decoration: none }
 
 button.reach { min-height: 0; padding: 4px 6px; margin-left: -6px; background: none; border: 0; border-radius: 8px; cursor: pointer; text-align: left }
 @media (hover: hover) { button.reach:hover { background: var(--btn) } } button.reach[aria-expanded=true] { color: var(--text) }
