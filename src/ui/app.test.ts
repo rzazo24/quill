@@ -808,6 +808,15 @@ describe('the bottom bar steps aside while you read down', () => {
     await a.go(''); await tick(80); expect(hidden(a)).toBe(true) // the page was loaded and redrawn, the bar did not jump back
     await a.go('#/mentions'); await tick(100); expect(hidden(a)).toBe(false)
   })
+  it('coming back from a thread puts the reader back down the feed without taking that jump for a scroll down', async () => {
+    const a = boot({ events: many(), stored: { me } }); await tick(150)
+    await scrollTo(a, 500); await scrollTo(a, 400); expect(hidden(a)).toBe(false) // down the feed, bar shown
+    const post = many().find((e) => e.content.startsWith('post number 30'))!
+    await a.go('#/note/' + post.id); await tick(150); await scrollTo(a, 0) // the thread starts at the top
+    await a.go(''); await tick(150)
+    const m = a.root.querySelector('main.view') as HTMLElement; expect(m.scrollTop).toBeGreaterThan(100) // back where they were
+    m.dispatchEvent(new Event('scroll')); await tick(10); expect(hidden(a)).toBe(false) // the scroll the drawing put back: the bar stays
+  })
 })
 
 

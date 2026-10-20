@@ -300,6 +300,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let restoreScroll: number | null = null
   let goToNote: string | null = null // a thread opened at one of its replies (from Mentions, say): once it is drawn, it is brought into view
   // the reader's finger or a page still gliding: drawing then would swap the scrolling <main> under them and stop the scroll (on iOS, every time)
+  let barsLast = 0 // where the main box was last seen by the bars: a drawing that puts the reader back moves it too, so that jump is not taken for the reader scrolling down
   let dragging = false, scrolledAt = 0, drawnAt = 0, drawLater: ReturnType<typeof setTimeout> | undefined
   let askedLast: string | null = null // the question on screen at the last drawing (by its label): a new one gets the focus
   const watched = new WeakSet<Element>() // the scrolling box is kept between drawings: its listener goes on once
@@ -1615,14 +1616,14 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     const opened = route.name === 'note' ? [...root.querySelectorAll<HTMLElement>(`.reply > article.note[data-id="${route.id}"]`)] : []
     for (const a of opened) a.classList.add('here')
     if (goToNote && opened.length && goToNote === (route as { id?: string }).id) opened[0]!.scrollIntoView?.({ block: 'center' }) // again on each drawing while what is above it fills in, until the reader moves the page
+    if (main && !isWide) barsLast = main.scrollTop
     if (main && !isWide && !watched.has(main)) {
       watched.add(main) // the box is kept between drawings: one listener
-      let last = main.scrollTop
       main.addEventListener('scroll', () => {
         if (root.classList.contains('wide')) return
-        const top = main.scrollTop, d = top - last
-        if (Math.abs(d) < SCROLL_STEP_PX) return // small moves do not count; a slow drag adds up because `last` stays
-        last = top
+        const top = main.scrollTop, d = top - barsLast
+        if (Math.abs(d) < SCROLL_STEP_PX) return // small moves do not count; a slow drag adds up because `barsLast` stays
+        barsLast = top
         const hide = d > 0 && top > HIDE_AFTER_PX
         if (hide !== barsHidden) { barsHidden = hide; root.classList.toggle('bars-hidden', hide) }
       }, { passive: true })
