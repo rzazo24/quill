@@ -67,4 +67,14 @@ describe('remembered answers', () => {
     await m.query({ kinds: [1], authors: [b] }); await m.query({ kinds: [1], authors: [b] }, { only: ['wss://far.example'] }); await m.query({ kinds: [1], authors: [b] }, { only: ['wss://far.example'] })
     expect(n).toBe(2)
   })
+  it('an empty answer is asked again after a while (the relays may not have answered in time); one with notes is kept', async () => {
+    const { memo } = await import('../net/fetcher.js')
+    let clock = 0, n = 0, answer: Event[] = []
+    const m = memo({ query: async () => { n++; return answer } }, 30_000, () => clock)
+    await m.query({ kinds: [1] }); clock = 29_000; await m.query({ kinds: [1] })
+    expect(n).toBe(1)
+    clock = 31_000; answer = [relayList(b, [])]; expect(await m.query({ kinds: [1] })).toHaveLength(1)
+    clock = 999_000; await m.query({ kinds: [1] })
+    expect(n).toBe(2)
+  })
 })

@@ -135,15 +135,21 @@ export async function queryAuthors(f: Fetcher, base: Filter, authors: string[], 
   return parts.flat().filter((e) => !seen.has(e.id) && seen.add(e.id))
 }
 
-/** Remembers answers for the life of the page, so changing a filter setting re-judges without asking the relays again. `clear()` is "refresh". */
-export function memo(f: Fetcher): Fetcher & { clear(): void; reconnect(): void } {
-  const cache = new Map<string, Promise<Event[]>>()
+/** Remembers answers for the life of the page, so changing a filter setting re-judges without asking the relays again. `clear()` is "refresh".
+ *  An empty answer is kept only `emptyMs`: with poor coverage the relays may not have answered in time, and the view should ask again without a refresh. */
+export function memo(f: Fetcher, emptyMs = 30_000, now: () => number = Date.now): Fetcher & { clear(): void; reconnect(): void } {
+  const cache = new Map<string, { p: Promise<Event[]>; empty?: number }>()
   return {
     query: (filter, options) => {
       const key = JSON.stringify([filter, options?.quick === false ? 'all' : '', options?.also ?? [], options?.only ?? []]) // waiting for every relay, or asking more, is another question
       let hit = cache.get(key)
-      if (!hit) { hit = f.query(filter, options); hit.catch(() => cache.delete(key)); cache.set(key, hit) }
-      return hit
+      if (hit?.empty !== undefined && now() - hit.empty >= emptyMs) hit = undefined
+      if (!hit) {
+        const entry: { p: Promise<Event[]>; empty?: number } = { p: f.query(filter, options) }
+        entry.p.then((r) => { if (!r.length) entry.empty = now() }, () => { if (cache.get(key) === entry) cache.delete(key) })
+        cache.set(key, (hit = entry))
+      }
+      return hit.p
     },
     reconnect: () => f.reconnect?.(),
     clear: () => cache.clear(),
