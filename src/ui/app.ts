@@ -979,15 +979,17 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
   }
 
   // the Pick of the day: read once per visit (and again after a refresh); the card in Highlights opens it
-  let pickCache: { at: number; pick: DailyPick | null } | null = null
+  // the file is kept as it came and read in the current language each time: switching ES/EN must not leave the titles in the other one
+  let pickCache: { at: number; raw: unknown } | null = null
   async function pickOfDay(): Promise<DailyPick | null> {
     if (!deps.pickSource) return null
     const now = deps.nowMs?.() ?? Date.now()
-    if (pickCache && now - pickCache.at < 30 * 60_000) return pickCache.pick
-    let pick: DailyPick | null = null
-    try { pick = parsePick(await deps.pickSource(), lang) } catch { pick = null }
-    pickCache = { at: now, pick }
-    return pick
+    if (!pickCache || now - pickCache.at >= 30 * 60_000) {
+      let raw: unknown = null
+      try { raw = await deps.pickSource() } catch { raw = null }
+      pickCache = { at: now, raw }
+    }
+    return parsePick(pickCache.raw, lang)
   }
   async function pickCardEl(): Promise<HTMLElement | null> {
     const pk = await Promise.race([pickOfDay(), new Promise<null>((r) => setTimeout(() => r(null), 1500))]) // never holds the feed up

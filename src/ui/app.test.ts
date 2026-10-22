@@ -1548,6 +1548,12 @@ describe('the Pick of the day', () => {
     const b = boot({ stored: { me, feed: 'highlights' }, pick: null }); await tick(500)
     expect(b.root.querySelector('a.pick-card')).toBeNull()
   })
+  it('switching EN/ES changes the titles and summaries at once (the file is not kept in the old language)', async () => {
+    const a = boot({ events: [...world, picked], stored: { me }, pick: file }); await tick(300); await a.go('#/pick'); await tick(300)
+    expect(a.text()).toContain('Why relays matter')
+    ;([...a.root.querySelectorAll('.lang button')].find((b) => b.textContent === 'ES') as HTMLElement).click(); await tick(400)
+    expect(a.text()).toContain('Por qué importan los relés'); expect(a.text()).not.toContain('Why relays matter')
+  })
 })
 
 describe('what your notes got, wherever they are', () => {
