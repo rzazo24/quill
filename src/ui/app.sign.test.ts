@@ -486,12 +486,13 @@ describe('sharing a note', () => {
     const out = boot({ events: events(), signer: fakeSigner() }); await tick(100); expect(share(out)).toBeNull()
     const { a } = await ready(); expect(share(a)).not.toBeNull(); expect(share(a)!.getAttribute('aria-label')).toBe('Share'); expect(share(a)!.getAttribute('aria-pressed')).toBe('false'); expect(share(a)!.querySelector('svg')).not.toBeNull()
   })
-  it('the "…" of a note offers its id and its link, even without a signer; each copies exactly that and says so', async () => {
+  it('the "…" of a note offers its text, its id and its link, even without a signer; each copies exactly that and says so', async () => {
     const copied: string[] = []; const a = boot({ events: events(), copied }); await tick(100)
     const menu = a.root.querySelector('.more-menu')!; const id = (a.root.querySelector('article.note') as HTMLElement).dataset.id!
     expect(menu.classList.contains('open')).toBe(false); (menu.querySelector('.more-btn') as HTMLElement).click(); expect(menu.classList.contains('open')).toBe(true)
     await click(a.root, 'Copy note ID'); expect(copied[0]).toMatch(/^nostr:nevent1/); expect(nip19.decode(copied[0]!.slice(6)).data).toMatchObject({ id, relays: ['wss://r1.example', 'wss://r2.example'] }); expect(menu.textContent).toContain('Copied'); await tick(1000); expect(menu.classList.contains('open')).toBe(false); expect(menu.textContent).toContain('Copy note ID')
     ;(menu.querySelector('.more-btn') as HTMLElement).click(); await click(a.root, 'Copy note link'); expect(copied[1]).toMatch(/^https:\/\/quill\.hivescope\.xyz\/#\/note\/nevent1/); expect((nip19.decode(copied[1]!.split('/').pop()!).data as { id: string }).id).toBe(id); expect(parseRoute(copied[1]!.slice(copied[1]!.indexOf('#')))).toEqual({ name: 'note', id }) // the link opens that very note in Quill
+    ;(menu.querySelector('.more-btn') as HTMLElement).click(); await click(a.root, 'Copy text'); expect(copied[2]).toBe(events().find((e) => e.id === id)!.content) // the whole text, as written
   })
   it('the menu closes on a tap anywhere else and on Escape', async () => {
     const a = boot({ events: events(), copied: [] }); await tick(100)

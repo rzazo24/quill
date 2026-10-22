@@ -178,7 +178,7 @@ function openThread(e: Event, id: string): void {
   location.hash = `#/note/${id}`
 }
 
-/** The "…" of a note: a small menu with its id and its link. It closes when a choice is made, on a tap anywhere else, or on Escape. */
+/** The "…" of a note: a small menu with its text, its id and its link. It closes when a choice is made, on a tap anywhere else, or on Escape. */
 function moreMenu(event: Judged['event'], v: View): HTMLElement | null {
   const copy = v.copy
   if (!copy) return null
@@ -189,7 +189,7 @@ function moreMenu(event: Judged['event'], v: View): HTMLElement | null {
   const saveChoice = v.saved ? h('button', { type: 'button', role: 'menuitem', onClick: () => { close(); v.saved!.toggle(event) } }, t(v.lang, v.saved.has(event.id) ? 'unsaveNote' : 'saveNote')) : null
   const deleteChoice = v.deleteNote && own ? h('button', { type: 'button', role: 'menuitem', class: 'danger-text', onClick: () => { close(); v.deleteNote!(event) } }, t(v.lang, 'deleteNote')) : null
   const muteChoice = v.mute && !own ? h('button', { type: 'button', role: 'menuitem', class: 'danger-text', onClick: () => { close(); v.mute!(event.pubkey) } }, t(v.lang, v.isMuted?.(event.pubkey) ? 'unmuteWho' : 'muteWho', { who: nameOf(v, event.pubkey) })) : null
-  const list = h('span', { class: 'more-list', role: 'menu' }, choice(t(v.lang, 'copyNoteId'), () => noteId(event, v.hints)), choice(t(v.lang, 'copyNoteLink'), () => noteLink(event, v.hints)), saveChoice, deleteChoice, muteChoice)
+  const list = h('span', { class: 'more-list', role: 'menu' }, choice(t(v.lang, 'copyNoteText'), () => event.content), choice(t(v.lang, 'copyNoteId'), () => noteId(event, v.hints)), choice(t(v.lang, 'copyNoteLink'), () => noteLink(event, v.hints)), saveChoice, deleteChoice, muteChoice)
   const toggle = h('button', { type: 'button', class: 'more-btn', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-label': t(v.lang, 'more'), title: t(v.lang, 'more'), onClick: () => (box.classList.contains('open') ? close() : open()) }, icon('more', 22))
   const away = (e: Event) => { if (!box.contains(e.target as Node)) close() }
   const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
