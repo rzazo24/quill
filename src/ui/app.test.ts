@@ -1530,6 +1530,15 @@ describe('coming back to a list', () => {
   })
 })
 
+describe('switching what Following shows', () => {
+  it('the tap answers at once: the new choice pressed and a loading line, before the slow feed arrives', async () => {
+    const a = boot({ events: world, stored: { me }, delayMs: 600 }); await tick(2500)
+    ;[...a.root.querySelectorAll('.feedmode button')].find((b) => b.textContent === 'Popular')!.dispatchEvent(new Event('click')); await tick(20)
+    expect([...a.root.querySelectorAll('.feedmode button')].find((b) => b.textContent === 'Popular')!.getAttribute('aria-pressed')).toBe('true')
+    expect(a.root.querySelector('main .status.loading')).not.toBeNull(); expect(a.root.querySelector('main article.note')).toBeNull()
+  })
+})
+
 describe('when no relay answers', () => {
   it('an empty feed says the relays did not answer (not "nothing new") and offers to try again; once they answer, the usual empty message', async () => {
     const silent = { on: true }

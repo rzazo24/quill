@@ -1078,7 +1078,14 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
 
   function toggleSettings(): void { deps.setHash('#/settings/filter') } // the filter settings live in Settings
   function changeSettings(s: Settings): void { settings = s; safeSet(kv, 'settings', JSON.stringify(s)); void load() }
-  function changeFeedMode(m: FeedMode): void { feedMode = m; safeSet(kv, 'feed', m === 'follows' ? null : m); void load() }
+  function changeFeedMode(m: FeedMode): void {
+    feedMode = m; safeSet(kv, 'feed', m === 'follows' ? null : m)
+    // the tap answers at once: the new choice pressed and a loading line, instead of the old feed staying until the new one arrives
+    const waiting = h('div', { class: 'stack' }, renderFeedMode(m, changeFeedMode, view()), h('p', { class: 'status loading', role: 'status' }, h('span', {}, t(lang, 'loadingFeed'))))
+    if (wide()) panes.following.body = waiting
+    else if (parseRoute(deps.location.hash).name === 'following') body = waiting
+    draw(); void load()
+  }
   function changeAvatars(a: AvatarStyle): void { avatarStyle = a; safeSet(kv, 'avatars', a === 'initials' ? null : a); void load() } // the cards are built once and kept: they are rebuilt with the new pictures
   function changeAutoImages(on: boolean): void { autoImages = on; safeSet(kv, 'autoImages', on ? '1' : null); draw() }
   function changeClientTag(on: boolean): void { clientTag = on; safeSet(kv, 'clientTag', on ? null : '0'); draw() }
