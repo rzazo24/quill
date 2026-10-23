@@ -7,6 +7,8 @@ import type { Fetcher } from '../net/fetcher.js'
 export interface PickItem { id: string; pubkey: string; title: string; summary: string }
 export interface DailyPick { date: string; items: PickItem[] }
 const HEX64 = /^[0-9a-f]{64}$/
+/** Where the morning selection finds its notes besides the reader's relays (see the digest's global step). */
+export const PICK_RELAYS = ['wss://relay.damus.io', 'wss://relay.primal.net', 'wss://nos.lol', 'wss://nostr.mom']
 const text = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '')
 
 /** The file as published, in the reader's language; null when it is missing or not what it should be. Entries that are not well formed are dropped. */
@@ -30,5 +32,9 @@ export async function loadPickNotes(f: Fetcher, items: PickItem[]): Promise<Map<
   if (!items.length) return out
   const by = new Map(items.map((i) => [i.id, i.pubkey]))
   for (const e of await f.query({ ids: items.map((i) => i.id), kinds: [1], limit: items.length })) if (by.get(e.id) === e.pubkey) out.set(e.id, e)
+  // a note from all of Nostr may live only on a slower relay, or one the reader does not use: the missing ones are asked again, waiting for every
+  // relay and also asking the big ones the selection reads from, before saying they did not come
+  const missing = items.map((i) => i.id).filter((id) => !out.has(id))
+  if (missing.length) for (const e of await f.query({ ids: missing, kinds: [1], limit: missing.length }, { quick: false, also: PICK_RELAYS }).catch(() => [] as Event[])) if (by.get(e.id) === e.pubkey) out.set(e.id, e)
   return out
 }
