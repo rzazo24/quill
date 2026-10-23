@@ -18,14 +18,14 @@ const roots: HTMLElement[] = []
 /** A choice in the search Filters (Show / Search in): its buttons are there even while the panel is folded. */
 const pickFilter = (a: { root: HTMLElement }, label: string) => ([...a.root.querySelectorAll('.search-filters button')].find((b) => b.textContent === label) as HTMLButtonElement).click()
 
-function boot(opts: { events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; copy?: (text: string) => void; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; light?: { value: boolean }; elsewhere?: { relay: string; events: Event[]; delayMs: number }; avatarProxy?: string; pick?: unknown; saveFile?: (name: string, text: string) => void } = {}) {
+function boot(opts: { silent?: { on: boolean }; events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; copy?: (text: string) => void; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; light?: { value: boolean }; elsewhere?: { relay: string; events: Event[]; delayMs: number }; avatarProxy?: string; pick?: unknown; saveFile?: (name: string, text: string) => void } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
   const mem = new Map(Object.entries(opts.stored ?? {})), visible: ((awayMs: number) => void)[] = [], reconnects = { n: 0 }, ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], schemeChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs, opts.slowFor, opts.onlyWhenAll), calls = { n: 0 }, filters: Filter[] = []
   startApp(root, {
     ...(opts.avatarProxy ? { avatarProxy: opts.avatarProxy } : {}),
     ...(opts.pick !== undefined ? { pickSource: async () => opts.pick } : {}),
-    fetcher: { query: async (f, o) => { calls.n++; filters.push(f); if (o?.only) { const el = opts.elsewhere; if (!el || !o.only.includes(el.relay)) return []; await new Promise((r) => setTimeout(r, el.delayMs)); return el.events.filter((e) => answers(f, e)) } return base.query(f, o) }, reconnect: () => { reconnects.n++ } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', prefersLight: () => !!opts.light?.value, onSchemeChange: (cb) => schemeChanged.push(cb), onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
+    fetcher: { ...(opts.silent ? { activity: () => ({ asked: Date.now(), answered: opts.silent!.on ? 0 : Date.now() }) } : {}), query: async (f, o) => { calls.n++; filters.push(f); if (o?.only) { const el = opts.elsewhere; if (!el || !o.only.includes(el.relay)) return []; await new Promise((r) => setTimeout(r, el.delayMs)); return el.events.filter((e) => answers(f, e)) } return base.query(f, o) }, reconnect: () => { reconnects.n++ } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', prefersLight: () => !!opts.light?.value, onSchemeChange: (cb) => schemeChanged.push(cb), onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
     copy: opts.copy, saveFile: opts.saveFile,
     searchFetcher: opts.searchable ? { query: async (f: Filter) => opts.searchable!.filter((e) => answers(f, e) && (!(f as { search?: string }).search || e.content.toLowerCase().includes((f as { search: string }).search.toLowerCase()))) } : undefined,
     checkVersion: opts.newer ? async () => { asked.n++; return opts.newer!.value } : undefined, languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
@@ -1527,6 +1527,20 @@ describe('coming back to a list', () => {
     const calls = a.calls.n
     await a.go(''); await tick(200)
     expect(a.calls.n).toBeGreaterThan(calls)
+  })
+})
+
+describe('when no relay answers', () => {
+  it('an empty feed says the relays did not answer (not "nothing new") and offers to try again; once they answer, the usual empty message', async () => {
+    const silent = { on: true }
+    const a = boot({ events: [], stored: { me, feed: 'popular' }, silent }); await tick(400)
+    expect(a.text()).toContain('No relay answered'); expect(a.text()).not.toContain('Nothing that the people you follow reacted to')
+    silent.on = false; ;[...a.root.querySelectorAll('button')].find((b) => b.textContent === 'Try again')!.click(); await tick(400)
+    expect(a.text()).not.toContain('No relay answered'); expect(a.text()).toContain('Nothing that the people you follow reacted to')
+  })
+  it('a feed with notes never shows it', async () => {
+    const a = boot({ events: world, stored: { me }, silent: { on: true } }); await tick(400)
+    expect(a.root.querySelector('article.note')).not.toBeNull(); expect(a.text()).not.toContain('No relay answered')
   })
 })
 

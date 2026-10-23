@@ -595,6 +595,10 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   /** The content of one view (a feed, a thread, an account, a list…). `alive` says whether the answer is still wanted: when it is not, null comes back. */
   async function buildContent(route: Route, alive: () => boolean): Promise<HTMLElement | null> {
     if (route.name === 'search') return searchPage()
+    // an empty list is only "nothing here" if some relay answered: asked and never heard back is "no connection" (poor coverage), with a way to try again
+    const started = Date.now()
+    const unanswered = (n: number) => { const a = fetcher.activity?.(); return n === 0 && !!a && a.asked >= started && a.answered < started }
+    const noAnswer = () => h('div', { class: 'empty no-answer', role: 'status' }, h('p', {}, t(lang, 'noAnswer')), h('button', { type: 'button', onClick: refresh }, t(lang, 'searchRetry')))
     if (route.name === 'pick') {
       const pk = await pickOfDay()
       if (!alive()) return null
@@ -673,11 +677,11 @@ export function startApp(root: HTMLElement, deps: Deps): void {
           const block = renderReactionGroups(groupReactions(act, markFrom), view())
           const line = fresh.shown || fresh.hidden ? h('p', { class: 'meta new-line', role: 'status' }, [fresh.shown ? t(lang, 'newItems', { n: fresh.shown }) : '', fresh.hidden ? t(lang, 'newHidden', { n: fresh.hidden }) : ''].filter(Boolean).join(' · ')) : null
           content = h('div', { class: 'stack' }, renderSummary(tally(items), view(), toggleSettings), line, renderFollowers(fresher, view()), block, renderRepostGroups(groupReposts(act, markFrom), view()), renderList(items, view(), 'mentions'))
-        } else if (route.name === 'me') { content = renderList(items, view(), 'me'); queueReach(items.map((j) => j.event.id)) }
+        } else if (route.name === 'me') { content = unanswered(items.length) ? noAnswer() : renderList(items, view(), 'me'); queueReach(items.map((j) => j.event.id)) }
         else {
           // Following: the people you follow, or the network; in the network an empty list says why (no follow lists arrived, or just nothing new)
           const network = route.name === 'following' && feedMode === 'network'
-          const empty = network && !items.length ? h('p', { class: 'empty' }, t(lang, session!.graphInfo.answered === 0 ? 'networkNotLoaded' : 'networkEmpty')) : route.name === 'following' && feedMode === 'popular' && !items.length ? h('p', { class: 'empty' }, t(lang, 'popularEmpty')) : route.name === 'following' && feedMode === 'highlights' && !items.length ? h('p', { class: 'empty' }, t(lang, 'highlightsEmpty')) : null
+          const empty = unanswered(items.length) ? noAnswer() : network && !items.length ? h('p', { class: 'empty' }, t(lang, session!.graphInfo.answered === 0 ? 'networkNotLoaded' : 'networkEmpty')) : route.name === 'following' && feedMode === 'popular' && !items.length ? h('p', { class: 'empty' }, t(lang, 'popularEmpty')) : route.name === 'following' && feedMode === 'highlights' && !items.length ? h('p', { class: 'empty' }, t(lang, 'highlightsEmpty')) : null
           if (route.name === 'following' && feedMode === 'follows' && items.length) saveFeedCache(items)
           const pickCard = route.name === 'following' && feedMode === 'highlights' ? await pickCardEl() : null
           content = h('div', { class: 'stack' }, route.name === 'following' ? renderFeedMode(feedMode, changeFeedMode, view()) : null, pickCard, renderSummary(tally(items), view(), toggleSettings), empty ?? renderList(items, view(), route.name === 'following' ? `feed:${feedMode}` : route.name))

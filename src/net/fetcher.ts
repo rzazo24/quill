@@ -15,6 +15,9 @@ export interface Fetcher {
   /** Drops every open connection, so the next question opens fresh ones. A phone that put the app in the background may have cut them without
    *  telling it: a question sent down such a connection only times out, and "nothing came" would read as "nothing new". */
   reconnect?(): void
+  /** When (ms) a question was last sent to the relays, and when any relay last answered one. An empty view asked after `asked` with no answer since
+   *  did not hear from anybody: "nothing here" would be a lie, it is "no connection". */
+  activity?(): { asked: number; answered: number }
 }
 
 export const DEFAULT_RELAYS = [
@@ -102,15 +105,16 @@ export class RelayHealth {
 /** With `verifyMany`, the relay layer does not check signatures as they arrive (that froze the page): they are checked in one go, off the page, before anything is returned. */
 export function poolFetcher(relays: string[] | (() => string[]) = DEFAULT_RELAYS, maxWait = 6000, verifyMany?: VerifyMany, health = new RelayHealth()): Fetcher {
   const pool: SimplePool = verifyMany ? (new AbstractSimplePool({ verifyEvent: () => true, maxWaitForConnection: 3000 }) as unknown as SimplePool) : new SimplePool()
+  let asked = 0, answeredAt = 0
   const check = (filter: Filter, events: Event[]) => (verifyMany ? acceptMany(filter, events, verifyMany) : Promise.resolve(accept(filter, events)))
   const subscribe: Subscribe = (url, filter, on) => {
     let answered = false
     const sub = pool.subscribeMany([url], filter, {
-      maxWait, onevent: on.onevent, alreadyHaveEvent: on.alreadyHaveEvent,
+      maxWait, onevent: (e: Event) => { answeredAt = Date.now(); on.onevent(e) }, alreadyHaveEvent: on.alreadyHaveEvent,
       oneose: () => { answered = true; on.oneose() }, // (the pool also calls this when a relay cannot be reached: the close reason tells them apart)
       onclose: (reasons: { reason: string }[] | string) => {
         const why = typeof reasons === 'string' ? reasons : reasons?.[0]?.reason ?? ''
-        if (/closed by caller|closed automatically/i.test(why)) { if (answered) health.ok(url) } else health.fail(url) // closed by us after an answer: fine; any other reason: it failed
+        if (/closed by caller|closed automatically/i.test(why)) { if (answered) { health.ok(url); answeredAt = Date.now() } } else health.fail(url) // closed by us after an answer: fine; any other reason: it failed
         on.oneose()
       },
     } as Parameters<SimplePool['subscribeMany']>[2])
@@ -120,8 +124,10 @@ export function poolFetcher(relays: string[] | (() => string[]) = DEFAULT_RELAYS
     query: async (filter, options) => {
       const list = options?.only?.length ? options.only.filter((u) => !health.resting(u)) : health.usable([...new Set([...(typeof relays === 'function' ? relays() : relays), ...(options?.also ?? []).slice(0, 4)])])
       if (!list.length) return [] // the only relays asked for are resting: nothing to ask
+      asked = Date.now()
       return check(filter, options?.quick ?? isQuick(filter) ? await collectQuick(subscribe, list, filter, { maxWait, ...(options?.grace !== undefined ? { grace: options.grace } : {}) }) : await pool.querySync(list, filter, { maxWait }))
     },
+    activity: () => ({ asked, answered: answeredAt }),
     reconnect: () => { try { pool.close([...pool.listConnectionStatus()].filter(([, open]) => open).map(([url]) => url)) } catch { /* nothing open */ } }, // (one still connecting is fresh anyway)
   }
 }
@@ -152,6 +158,7 @@ export function memo(f: Fetcher, emptyMs = 30_000, now: () => number = Date.now)
       return hit.p
     },
     reconnect: () => f.reconnect?.(),
+    ...(f.activity ? { activity: () => f.activity!() } : {}),
     clear: () => cache.clear(),
   }
 }
