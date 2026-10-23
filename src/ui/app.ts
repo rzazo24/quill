@@ -191,6 +191,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let barsHidden = false
   const HIDE_AFTER_PX = 120, SCROLL_STEP_PX = 10
   let guestBody: HTMLElement | null = null // the note a visitor without an account came to read
+  let guestPick: HTMLElement | null = null // what a visitor without an account sees under the form: the Pick of the day
   // wide screens: three columns that are always there (each with its own content, load and scroll) and a panel on the right for a thread, an account or a list
   interface Pane { body: HTMLElement | null; run: number; resetScroll: boolean }
   const newPane = (): Pane => ({ body: null, run: 0, resetScroll: true })
@@ -449,6 +450,26 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     }, 150)
   }
 
+  /** Each entry of the Pick of the day: its title, its summary and the note itself (or a word saying the relays did not return it). */
+  function pickItems(pk: DailyPick, judged: Map<string, Judged>): HTMLElement[] {
+    return pk.items.map((it) => { const j = judged.get(it.id)
+      return h('section', { class: 'pick-item' }, h('h3', {}, it.title), it.summary ? h('p', {}, it.summary) : null, j ? renderList([j], view()) : h('p', { class: 'meta' }, t(lang, 'pickNoteMissing'))) })
+  }
+  /** A visitor without an account sees the Pick of the day under the form: something worth reading before choosing anything (nothing filtered, as a guest). */
+  async function loadGuestPick(mine: number): Promise<void> {
+    if (guestPick) return draw()
+    try {
+      const pk = await pickOfDay()
+      if (mine !== run || !pk) return draw()
+      const notes = await loadPickNotes(fetcher, pk.items).catch(() => new Map<string, NostrEvent>())
+      const judged = new Map(judgeAll([...notes.values()], GUEST_CONTEXT, GUEST_SETTINGS).map((j) => [j.event.id, j]))
+      await nameThem([...judged.values()])
+      if (mine !== run || me) return
+      guestPick = h('div', { class: 'stack pick guest-pick' }, h('h2', { class: 'section' }, t(lang, 'pickTitle'), ' ', h('span', { class: 'meta' }, pk.date)), h('p', { class: 'meta' }, t(lang, 'guestPickHelp')), ...pickItems(pk, judged))
+    } catch { /* no pick: the form alone */ }
+    draw()
+  }
+
   async function loadGuestNote(id: string, mine: number): Promise<void> {
     guestBody = h('p', { class: 'status loading', role: 'status' }, h('span', {}, t(lang, 'loadingFeed'))); draw()
     let out: HTMLElement
@@ -611,8 +632,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       return h('div', { class: 'stack pick' }, wide() ? null : backLink(), // on a wide screen the column has its own ×
         wide() ? h('p', { class: 'meta' }, pk.date) : h('h2', { class: 'section' }, t(lang, 'pickTitle'), ' ', h('span', { class: 'meta' }, pk.date)), // on a wide screen the column already says what it is
         h('p', { class: 'meta' }, t(lang, 'pickHelp')),
-        ...pk.items.map((it) => { const j = judged.get(it.id)
-          return h('section', { class: 'pick-item' }, h('h3', {}, it.title), it.summary ? h('p', {}, it.summary) : null, j ? renderList([j], view()) : h('p', { class: 'meta' }, t(lang, 'pickNoteMissing'))) }))
+        ...pickItems(pk, judged))
     }
     if (route.name === 'saved') {
       const list = savedNotes()
@@ -708,7 +728,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (!me) {
       const r = parseRoute(deps.location.hash)
       if (r.name === 'note') return void loadGuestNote(r.id, mine)
-      guestBody = null; return draw()
+      guestBody = null; return void loadGuestPick(mine)
     }
     if (!panes.following.body && feedMode === 'follows') { const cached = cachedFeed(); if (cached) { panes.following.body = cached; draw() } }
     if (!(await ensureSession()) || !session) return
@@ -753,7 +773,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (!me) {
       const r = parseRoute(deps.location.hash)
       if (r.name === 'note') return void loadGuestNote(r.id, mine)
-      guestBody = null; return draw()
+      guestBody = null; return void loadGuestPick(mine)
     }
     const first = parseRoute(deps.location.hash)
     if (!body && first.name === 'following' && feedMode === 'follows') { const cached = cachedFeed(); if (cached) { body = cached; shownRoute = JSON.stringify(first); draw() } }
@@ -1557,6 +1577,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     const input = h('input', { type: 'text', placeholder: t(lang, 'loginPlaceholder'), autocomplete: 'off', spellcheck: 'false', 'aria-label': t(lang, 'loginTitle') })
     const loginForm = h('form', { class: 'login card', onSubmit: (e: Event) => { e.preventDefault(); login(input.value) } },
       h('p', { class: 'tagline' }, t(lang, 'tagline')), h('h2', {}, t(lang, 'loginTitle')), h('p', {}, t(lang, 'loginHelp')), input, ' ', h('button', { type: 'submit', class: 'primary' }, t(lang, 'loginButton')),
+      h('details', { class: 'newcomer' }, h('summary', {}, t(lang, 'newTitle')), h('ol', {}, h('li', {}, t(lang, 'newStep1')), h('li', {}, t(lang, 'newStep2')), h('li', {}, t(lang, 'newStep3')))),
       loginError ? h('p', { class: 'error', role: 'alert' }, loginError) : null)
     const signArea = signer ? renderSignArea({
       emojiPicker: isWide, signer: signer.state, who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, zapFlow, flash, composer, review, step, result, relays, bunkerText, linkOpen, confirmDisconnect: confirmingDisconnect, shareConfirm, deleteConfirm, followPanel: followPanel(),
@@ -1570,7 +1591,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
       confirmZap: () => void confirmZap(), cancelZap: () => { if (zapFlow?.stage !== 'working') { zapFlow = null; draw() } },
     }, view(), true, !me || route.name === 'me' || isWide ? 'me' : 'feed', !!me && !isWide && ['following', 'mentions', 'note', 'user', 'me', 'people'].includes(route.name)) : null
     const pills = h('div', { class: 'lang', role: 'group', 'aria-label': 'Language' }, ...(['en', 'es'] as const).map((l) =>
-      h('button', { type: 'button', 'aria-pressed': String(lang === l), onClick: () => { if (lang !== l) { lang = l; safeSet(kv, 'lang', lang); void load() } } }, l.toUpperCase())))
+      h('button', { type: 'button', 'aria-pressed': String(lang === l), onClick: () => { if (lang !== l) { lang = l; safeSet(kv, 'lang', lang); guestPick = null; void load() } } }, l.toUpperCase())))
     const statusEl = me && status ? h('p', { class: 'status loading', role: 'status' }, h('span', {}, status)) : null
     const doSignOut = () => { confirmingSignOut = false; safeSet(kv, feedCacheKey(), null); me = null; session = null; body = null; shownRoute = ''; forgetAccount(); safeSet(kv, 'me', null); void signer?.disconnect(); composer = review = result = null; flash = null; deps.setHash(''); draw() }
     const signOut = confirmingSignOut
@@ -1579,7 +1600,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
       : h('button', { type: 'button', class: 'danger', onClick: () => { confirmingSignOut = true; draw() } }, t(lang, 'signOut'))
     const helpPage = renderHelp(view(), helpOpen, (id, isOpen) => { if (isOpen) helpOpen.add(id); else helpOpen.delete(id) })
     const content: (HTMLElement | null)[] = route.name === 'help' ? [signArea, helpPage]
-      : !me ? [...(route.name === 'note' && guestBody ? [guestBody] : []), loginForm, signArea]
+      : !me ? [...(route.name === 'note' && guestBody ? [guestBody] : []), loginForm, signArea, route.name === 'note' ? null : guestPick]
       : route.name === 'settings' ? [signArea, renderPrefs({ font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, realAvatars, onRealAvatars: changeRealAvatars, scheme, onScheme: changeScheme, halloween: halloween(), onHalloween: changeTheme, autoImages, onAutoImages: changeAutoImages, interests, onInterests: changeInterests, reposts: showReposts, onReposts: changeReposts, clientTag, onClientTag: changeClientTag, outbox: readOutbox, onOutbox: changeOutbox, nwc: { relay: nwcOf()?.relays[0] ?? null, state: nwcState, error: nwcError, canSign: signer?.state === 'connected' }, onNwcSave: saveNwc, onNwcRemove: removeNwc, onNwcTest: () => void testNwc(), relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
         onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderRescue({ state: rescue, saving: rescueSaving, savedCount: rescueSaved, onScan: () => void scanRescue(), onCopy: () => void copyRescue(), onSave: () => void saveRescue() }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]

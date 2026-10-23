@@ -1556,6 +1556,16 @@ describe('the Pick of the day', () => {
     expect(a.root.querySelector('.pick-item article.note')!.textContent).toContain('a carefully argued note about relays')
     expect(a.text()).toContain('the relays did not return this note') // the second one is not on the relays
   })
+  it('a visitor without an account sees it under the form, with the guide for newcomers, and in Spanish after switching', async () => {
+    const a = boot({ events: [...world, picked], pick: file }); await tick(500)
+    expect(a.root.querySelector('form.login')).not.toBeNull(); expect(a.root.querySelector('details.newcomer summary')!.textContent).toBe('New to Nostr? Start here')
+    const pick = a.root.querySelector('.guest-pick')!
+    expect(pick.textContent).toContain('Why relays matter'); expect(pick.querySelector('article.note')!.textContent).toContain('a carefully argued note about relays')
+    ;[...a.root.querySelectorAll('.lang button')].find((b) => b.textContent === 'ES')!.dispatchEvent(new Event('click')); await tick(500)
+    expect(a.root.querySelector('.guest-pick')!.textContent).toContain('Por qué importan los relés')
+    const b = boot({ pick: null }); await tick(400)
+    expect(b.root.querySelector('.guest-pick')).toBeNull(); expect(b.root.querySelector('form.login')).not.toBeNull()
+  })
   it('in Spanish, the Spanish words; without a file, no card', async () => {
     const a = boot({ events: [...world, picked], stored: { me, lang: 'es' }, pick: file }); await tick(300); await a.go('#/pick'); await tick(300)
     expect(a.text()).toContain('Por qué importan los relés')
