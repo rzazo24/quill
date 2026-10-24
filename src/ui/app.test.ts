@@ -21,7 +21,8 @@ const pickFilter = (a: { root: HTMLElement }, label: string) => ([...a.root.quer
 function boot(opts: { silent?: { on: boolean }; events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; copy?: (text: string) => void; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; light?: { value: boolean }; elsewhere?: { relay: string; events: Event[]; delayMs: number }; avatarProxy?: string; pick?: unknown; saveFile?: (name: string, text: string) => void } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
-  const mem = new Map(Object.entries(opts.stored ?? {})), visible: ((awayMs: number) => void)[] = [], reconnects = { n: 0 }, ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], schemeChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs, opts.slowFor, opts.onlyWhenAll), calls = { n: 0 }, filters: Filter[] = []
+  // the tests do not depend on today's date: without a clock of their own, the Halloween season (late October) is not let in by itself
+  const mem = new Map(Object.entries({ ...(opts.clock || opts.stored?.theme ? {} : { theme: 'default' }), ...(opts.stored ?? {}) })), visible: ((awayMs: number) => void)[] = [], reconnects = { n: 0 }, ticks: (() => void)[] = [], polls: (() => void)[] = [], wideChanged: (() => void)[] = [], schemeChanged: (() => void)[] = [], reloads = { n: 0 }, asked = { n: 0 }, setRelays: string[][] = [], base = relays(opts.events ?? world, opts.delayMs, opts.slowFor, opts.onlyWhenAll), calls = { n: 0 }, filters: Filter[] = []
   startApp(root, {
     ...(opts.avatarProxy ? { avatarProxy: opts.avatarProxy } : {}),
     ...(opts.pick !== undefined ? { pickSource: async () => opts.pick } : {}),
@@ -59,7 +60,7 @@ describe('the app', () => {
       input.value = bad; form.dispatchEvent(new Event('submit', { cancelable: true })); await tick(5)
       expect(a.root.querySelector('.error')).not.toBeNull()
     }
-    expect(a.mem.size).toBe(0)
+    expect([...a.mem.keys()].filter((k) => k !== 'theme')).toEqual([]) // (theme: the test's own setting, see boot)
   })
   it('logs in with an npub, shows the feed, remembers who you are', async () => {
     const a = boot()
