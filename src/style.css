@@ -218,7 +218,7 @@ button.icon.on { color: var(--accent); border-color: var(--accent); background: 
 .quoted-from > .meta { margin: 0 }
 
 /* write: a round button over the page, and the panel it opens */
-.fab { position: fixed; z-index: 6; right: max(16px, calc((100% - var(--col)) / 2 + 16px)); bottom: calc(var(--tab-h) + var(--tab-safe) + 16px); width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: var(--accent); border-color: var(--accent); color: var(--on-accent); box-shadow: 0 4px 16px rgba(0,0,0,.5) }
+.fab { position: fixed; z-index: 6; right: max(calc(16px + env(safe-area-inset-right)), calc((100% - var(--col)) / 2 + 16px)); /* sideways on a phone with a notch, clear of it */ bottom: calc(var(--tab-h) + var(--tab-safe) + 16px); width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: var(--accent); border-color: var(--accent); color: var(--on-accent); box-shadow: 0 4px 16px rgba(0,0,0,.5) }
 .sheet { position: fixed; inset: 0; z-index: 9; display: flex; align-items: flex-start; justify-content: center; padding: calc(env(safe-area-inset-top) + 56px) 16px 16px; background: var(--scrim); overflow: auto }
 .sheet > * { width: min(100%, var(--col)); box-sizing: border-box; padding: 14px; border-radius: 14px; background: var(--panel); border: 1px solid var(--border); max-height: 100%; overflow: auto }
 
@@ -359,7 +359,7 @@ a.quote { display: grid; gap: 4px; margin: 8px 0 4px; padding: 10px 12px; border
 .reach-who p { align-items: center }
 
 /* search: a round button bottom left, the mirror of the write button (outlined: writing stays the main action), and its page */
-.fab-search { position: fixed; z-index: 6; left: max(16px, calc((100% - var(--col)) / 2 + 16px)); bottom: calc(var(--tab-h) + var(--tab-safe) + 16px); width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: var(--panel); border: 2px solid var(--accent); color: var(--accent); box-shadow: 0 4px 16px rgba(0,0,0,.5) }
+.fab-search { position: fixed; z-index: 6; left: max(calc(16px + env(safe-area-inset-left)), calc((100% - var(--col)) / 2 + 16px)); bottom: calc(var(--tab-h) + var(--tab-safe) + 16px); width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: var(--panel); border: 2px solid var(--accent); color: var(--accent); box-shadow: 0 4px 16px rgba(0,0,0,.5) }
 .search-form { display: grid; gap: 8px } .search-form .meta { margin: 0 }
 .search-row { display: flex; align-items: center; gap: 10px; color: var(--muted) }
 .search-box { flex: 1; min-width: 0; font: inherit; font-size: 1rem; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text) }
