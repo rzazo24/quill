@@ -2,10 +2,10 @@
 // user's remote signer. State lives here; everything else is a function of it.
 import { nip19, verifyEvent, type Event as NostrEvent } from 'nostr-tools'
 import { canRepost, repostTemplate } from '../core/repost.js'
-import { hashtagTags, mentionTags, mergeTags, quoteContent, quoteTags, reactionTags, replyTags } from '../core/compose.js'
+import { commentTags, hashtagTags, mentionTags, mergeTags, quoteContent, quoteTags, reactionTags, replyTags } from '../core/compose.js'
 import { parseIdentity } from '../core/identity.js'
 import { mentionedKeys, refs, shortNpub } from '../core/refs.js'
-import { isReply, threadRefs } from '../core/thread.js'
+import { COMMENT_KIND, isReply, threadRefs } from '../core/thread.js'
 import { judgeAll, tally, type Context, type Judged, type Settings } from '../core/verdict.js'
 import { loadNetwork } from '../data/network.js'
 import { loadHighlights } from '../data/highlights.js'
@@ -1221,6 +1221,8 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     const created_at = Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
     // a quote is a note of its own (not a reply): the comment, then a reference to the quoted note, with the q tag that points at it
     if (mode === 'quote' && target) { const hint = relays[0] ?? ''; return { kind: 1, content: quoteContent(text, target, hint), tags: mergeTags(quoteTags(target, hint), auto), created_at } }
+    // an answer to a NIP-22 comment is a comment too (same kind as what it answers); to a note, a classic reply
+    if (target?.kind === COMMENT_KIND) return { kind: COMMENT_KIND, content: text, tags: mergeTags(commentTags(target), auto), created_at }
     return { kind: 1, content: text, tags: target ? mergeTags(replyTags(target), auto) : auto, created_at }
   }
 

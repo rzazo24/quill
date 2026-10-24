@@ -1,5 +1,6 @@
 // What Quill is willing to ask a signer to sign. The user's signer decides what it approves (low/medium/full trust); this is Quill's own rule,
 // so that even a signer set to approve everything is only ever asked for notes, reactions, reposts of a real note and the reader's relay list, in the shapes Quill builds itself.
+import { COMMENT_KIND } from '../core/thread.js'
 import { isReactionContent } from '../core/compose.js'
 import { nip19 } from 'nostr-tools'
 import { followChange, FOLLOW_LIST_KIND, MUTE_LIST_KIND } from '../core/follow.js'
@@ -12,7 +13,7 @@ import { checkZapRequest, ZAP_REQUEST_KIND } from '../core/zapsend.js'
 
 /** NIP-65: the list of relays a person writes to and reads from. */
 export const RELAY_LIST_KIND = 10002
-export const ALLOWED_KINDS = [PROFILE_KIND, 1, FOLLOW_LIST_KIND, DELETION_KIND, REPOST_KIND, 7, MUTE_LIST_KIND, RELAY_LIST_KIND, ZAP_REQUEST_KIND] as const
+export const ALLOWED_KINDS = [PROFILE_KIND, 1, COMMENT_KIND, FOLLOW_LIST_KIND, DELETION_KIND, REPOST_KIND, 7, MUTE_LIST_KIND, RELAY_LIST_KIND, ZAP_REQUEST_KIND] as const
 export const MAX_NOTE_CHARS = 1000
 export const MAX_SIGNATURES_PER_HOUR = 20
 /** Reactions have their own allowance: a run of likes never stops a note, and a like is the least that can be signed. */
@@ -22,12 +23,12 @@ export interface Template { kind: number; content: string; tags: string[][]; cre
 
 export type Problem = 'zap' | 'kind' | 'empty' | 'too-long' | 'reaction' | 'tags' | 'reaction-target' | 'relay-list' | 'quote' | 'follow' | 'profile' | 'delete' | RepostProblem
 
-const TAG_NAMES = new Set(['e', 'p', 't', 'k', 'a', 'q'])
+const TAG_NAMES = new Set(['e', 'p', 't', 'k', 'a', 'q', 'E', 'A', 'I', 'K', 'P']) // the upper-case ones: the root of a NIP-22 comment
 /** NIP-89: says the event was made with Quill (a setting, on by default). Allowed exactly like this, once, on notes and reactions. */
 export const CLIENT_TAG = ['client', 'Quill'] as const
 const isClientTag = (tag: string[]) => tag.length === 2 && tag[0] === CLIENT_TAG[0] && tag[1] === CLIENT_TAG[1]
 /** The template with the client tag at the end, for a note or a reaction that does not carry it yet; anything else as it is. */
-export const withClientTag = <T extends Template>(t: T): T => ((t.kind === 1 || t.kind === 7) && !t.tags.some(isClientTag) ? { ...t, tags: [...t.tags, [...CLIENT_TAG]] } : t)
+export const withClientTag = <T extends Template>(t: T): T => ((t.kind === 1 || t.kind === COMMENT_KIND || t.kind === 7) && !t.tags.some(isClientTag) ? { ...t, tags: [...t.tags, [...CLIENT_TAG]] } : t)
 const HEX64 = /^[0-9a-f]{64}$/
 
 /** The ids of the notes a text points at with NIP-21 references (nostr:nevent1… / nostr:note1…). */
@@ -62,7 +63,11 @@ export function checkTemplate(t: Template, ctx: CheckContext = {}): Problem | nu
   if (t.tags.filter((tag) => Array.isArray(tag) && isClientTag(tag)).length > 1) return 'tags'
   if (t.tags.length > 40 || !t.tags.every((tag) => Array.isArray(tag) && (isClientTag(tag) || (tag.length >= 2 && tag.length <= 4 && tag.every((v) => typeof v === 'string' && v.length <= 300) && TAG_NAMES.has(tag[0]!))))) return 'tags'
   if (t.kind !== 1 && t.tags.some((x) => x[0] === 'q')) return 'tags'
-  if (t.kind === 1) {
+  if (t.kind === COMMENT_KIND) { // an answer to a comment: one parent (e, k, p) and a root scope (K plus E, A or I)
+    const has = (n: string) => t.tags.filter((x) => x[0] === n).length
+    if (has('e') !== 1 || has('k') !== 1 || has('K') !== 1 || has('E') + has('A') + has('I') !== 1 || !t.tags.some((x) => x[0] === 'e' && HEX64.test(x[1] ?? ''))) return 'tags'
+  }
+  if (t.kind === 1 || t.kind === COMMENT_KIND) {
     if (t.tags.some((x) => x[0] === 'q') && !checkQuote(t)) return 'quote'
     if (!t.content.trim()) return 'empty'
     if ([...t.content].length > MAX_NOTE_CHARS) return 'too-long'

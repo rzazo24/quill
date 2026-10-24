@@ -37,6 +37,17 @@ export function replyTags(target: Event): string[][] {
   return tags
 }
 
+/**
+ * NIP-22 tags for an answer to a comment (kind 1111): the answer is a comment too, so the clients that only follow comments keep it in the
+ * thread. The root scope is copied from the comment (its upper-case E/A/I, K and P tags); the parent is the comment itself (e with its
+ * author, k 1111, p). A reply to a classic note stays a kind 1 reply (see replyTags): NIP-22 says comments are not for kind 1 notes.
+ */
+export function commentTags(target: Event): string[][] {
+  if (target.kind !== 1111) throw new Error(`commentTags answers a comment (kind 1111), not a kind ${target.kind}`)
+  const root = target.tags.filter((t) => ['E', 'A', 'I', 'K', 'P'].includes(t[0] ?? '') && typeof t[1] === 'string' && t[1] !== '').map((t) => t.slice(0, 4))
+  return [...root, ['e', target.id, '', target.pubkey], ['k', '1111'], ['p', target.pubkey]]
+}
+
 /** `#word` in the text becomes a lower-case `t` tag (NIP-24); pure numbers (`#1`) are not hashtags. */
 export function hashtagTags(content: string): string[][] {
   const out: string[][] = []

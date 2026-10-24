@@ -86,3 +86,18 @@ describe('the client tag (NIP-89)', () => {
     expect(checkTemplate(note('hello', [['client', 'Quill', 'extra']]))).toBe('tags')
   })
 })
+
+describe('comments (NIP-22, kind 1111): only as an answer to a comment', () => {
+  const id = 'a'.repeat(64), pk = 'b'.repeat(64)
+  const good = { kind: 1111, content: 'agreed', created_at: 1, tags: [['E', id, '', pk], ['K', '1'], ['P', pk], ['e', 'c'.repeat(64), '', pk], ['k', '1111'], ['p', pk]] }
+  it('accepts a well-formed one and tags it like a note', () => {
+    expect(checkTemplate(good)).toBeNull()
+    expect(withClientTag(good).tags.some((t) => t[0] === 'client')).toBe(true)
+  })
+  it('refuses one with no parent, no root kind, two roots, or no text', () => {
+    expect(checkTemplate({ ...good, tags: good.tags.filter((t) => t[0] !== 'e') })).toBe('tags')
+    expect(checkTemplate({ ...good, tags: good.tags.filter((t) => t[0] !== 'K') })).toBe('tags')
+    expect(checkTemplate({ ...good, tags: [...good.tags, ['A', `30023:${pk}:x`]] })).toBe('tags')
+    expect(checkTemplate({ ...good, content: '  ' })).toBe('empty')
+  })
+})

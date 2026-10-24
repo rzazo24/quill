@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { finalizeEvent, generateSecretKey, getPublicKey, nip19, type Event } from 'nostr-tools'
-import { hashtagTags, isReactionContent, mentionTags, mergeTags, quoteContent, quoteRef, quoteReserve, quoteTags, reactionTags, replyTags } from './compose.js'
+import { hashtagTags, isReactionContent, mentionTags, mergeTags, quoteContent, quoteRef, quoteReserve, quoteTags, reactionTags, replyTags, commentTags } from './compose.js'
 
 const key = () => { const sk = generateSecretKey(); return { sk, pk: getPublicKey(sk) } }
 const ev = (k: { sk: Uint8Array }, kind: number, content: string, created_at: number, tags: string[][] = []) => finalizeEvent({ kind, content, created_at, tags }, k.sk)
@@ -79,5 +79,20 @@ describe('quotes', () => {
   })
   it('the content is the comment, a blank line and the reference; the reserve is what the reference takes', () => {
     const c = quoteContent('  my comment  ', target, ''); expect(c).toBe(`my comment\n\n${quoteRef(target, '')}`); expect([...c].length).toBe([...'my comment'].length + quoteReserve(target, ''))
+  })
+})
+
+describe('an answer to a NIP-22 comment', () => {
+  const note = 'a'.repeat(64), author = 'b'.repeat(64), commenter = 'c'.repeat(64)
+  const comment = { id: 'd'.repeat(64), pubkey: commenter, kind: 1111, content: 'nice', created_at: 1, sig: '', tags: [['E', note, 'wss://r.example', author], ['K', '1'], ['P', author], ['e', note, 'wss://r.example', author], ['k', '1'], ['p', author]] } as Event
+  it('is a comment on the same root, whose parent is the comment', () => {
+    expect(commentTags(comment)).toEqual([['E', note, 'wss://r.example', author], ['K', '1'], ['P', author], ['e', comment.id, '', commenter], ['k', '1111'], ['p', commenter]])
+  })
+  it('a comment on an article keeps its A root', () => {
+    const onArticle = { ...comment, tags: [['A', `30023:${author}:post`], ['K', '30023'], ['P', author], ['a', `30023:${author}:post`], ['k', '30023'], ['p', author]] } as Event
+    expect(commentTags(onArticle).slice(0, 3)).toEqual([['A', `30023:${author}:post`], ['K', '30023'], ['P', author]])
+  })
+  it('only answers comments: a note gets a classic reply', () => {
+    expect(() => commentTags({ ...comment, kind: 1 } as Event)).toThrow()
   })
 })
