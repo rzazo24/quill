@@ -120,7 +120,7 @@ h2.section { font-size: 1.05rem; margin-top: 8px } .foot { margin: 8px 0 0 }
 .bunker h3 { color: var(--text) } .by-link summary { display: inline-flex; align-items: center; cursor: pointer; list-style: none; min-height: 36px; padding: 0 12px; background: var(--btn); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: .9rem }
 .by-link summary::-webkit-details-marker { display: none }
 .result ul { margin: 0; padding-left: 0; list-style: none; font-size: .9rem }
-.sign .toast { position: fixed; left: 0; right: 0; bottom: calc(var(--tab-h) + var(--tab-safe) + 1px); z-index: 7; max-height: 45vh; overflow: auto; padding: 10px 14px; background: var(--panel);
+.sign .toast { position: fixed; left: 0; right: 0; bottom: calc(var(--tab-h) + var(--tab-safe) + 1px); z-index: 7; max-height: 45vh; overflow: auto; padding: 10px max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left)); background: var(--panel); /* sideways on a phone with a notch, the box stays clear of it */
   border-top: 2px solid var(--accent); box-shadow: 0 -6px 16px rgba(0,0,0,.35); display: grid; gap: 6px }
 .sign .toast > * { max-width: var(--col); margin: 0 auto; width: 100% }
 .login input { margin-top: 2px } .graph { font-size: .85rem }
@@ -474,3 +474,6 @@ article.note.here { border-color: var(--accent); box-shadow: 0 0 0 1px var(--acc
 .no-answer p { margin: 0 0 8px; }
 .newcomer summary { cursor: pointer; color: var(--text) } .newcomer ol { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 6px; color: var(--muted) }
 .guest-pick { margin-top: 16px }
+
+/* a phone on its side: little height, so the composer may take more of it (the keyboard covers the rest anyway) */
+@media (orientation: landscape) and (max-height: 500px) { .sign .toast { max-height: 70vh } .sign textarea { min-height: 72px } }
