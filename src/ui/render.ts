@@ -453,7 +453,8 @@ export function renderHelp(v: View, open: ReadonlySet<string>, onToggle: (id: st
       h('summary', {}, s.title),
       ...helpBlocks(s.body).map((b) => (b.kind === 'p' ? h('p', {}, b.text) : h('ul', {}, ...b.items.map((i) => h('li', {}, i))))))),
     // the one real link in the app: it leaves Quill, so it opens in a new tab and tells the other site nothing about this one
-    h('p', { class: 'help-foot' }, t(v.lang, 'helpSource'), ' ', h('a', { href: SOURCE_URL, target: '_blank', rel: 'noopener noreferrer' }, SOURCE_URL.replace('https://', ''))))
+    h('p', { class: 'help-foot' }, t(v.lang, 'helpSource'), ' ', h('a', { href: SOURCE_URL, target: '_blank', rel: 'noopener noreferrer' }, SOURCE_URL.replace('https://', ''))),
+    h('p', { class: 'help-foot' }, h('a', { href: v.lang === 'es' ? '/privacy-es.html' : '/privacy.html' }, t(v.lang, 'privacyPolicy'))))
 }
 export const SOURCE_URL = 'https://github.com/rzazo24/quill'
 

@@ -357,7 +357,7 @@ describe('the help page', () => {
   it('the text is shown as text, never as markup', async () => {
     const a = boot({ stored: { me } }); await tick(80); help(a).click(); await tick(60)
     expect(a.root.querySelector('.help script, .help img')).toBeNull(); const links = [...a.root.querySelectorAll('.help a')] as HTMLAnchorElement[]
-    expect(links).toHaveLength(1); expect(links[0]!.getAttribute('href')).toBe('https://github.com/rzazo24/quill'); expect(links[0]!.getAttribute('target')).toBe('_blank'); expect(links[0]!.getAttribute('rel')).toBe('noopener noreferrer'); expect(links[0]!.textContent).toBe('github.com/rzazo24/quill'); expect(a.root.querySelectorAll('.help li').length).toBeGreaterThan(20)
+    expect(links).toHaveLength(2); expect(links[1]!.getAttribute('href')).toBe('/privacy.html'); expect(links[0]!.getAttribute('href')).toBe('https://github.com/rzazo24/quill'); expect(links[0]!.getAttribute('target')).toBe('_blank'); expect(links[0]!.getAttribute('rel')).toBe('noopener noreferrer'); expect(links[0]!.textContent).toBe('github.com/rzazo24/quill'); expect(a.root.querySelectorAll('.help li').length).toBeGreaterThan(20)
   })
 })
 
@@ -1537,6 +1537,15 @@ describe('switching what Following shows', () => {
     ;[...a.root.querySelectorAll('.feedmode button')].find((b) => b.textContent === 'Popular')!.dispatchEvent(new Event('click')); await tick(20)
     expect([...a.root.querySelectorAll('.feedmode button')].find((b) => b.textContent === 'Popular')!.getAttribute('aria-pressed')).toBe('true')
     expect(a.root.querySelector('main .status.loading')).not.toBeNull(); expect(a.root.querySelector('main article.note')).toBeNull()
+  })
+})
+
+describe('the privacy policy', () => {
+  it('Help links to it, in the reader\'s language', async () => {
+    const a = boot({ stored: { me } }); await tick(200); await a.go('#/help'); await tick(100)
+    expect(a.root.querySelector('a[href="/privacy.html"]')!.textContent).toBe('Privacy policy')
+    const b = boot({ stored: { me, lang: 'es' } }); await tick(200); await b.go('#/help'); await tick(100)
+    expect(b.root.querySelector('a[href="/privacy-es.html"]')!.textContent).toBe('Política de privacidad')
   })
 })
 

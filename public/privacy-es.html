@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quill · Política de privacidad</title><link rel="stylesheet" href="/privacy.css"><link rel="icon" href="/favicon.svg" type="image/svg+xml"></head>
+<body><main>
+<h1>Política de privacidad de Quill</h1>
+<p class="meta">Última actualización: 2026-10-24 · <a href="/privacy.html">In English</a> · <a href="/">Volver a Quill</a></p>
+
+<h2>Quién está detrás de Quill</h2>
+<p>Quill lo hace y lo mantiene una persona, no una empresa. No hay cuentas de Quill. Contacto en Nostr: <code>npub1v7nf76fh474q4dnqfjpnkyqsmg439n5uw9x9jdpvzmmgczvrwhcsuhvl8a</code>. El código fuente es público: <a rel="noopener noreferrer" href="https://github.com/rzazo24/quill">github.com/rzazo24/quill</a>.</p>
+
+<h2>Tus claves</h2>
+<ul>
+<li>Quill nunca te pide la clave privada (nsec) ni la ve. Para leer solo hace falta tu clave pública (npub).</li>
+<li>Para escribir, Quill envía cada evento a tu firmador (NIP-46: Amber, Primal, Clave, nsec.app o tu propio bunker), que guarda la clave y lo firma.</li>
+</ul>
+
+<h2>Qué se queda en tu dispositivo</h2>
+<p>Tus ajustes, la cuenta con la que lees, los borradores, las notas guardadas, las palabras silenciadas, la conexión con tu firmador y, si la configuras, la conexión de tu cartera (Nostr Wallet Connect) se guardan en el almacenamiento del navegador de este dispositivo. No se envían al servidor de Quill. Borrar los datos del sitio los elimina.</p>
+
+<h2>Qué ven los relés</h2>
+<p>Como cualquier cliente de Nostr, Quill lee de relés y publica en ellos: de serie relay.hivescope.xyz (que lleva la misma persona que Quill), relay.primal.net, nos.lol, nostr.mom, nostr.oxtr.dev y nostr.bitcoiner.social, y los que añadas en Ajustes. Cuando hace falta pregunta también a otros: purplepag.es para las listas de seguidos, los relés donde escriben las personas que sigues (un ajuste, activado de serie), relés grandes para las notas de la Selección del día y relés de búsqueda cuando buscas en toda la red. Cada relé ve tu dirección IP, lo que pides y lo que publicas, según sus propias normas. Lo que publicas en Nostr es público y se puede copiar en cualquier parte.</p>
+
+<h2>Qué hace el servidor de Quill</h2>
+<ul>
+<li><strong>La web:</strong> sirve los archivos de Quill. El servidor web no guarda registro de accesos.</li>
+<li><strong>Fotos de perfil</strong> (desactivadas de serie): si activas las fotos de perfil reales, el servidor de Quill pide cada foto por ti y te devuelve una copia pequeña, así que el sitio de la foto ve la dirección del servidor y no la tuya. El servidor ve qué fotos se piden, guarda las copias pequeñas 7 días y solo anota el sitio de una foto que no se pudo cargar.</li>
+<li><strong>Selección del día:</strong> cada mañana un modelo de IA (Claude, de Anthropic) elige notas entre notas públicas de Nostr, en el servidor. No se le envía nada sobre ti; la selección es un archivo público, la misma para todos.</li>
+<li><strong>Versiones nuevas:</strong> Quill consulta un pequeño archivo público (<code>/version.json</code>) para saber si hay una versión nueva. No se envía nada sobre ti.</li>
+<li><strong>relay.hivescope.xyz</strong> guarda los eventos que se publican en él (se borran a los 180 días, salvo perfiles y listas) y anota un fragmento corto de la clave de los eventos que rechaza, para frenar el spam.</li>
+</ul>
+
+<h2>Lo que publicas</h2>
+<p>Las notas y reacciones escritas con Quill llevan una etiqueta pública <code>["client","Quill"]</code>, para que otras apps puedan mostrar que se escribieron con Quill. Está activada de serie y se puede quitar en Ajustes.</p>
+
+<h2>Lo que Quill no hace</h2>
+<p>Sin cookies, sin analítica, sin publicidad, sin rastreo y sin venta de datos. La web no carga nada de otros sitios salvo los relés que usa y las imágenes y vídeos de las notas cuando eliges mostrarlos.</p>
+
+<h2>Cambios</h2>
+<p>Los cambios de esta política se fechan aquí y quedan en el historial público del código fuente.</p>
+</main></body></html>
