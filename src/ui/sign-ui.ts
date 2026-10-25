@@ -32,6 +32,8 @@ export interface Flash { kind: 'error' | 'info'; text: string }
 
 export interface SignUiState {
   signer: 'disconnected' | 'connecting' | 'connected'
+  /** A NIP-07 extension is in this browser: offer it first */
+  extension?: boolean
   who: string | null
   connect: { uri: string; claveLink: string } | null
   connectOpen: boolean
@@ -60,7 +62,7 @@ export interface SignUiState {
 export interface SignUiHandlers {
   openConnect(): void; cancelConnect(): void; bunker(text: string): void; dismissFlash(): void; confirmFollow(): void; acceptList(): void; cancelFollow(): void; confirmShare(): void; confirmDelete(): void; cancelDelete(): void; startQuote(): void; cancelShare(): void; askDisconnect(): void; cancelDisconnect(): void; disconnect(): void; copy(text: string): void
   edit(text: string): void; discardDraft(): void; review(): void; publish(): void; back(): void; cancelComposer(): void; retry(): void; dismissResult(): void
-  startNote(): void; cancelSigning(): void; startLink(): void; pasteBunker(): void; editBunker(text: string): void; setLinkOpen(open: boolean): void
+  startNote(): void; cancelSigning(): void; startLink(): void; useExtension?(): void; pasteBunker(): void; editBunker(text: string): void; setLinkOpen(open: boolean): void
   zapPick?(sats: number): void; zapCustom?(sats: number): void; zapComment?(text: string): void; confirmZap?(): void; cancelZap?(): void
 }
 
@@ -109,6 +111,10 @@ function renderConnect(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement
   input.value = s.bunkerText
   return h('div', { class: 'connect' },
     h('h2', {}, t(v.lang, 'connectTitle')), h('p', {}, t(v.lang, 'connectHelp')),
+    // a computer with a Nostr extension: one tap, and the key stays in the extension
+    s.extension && hd.useExtension ? h('div', { class: 'bunker extension' },
+      h('h3', {}, t(v.lang, 'extTitle')), h('p', { class: 'meta' }, t(v.lang, 'extHelp')),
+      h('p', {}, h('button', { type: 'button', class: 'primary', onClick: hd.useExtension }, t(v.lang, 'extButton')))) : null,
     // The way Clave documents for signing from the background: a bunker:// address copied in Clave.
     h('div', { class: 'bunker' },
       h('h3', {}, t(v.lang, 'bunkerTitle')), h('p', { class: 'meta' }, t(v.lang, 'bunkerHelp')),

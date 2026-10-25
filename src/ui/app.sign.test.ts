@@ -24,7 +24,7 @@ async function connectClave(a: ReturnType<typeof boot>, sg: ReturnType<typeof fa
 }
 
 /** A signer that does what the test tells it to: connects when asked, signs (or not), and records what it was asked. */
-function fakeSigner(over: { pubkey?: string; signError?: string; saved?: boolean; hang?: boolean; hangFirst?: boolean } = {}) {
+function fakeSigner(over: { pubkey?: string; signError?: string; saved?: boolean; hang?: boolean; hangFirst?: boolean; extension?: boolean } = {}) {
   let signCalls = 0
   const listeners: (() => void)[] = []
   const log: string[] = []
@@ -42,6 +42,8 @@ function fakeSigner(over: { pubkey?: string; signError?: string; saved?: boolean
       if (over.signError) throw new Error(over.signError)
       return { event: { ...ev(over.pubkey ?? me, t.content, { kind: t.kind, tags: t.tags, created_at: t.created_at }) }, ms: 700 }
     },
+    hasExtension: () => !!over.extension,
+    connectExtension: async () => { log.push('extension'); s.state = 'connected'; s.pubkey = over.pubkey ?? me; listeners.forEach((l) => l()); return true },
     disconnect: async () => { log.push('disconnect'); s.state = 'disconnected'; s.pubkey = undefined; listeners.forEach((l) => l()) },
     /** The user approves the connection in Clave. */
     approve: (pubkey = over.pubkey ?? me) => { s.state = 'connected'; s.pubkey = pubkey; listeners.forEach((l) => l()) },
@@ -485,6 +487,18 @@ describe('sharing a note', () => {
   it('there is a Share button on notes the filter shows, only with a signer connected', async () => {
     const out = boot({ events: events(), signer: fakeSigner() }); await tick(100); expect(share(out)).toBeNull()
     const { a } = await ready(); expect(share(a)).not.toBeNull(); expect(share(a)!.getAttribute('aria-label')).toBe('Share'); expect(share(a)!.getAttribute('aria-pressed')).toBe('false'); expect(share(a)!.querySelector('svg')).not.toBeNull()
+  })
+  it('with a Nostr extension in the browser, the panel offers it first, and one tap connects', async () => {
+    const sg = fakeSigner({ extension: true }); const a = boot({ signer: sg }); await tick(100)
+    await a.go('#/me'); await click(a.root, 'Connect a signer')
+    expect(a.text()).toContain('Browser extension')
+    await click(a.root, 'Use the browser extension'); await tick(60)
+    expect(sg.log).toContain('extension'); expect(sg.raw.state).toBe('connected')
+  })
+  it('without an extension, the panel does not offer it', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100)
+    await a.go('#/me'); await click(a.root, 'Connect a signer')
+    expect(a.text()).not.toContain('Use the browser extension')
   })
   it('the "…" of a note offers its text, its id and its link, even without a signer; each copies exactly that and says so', async () => {
     const copied: string[] = []; const a = boot({ events: events(), copied }); await tick(100)

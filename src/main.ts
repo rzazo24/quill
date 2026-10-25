@@ -4,7 +4,7 @@ import { SEARCH_RELAYS } from './data/search.js'
 import { workerVerifier } from './net/verifier.js'
 import { poolPublisher } from './net/publisher.js'
 import { probeRelay } from './net/relays.js'
-import { Signer } from './sign/signer.js'
+import { Signer, type Nip07 } from './sign/signer.js'
 import { startApp } from './ui/app.js'
 import { detectEnv } from './ui/install.js'
 
@@ -27,7 +27,7 @@ startApp(document.getElementById('app')!, {
   publisher: poolPublisher(current),
   setRelays: (list) => { relays = list },
   probeRelay: (url) => probeRelay(url),
-  signer: new Signer({ kv: storage, appUrl: location.origin }),
+  signer: new Signer({ kv: storage, appUrl: location.origin, extension: () => (window as Window & { nostr?: Nip07 }).nostr }),
   pickSource: async () => { const r = await fetch('/digest/latest.json', { cache: 'no-store' }); return r.ok ? r.json() : null },
   // thumbnails from this site's own server (quill-avatars); a local preview has none, so the pictures come straight from their sites
   ...(location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? {} : { avatarProxy: `${location.origin}/avatar` }),

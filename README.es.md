@@ -4,7 +4,7 @@
 
 Un cliente pequeño de [Nostr](https://nostr.com), **pensado primero para el texto**, que **te dice por qué oculta cosas**.
 
-En marcha en **<https://quill.hivescope.xyz>**. Pega un `npub` para leer; conecta un firmador NIP-46 ([Amber](https://github.com/greenart7c3/Amber) o [Primal](https://primal.net) en Android, [Clave](https://clave.casa) en iPhone, [nsec.app](https://nsec.app) en el navegador, o un bunker propio) para reaccionar, responder y escribir. Quill nunca ve tu clave privada.
+En marcha en **<https://quill.hivescope.xyz>**. Pega un `npub` para leer; conecta un firmador NIP-46 ([Amber](https://github.com/greenart7c3/Amber) o [Primal](https://primal.net) en Android, [Clave](https://clave.casa) en iPhone, o un bunker propio; o una extensión NIP-07 del navegador como Alby o nos2x en un ordenador) para reaccionar, responder y escribir. Quill nunca ve tu clave privada.
 
 ![Quill en un móvil: el feed de la gente que sigues, las menciones con lo que el filtro ocultó y por qué, y los ajustes del filtro](docs/screenshot.es.png)
 

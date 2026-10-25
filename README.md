@@ -4,7 +4,7 @@
 
 A small, **text-first** [Nostr](https://nostr.com) client that **tells you why it hides things**.
 
-Live at **<https://quill.hivescope.xyz>**. Paste an `npub` to read; connect a NIP-46 signer ([Amber](https://github.com/greenart7c3/Amber) or [Primal](https://primal.net) on Android, [Clave](https://clave.casa) on iPhone, [nsec.app](https://nsec.app) on the web, or a bunker of your own) to react, reply and write. Quill never sees your private key.
+Live at **<https://quill.hivescope.xyz>**. Paste an `npub` to read; connect a NIP-46 signer ([Amber](https://github.com/greenart7c3/Amber) or [Primal](https://primal.net) on Android, [Clave](https://clave.casa) on iPhone, or a bunker of your own; or a NIP-07 browser extension such as Alby or nos2x on a computer) to react, reply and write. Quill never sees your private key.
 
 ![Quill on a phone: the feed of the people you follow, the mentions with what the filter hid and why, and the filter settings](docs/screenshot.png)
 

@@ -1,4 +1,4 @@
-// The NIP-46 session with the user's remote signer (Clave, nsec.app, a bunker). Quill never sees the user's private key: it holds only an
+// The session with the user's signer: a remote one over NIP-46 (Amber, Clave, a bunker) or a browser extension over NIP-07. Quill never sees the user's private key: it holds only an
 // app key that identifies it to the signer, saved in this browser, and asks the signer to sign. Everything that comes back is checked.
 import { generateSecretKey, getPublicKey, verifyEvent, type Event as NostrEvent, type VerifiedEvent } from 'nostr-tools'
 import { BunkerSigner, createNostrConnectURI, type BunkerPointer } from 'nostr-tools/nip46'
@@ -41,6 +41,9 @@ async function closePool(pool: SimplePool | undefined, relays: string[]): Promis
   try { pool.close(relays) } catch { /* already closed */ }
 }
 
+/** A NIP-07 browser extension (window.nostr): it holds the key and signs; Quill only asks. */
+export interface Nip07 { getPublicKey(): Promise<string>; signEvent(t: Template): Promise<NostrEvent> }
+
 export interface SignerOptions {
   kv?: KV
   relays?: string[]
@@ -50,6 +53,8 @@ export interface SignerOptions {
   allowLoopback?: boolean
   /** The page's own address, shown by the signer next to the name so you can tell which app is asking (https only). */
   appUrl?: string
+  /** The browser's NIP-07 extension, if there is one (window.nostr). A function: extensions may add it after the page starts. */
+  extension?: () => Nip07 | undefined
 }
 
 export class Signer {
@@ -59,6 +64,9 @@ export class Signer {
   /** An approval page the signer asked the user to open, cleaned. */
   authUrl?: string
   private bunker?: BunkerSigner
+  /** Signing through a browser extension instead of a remote signer (NIP-07). */
+  private ext?: Nip07
+  private readonly extension?: () => Nip07 | undefined
   /** Cancels a connection that is still waiting for the user to approve it. */
   private pending?: AbortController
   private connecting?: Promise<boolean>
@@ -74,6 +82,7 @@ export class Signer {
   constructor(opts: SignerOptions = {}) {
     this.allowLoopback = opts.allowLoopback ?? false
     this.appUrl = opts.appUrl?.startsWith('https://') ? opts.appUrl : undefined
+    this.extension = opts.extension
     this.kv = opts.kv; this.relays = opts.relays ?? SIGNER_RELAYS; this.now = opts.now ?? Date.now
     this.t = { connectMs: CONNECT_WINDOW_MS, identityMs: IDENTITY_WAIT_MS, resumeMs: RESUME_WAIT_MS, attemptMs: RESUME_ATTEMPT_MS, ...opts.timeouts }
   }
@@ -89,7 +98,27 @@ export class Signer {
     } catch { return null }
   }
   private save(s: Saved): void { safeSet(this.kv, 'signer', JSON.stringify(s)) }
-  hasSavedSession(): boolean { const s = this.load(); return !!(s?.signerPubkey && HEX64.test(s.signerPubkey) && s.relays?.length) }
+  hasSavedSession(): boolean { const s = this.load(); return !!(s?.signerPubkey && HEX64.test(s.signerPubkey) && s.relays?.length) || this.savedExtension() !== null }
+  /** The key a browser extension signed as last time (only that is kept: the extension holds everything else). */
+  private savedExtension(): string | null { const k = safeGet(this.kv, 'signerExt'); return k && HEX64.test(k) ? k : null }
+  /** Is a NIP-07 extension there to sign with? */
+  hasExtension(): boolean { try { const x = this.extension?.(); return !!x && typeof x.getPublicKey === 'function' && typeof x.signEvent === 'function' } catch { return false } }
+
+  /** Signs with the browser extension (NIP-07). It asks the extension once which key it signs as; the extension may ask the user to allow Quill. */
+  async connectExtension(): Promise<boolean> {
+    const x = this.hasExtension() ? this.extension!() : undefined
+    if (!x) { this.set('disconnected', 'no browser extension was found'); return false }
+    if (this.bunker) await this.disconnect()
+    this.set('connecting')
+    try {
+      const pubkey = await withTimeout(x.getPublicKey(), this.t.connectMs, 'the browser extension')
+      if (!HEX64.test(pubkey)) throw new Error('the extension sent something that is not a public key')
+      this.ext = x; this.pubkey = pubkey
+      safeSet(this.kv, 'signerExt', pubkey)
+      this.set('connected')
+      return true
+    } catch (e) { this.ext = undefined; this.set('disconnected', cleanText(asError(e).message, 200)); return false }
+  }
   /** A new pairing gets a NEW app key. After a connection is deleted in the signer, reusing its old key can get the new pairing ignored (the signer remembers the key it revoked). */
   private freshKey(): Uint8Array { const sk = generateSecretKey(); this.save({ clientSecret: bytesToHex(sk) }); return sk }
   private params(pool = (this.pool ??= new SimplePool())) { return { pool, skipSwitchRelays: true, onauth: (url: string) => { this.authUrl = cleanText(url, 300) } } }
@@ -98,7 +127,7 @@ export class Signer {
     this.bunker = b
     const pubkey = await withTimeout(b.getPublicKey(), this.t.identityMs, 'the signer (which key it signs as). Keep the signer app open on screen while connecting')
     if (!HEX64.test(pubkey)) throw new Error('the signer sent something that is not a public key')
-    this.pubkey = pubkey
+    this.pubkey = pubkey; this.ext = undefined; safeSet(this.kv, 'signerExt', null) // a remote signer replaces the extension
     this.save({ clientSecret: secretHex, signerPubkey: b.bp.pubkey, relays: b.bp.relays, userPubkey: pubkey })
     this.set('connected')
   }
@@ -160,6 +189,9 @@ export class Signer {
    */
   async resume(hint?: string): Promise<boolean> {
     if (this.state === 'connected') return true
+    // the extension, as last time: nothing is asked (the first signature checks the author anyway)
+    const extKey = this.savedExtension()
+    if (extKey && this.hasExtension()) { this.ext = this.extension!(); this.pubkey = extKey; this.set('connected'); return true }
     const saved = this.load()
     if (!saved?.signerPubkey || !saved.relays?.length) return false
     // `hint` is the account the user is reading as: for a session saved before the signer's key was stored, it stands in for it until the first signature
@@ -194,7 +226,7 @@ export class Signer {
   async sign(t: Template, timeoutMs: number, signal?: AbortSignal, opts: { followBase?: NostrEvent | null; profileBase?: NostrEvent; deleteTarget?: NostrEvent } = {}): Promise<{ event: VerifiedEvent; ms: number }> {
     const problem = checkTemplate(t, { ...opts, me: this.pubkey ?? undefined }) // a first mute list may not name the reader
     if (problem) throw new Error(`Quill will not sign this (${problem})`)
-    if (this.state !== 'connected' || !this.bunker || !this.pubkey) throw new Error('no signer is connected')
+    if (this.state !== 'connected' || (!this.bunker && !this.ext) || !this.pubkey) throw new Error('no signer is connected')
     // a follow-list change is built from the reader's OWN list, validly signed: anything else is refused whatever the template says
     if (t.kind === 3 && !(opts.followBase && opts.followBase.pubkey === this.pubkey && verifyEvent(opts.followBase))) throw new Error('Quill will not sign this (follow)')
     // a deletion only of a note the reader really wrote (its signature checked here, whatever the page says)
@@ -204,7 +236,7 @@ export class Signer {
     // a mute-list change too: from the reader's own list, or from none at all (a first list holding one account, checked above)
     if (t.kind === 10000 && opts.followBase !== null && !(opts.followBase && opts.followBase.pubkey === this.pubkey && verifyEvent(opts.followBase))) throw new Error('Quill will not sign this (follow)')
     const t0 = this.now()
-    const asked = this.bunker.signEvent(t)
+    const asked = this.bunker ? this.bunker.signEvent(t) : this.ext!.signEvent({ kind: t.kind, content: t.content, tags: t.tags.map((x) => [...x]), created_at: t.created_at })
     // A user who cancels stops waiting; the request itself cannot be recalled, but its answer is ignored and nothing is published.
     const cancelled = signal ? new Promise<never>((_, reject) => { if (signal.aborted) reject(new Error('cancelled')); else signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true }) }) : null
     cancelled?.catch(() => {})
@@ -219,6 +251,7 @@ export class Signer {
 
   /** Is the signer awake through the connection held? True only on a real `pong`: silence and local errors both count as "no". */
   async ping(ms: number): Promise<boolean> {
+    if (this.state === 'connected' && this.ext) return true // an extension lives in this browser: it is always there
     if (this.state !== 'connected' || !this.bunker) return false
     try { await withTimeout(this.bunker.ping(), ms, 'the signer'); return true } catch { return false }
   }
@@ -262,7 +295,7 @@ export class Signer {
 
   private async drop(): Promise<void> {
     try { await this.bunker?.close() } catch { /* already closed */ }
-    this.bunker = undefined; this.pubkey = undefined
+    this.bunker = undefined; this.ext = undefined; this.pubkey = undefined
   }
 
   /** Closes the session and forgets the app key. */
@@ -274,7 +307,7 @@ export class Signer {
     // Closing a pool closes its sockets first and sends each subscription's CLOSE after, which the library then logs as an error. After a cancelled
     // connection a subscription may still be opening, so that pool is kept (its idle sockets are harmless and a new attempt reuses them).
     if (!wasConnecting) { await closePool(this.pool, this.relays); this.pool = undefined }
-    safeSet(this.kv, 'signer', null)
+    safeSet(this.kv, 'signer', null); safeSet(this.kv, 'signerExt', null)
     this.set('disconnected')
   }
 }
