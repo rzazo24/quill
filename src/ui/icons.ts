@@ -33,6 +33,7 @@ const PATHS = {
   image: ['M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z', 'M11 9a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z', 'M21 15l-5-5L5 21'],
   /** an arrow into a tray: save a file */
   download: ['M12 3v12', 'M7 10l5 5 5-5', 'M5 21h14'],
+  upload: ['M12 15V3', 'M7 8l5-5 5 5', 'M5 21h14'],
   /** a film camera: a video */
   video: ['M4 6h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z', 'M17 10l5-3v10l-5-3'],
   /** a magnifying glass: search */

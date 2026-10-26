@@ -116,6 +116,28 @@ export async function collectBackup(f: Fetcher, me: string, relays: string[]): P
   return [...keep, ...newest.values()].sort((a, b) => b.created_at - a.created_at)
 }
 
+/**
+ * Reads a backup file back (the one `backupFile` writes, or a plain JSON list of events): only events validly signed by `me` are kept, once each, so
+ * a file cannot be used to publish anyone else's notes through this reader's relays. `skipped` counts what was left out.
+ */
+export function readBackup(text: string, me: string, verify: (e: Event) => boolean): { events: Event[]; skipped: number } {
+  let raw: unknown
+  try { raw = JSON.parse(text) } catch { return { events: [], skipped: 0 } }
+  const list: unknown[] = Array.isArray(raw) ? raw : raw && typeof raw === 'object' && Array.isArray((raw as { events?: unknown }).events) ? (raw as { events: unknown[] }).events : []
+  const seen = new Set<string>(), events: Event[] = []
+  let skipped = 0
+  for (const x of list) {
+    const e = x as Event
+    const shaped = !!e && typeof e === 'object' && typeof e.id === 'string' && typeof e.sig === 'string' && typeof e.kind === 'number' && typeof e.content === 'string' && Array.isArray(e.tags) && typeof e.created_at === 'number'
+    if (!shaped || e.pubkey !== me || seen.has(e.id)) { skipped++; continue }
+    let ok = false
+    try { ok = verify({ ...e }) } catch { ok = false }
+    if (!ok) { skipped++; continue }
+    seen.add(e.id); events.push(e)
+  }
+  return { events: events.sort((a, b) => b.created_at - a.created_at), skipped }
+}
+
 /** The file: plain JSON any Nostr tool can read back (one signed event per entry), with a short header. */
 export function backupFile(me: string, events: Event[], nowMs: number): { name: string; text: string } {
   const day = new Date(nowMs).toISOString().slice(0, 10)

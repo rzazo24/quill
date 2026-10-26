@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { ev, pk } from '../core/testutil.js'
 import { answers, type Fetcher } from '../net/fetcher.js'
 import type { Publisher } from '../net/publisher.js'
-import { backupFile, collectBackup, copyNotes, coverage, scanNotes } from './rescue.js'
+import { backupFile, collectBackup, copyNotes, coverage, readBackup, scanNotes } from './rescue.js'
 
 const me = pk('a'), other = pk('b')
 const A = 'wss://a.example', B = 'wss://b.example', C = 'wss://c.example'
@@ -82,5 +82,19 @@ describe('your notes, safe', () => {
     const file = backupFile(me, events, Date.UTC(2026, 9, 15))
     expect(file.name).toBe(`nostr-backup-${me.slice(0, 8)}-2026-10-15.json`)
     expect(JSON.parse(file.text)).toMatchObject({ pubkey: me, events: expect.arrayContaining([expect.objectContaining({ id: n1.id, sig: n1.sig })]) })
+  })
+})
+
+describe('restoring from a file', () => {
+  const me = pk('1'), ok = (e: Event) => e.content !== 'tampered'
+  it('reads the file this app saves, and a plain list too: only this account\'s validly signed events, once each, newest first', () => {
+    const a = ev(me, 'first', { created_at: 100 }), b = ev(me, 'second', { created_at: 200 }), theirs = ev(pk('2'), 'not mine'), bad = ev(me, 'tampered')
+    const file = backupFile(me, [a, b, theirs, bad, a], 0).text
+    expect(readBackup(file, me, ok)).toEqual({ events: [b, a], skipped: 3 })
+    expect(readBackup(JSON.stringify([a]), me, ok).events).toEqual([a])
+  })
+  it('anything that is not a backup gives nothing', () => {
+    expect(readBackup('not json', me, ok)).toEqual({ events: [], skipped: 0 })
+    expect(readBackup('{"events":[{"id":1}]}', me, ok)).toEqual({ events: [], skipped: 1 })
   })
 })

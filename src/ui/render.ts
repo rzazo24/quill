@@ -566,7 +566,7 @@ export type RescueState =
   | ScannedState
   | { phase: 'copying'; done: number; of: number; /** what the check said, still shown while copying (the card keeps its size) */ from?: ScannedState }
   | { phase: 'copied'; results: { relay: string; ok: number; failed: number; reason?: string }[] }
-export interface RescueProps { state: RescueState; saving: boolean | 'failed' | 'done'; savedCount?: number; onScan: () => void; onCopy: () => void; onSave: () => void }
+export interface RescueProps { state: RescueState; saving: boolean | 'failed' | 'done'; savedCount?: number; onScan: () => void; onCopy: () => void; onSave: () => void; /** a saved file, sent back to the relays as it is */ onRestore?: (file: File) => void; restoreNote?: string }
 
 export function renderRescue(p: RescueProps, v: View): HTMLElement {
   const s = p.state, host = (u: string) => u.replace(/^wss:\/\//, '')
@@ -589,5 +589,9 @@ export function renderRescue(p: RescueProps, v: View): HTMLElement {
   const saving = p.saving === true ? h('p', { class: 'status loading', role: 'status' }, h('span', {}, t(v.lang, 'rescueSaving')))
     : h('p', {}, h('button', { type: 'button', onClick: p.onSave }, icon('download', 16), t(v.lang, 'rescueSave')), p.saving === 'failed' ? h('span', { class: 'error' }, ' ', t(v.lang, 'rescueSaveFailed')) : p.saving === 'done' ? h('span', { class: 'meta' }, ' ', t(v.lang, 'rescueSaved', { n: p.savedCount ?? 0 })) : null)
   return h('section', { class: 'card rescue' }, h('h2', {}, t(v.lang, 'rescueTitle')), h('p', { class: 'meta' }, t(v.lang, 'rescueHelp')), ...body,
-    h('h3', {}, t(v.lang, 'rescueFileTitle')), h('p', { class: 'meta' }, t(v.lang, 'rescueFileHelp')), saving)
+    h('h3', {}, t(v.lang, 'rescueFileTitle')), h('p', { class: 'meta' }, t(v.lang, 'rescueFileHelp')), saving,
+    p.onRestore ? h('p', { class: 'meta' }, t(v.lang, 'rescueRestoreHelp')) : null,
+    p.onRestore ? h('p', {}, h('label', { class: 'button file-button' }, icon('upload', 16), t(v.lang, 'rescueRestore'),
+      h('input', { type: 'file', accept: '.json,application/json', class: 'visually-hidden', disabled: s.phase === 'copying' || s.phase === 'scanning' ? true : undefined, onChange: (e: Event) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) p.onRestore!(f) } })),
+      p.restoreNote ? h('span', { class: 'meta' }, ' ', p.restoreNote) : null) : null)
 }

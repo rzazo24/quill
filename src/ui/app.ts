@@ -30,7 +30,7 @@ import { contextOf, loadGraphInfo, loadOwnLists, pendingGraph, type Session } fr
 import { DEFAULT_RELAYS, memo, queryAuthors, type Fetcher } from '../net/fetcher.js'
 import { fromOutbox } from '../data/outbox.js'
 import { failedRelays, type Publisher } from '../net/publisher.js'
-import { backupFile, collectBackup, copyNotes, coverage, scanNotes } from '../data/rescue.js'
+import { backupFile, collectBackup, copyNotes, coverage, readBackup, scanNotes } from '../data/rescue.js'
 import { isLockedError } from '../sign/signer.js'
 import { PipelineError, signAndPublish, signOnly, type Published, type SignerApi, type Step } from '../sign/pipeline.js'
 import { newestPerAuthor } from '../data/lists.js'
@@ -141,6 +141,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let relayError: string | null = null
   const probes = new Map<string, 'testing' | 'up' | 'down'>()
   // "Your notes, safe" (Settings): the check, the copy and the file
+  let restoreNote = '' // what the last restored file held (how many events, how many left out)
   let rescue: RescueState = { phase: 'idle' }, rescueLacking: Map<string, NostrEvent[]> | null = null, rescueSaving: boolean | 'failed' | 'done' = false, rescueSaved = 0
   let published: string[] | null | undefined // the relay list on Nostr: undefined = not read (yet), null = none
   let confirmingList = false
@@ -900,6 +901,21 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     if (me !== who) return
     rescueLacking = null; rescue = { phase: 'copied', results }; draw()
   }
+  /** A file saved here (or any JSON list of events): this account's signed events go back to its relays, unchanged. */
+  async function restoreRescue(file: File): Promise<void> {
+    if (!me || !publisher || rescue.phase === 'scanning' || rescue.phase === 'copying') return
+    const who = me
+    let text = ''
+    try { text = await file.text() } catch { text = '' }
+    const { events, skipped } = readBackup(text, who, deps.verify ?? verifyEvent)
+    if (!events.length) { restoreNote = t(lang, 'rescueRestoreNone'); return draw() }
+    restoreNote = [t(lang, 'rescueRestoreRead', { n: events.length }), skipped ? t(lang, 'rescueRestoreSkipped', { n: skipped }) : ''].filter(Boolean).join(' · ')
+    const lacking = new Map(rescueRelays().map((r) => [r, events]))
+    rescue = { phase: 'copying', done: 0, of: events.length * lacking.size }; draw()
+    const results = await copyNotes(publisher, lacking, (done, of) => { if (me === who && rescue.phase === 'copying') rescueProgress({ ...rescue, done, of }) })
+    if (me !== who) return
+    rescueLacking = null; rescue = { phase: 'copied', results }; draw()
+  }
   async function saveRescue(): Promise<void> {
     if (!me || rescueSaving === true) return
     const who = me
@@ -1621,7 +1637,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
       : !me ? [...(route.name === 'note' && guestBody ? [guestBody] : []), loginForm, signArea, route.name === 'note' ? null : guestPick]
       : route.name === 'settings' ? [signArea, renderPrefs({ font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, realAvatars, onRealAvatars: changeRealAvatars, scheme, onScheme: changeScheme, halloween: halloween(), onHalloween: changeTheme, autoImages, onAutoImages: changeAutoImages, interests, onInterests: changeInterests, reposts: showReposts, onReposts: changeReposts, clientTag, onClientTag: changeClientTag, outbox: readOutbox, onOutbox: changeOutbox, nwc: { relay: nwcOf()?.relays[0] ?? null, state: nwcState, error: nwcError, canSign: signer?.state === 'connected' }, onNwcSave: saveNwc, onNwcRemove: removeNwc, onNwcTest: () => void testNwc(), relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
-        onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderRescue({ state: rescue, saving: rescueSaving, savedCount: rescueSaved, onScan: () => void scanRescue(), onCopy: () => void copyRescue(), onSave: () => void saveRescue() }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
+        onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderRescue({ state: rescue, saving: rescueSaving, savedCount: rescueSaved, restoreNote, ...(publisher ? { onRestore: (f: File) => void restoreRescue(f) } : {}), onScan: () => void scanRescue(), onCopy: () => void copyRescue(), onSave: () => void saveRescue() }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
       : isWide ? [wideView(route, signArea, signOut)]
       : route.name === 'me' ? [accountCard(), installHint(deps.env ?? { ios: false, standalone: true }) ? h('section', { class: 'card install' }, h('h2', {}, t(lang, 'installTitle')), h('p', { class: 'meta' }, t(lang, 'installHint'))) : null, signArea, draftsCard(), h('h2', { class: 'section' }, t(lang, 'myNotes')), body, h('div', { class: 'foot' }, signOut)]
       : [signArea, body]

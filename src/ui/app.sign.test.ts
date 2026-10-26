@@ -56,7 +56,7 @@ const publisherFake = (outcomes: Record<string, string> = { 'wss://r1.example': 
   return { p, sent }
 }
 
-function boot(o: { events?: Event[]; signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; stored?: Record<string, string>; clipboard?: string | Error; copied?: string[]; wide?: boolean; errorMs?: number; verifyWaits?: number[]; zapNet?: Parameters<typeof startApp>[1]['zapNet'] } = {}) {
+function boot(o: { verifyAll?: boolean; events?: Event[]; signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; stored?: Record<string, string>; clipboard?: string | Error; copied?: string[]; wide?: boolean; errorMs?: number; verifyWaits?: number[]; zapNet?: Parameters<typeof startApp>[1]['zapNet'] } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = [], mem = new Map(Object.entries(o.stored ?? { me }))
   const pub = o.pub ?? publisherFake()
@@ -66,6 +66,7 @@ function boot(o: { events?: Event[]; signer?: ReturnType<typeof fakeSigner>; pub
     copy: (x) => { o.copied?.push(x) },
     readClipboard: async () => { if (o.clipboard instanceof Error) throw o.clipboard; return o.clipboard ?? '' },
     ...(o.signer ? { signer: o.signer.s, publisher: pub.p } : {}),
+    ...(o.verifyAll ? { verify: () => true } : {}), // the test events carry fake signatures
     ...(o.zapNet ? { zapNet: o.zapNet } : {}),
   })
   const go = async (hash: string) => { location.hash = hash; listeners.forEach((l) => l()); await tick(60) }
@@ -499,6 +500,16 @@ describe('sharing a note', () => {
     const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100)
     await a.go('#/me'); await click(a.root, 'Connect a signer')
     expect(a.text()).not.toContain('Use the browser extension')
+  })
+  it('Settings can restore a saved file: this account\'s events go back to its relays as they are, and the rest is left out', async () => {
+    const mine = ev(me, 'kept in a file', { created_at: 9000 }), theirs = ev(friend, 'not mine', { created_at: 9001 })
+    const pub = publisherFake(); const a = boot({ pub, signer: fakeSigner(), verifyAll: true }); await tick(200); await a.go('#/settings'); await tick(100)
+    const input = a.root.querySelector('section.rescue input[type=file]') as HTMLInputElement
+    const file = new File([JSON.stringify({ events: [mine, theirs] })], 'backup.json', { type: 'application/json' })
+    Object.defineProperty(input, 'files', { value: [file] }); input.dispatchEvent(new Event('change')); await tick(600)
+    const sent = pub.sent.map((x) => x.event.id)
+    expect(sent.every((id) => id === mine.id)).toBe(true); expect(sent.length).toBeGreaterThan(0)
+    expect(a.root.querySelector('section.rescue')!.textContent).toContain('1 events from the file · 1 left out (not signed by this account)')
   })
   it('the "…" of a note offers its text, its id and its link, even without a signer; each copies exactly that and says so', async () => {
     const copied: string[] = []; const a = boot({ events: events(), copied }); await tick(100)
