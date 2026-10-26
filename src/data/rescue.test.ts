@@ -65,7 +65,7 @@ describe('your notes, safe', () => {
     const lacking = new Map([[A, [...old, ...fresh]], [B, blocked], [C, [n2, n1]]])
     const progress: number[] = []
     const out = await copyNotes(p, lacking, (d) => progress.push(d), 0)
-    expect(out.map(({ missed, ...r }) => r)).toEqual([{ relay: A, sent: 7, ok: 3, failed: 4, reason: 'blocked: not in our web of trust' }, { relay: B, sent: 10, ok: 0, failed: 10, reason: 'blocked: not allowed' }, { relay: C, sent: 2, ok: 2, failed: 0 }])
+    expect(out.map(({ missed, ...r }) => r)).toEqual([{ relay: A, sent: 7, ok: 3, failed: 4, reason: 'blocked: not in our web of trust' }, { relay: B, sent: 10, ok: 0, failed: 10, reason: 'blocked: not allowed', untried: 2 }, { relay: C, sent: 2, ok: 2, failed: 0 }])
     expect(out[0]!.missed!.map((e) => e.id).sort()).toEqual(old.map((e) => e.id).sort()) // what was refused…
     expect(out[1]!.missed).toHaveLength(12) // …and what was never tried after the relay gave up
     expect(out[2]!.missed).toEqual([])
@@ -109,10 +109,17 @@ describe('restoring from a file', () => {
     const a = ev(me1, 'kept', { created_at: 1 }), b = ev(me1, 'said ok, not kept', { created_at: 2 }), c = ev(me1, 'refused', { created_at: 3 })
     const results: CopyResult[] = [{ relay: A, sent: 3, ok: 2, failed: 1, missed: [c] }, { relay: B, sent: 1, ok: 1, failed: 0, missed: [] }]
     const checked = await checkHeld(relays({ [A]: [a], [B]: [a] }), new Map([[A, [a, b, c]], [B, [a]]]), results)
-    expect(checked.map((r) => [r.relay, r.held, r.missed!.map((e) => e.id)])).toEqual([[A, 1, [c.id, b.id]], [B, 1, []]])
+    expect(checked.map((r) => [r.relay, r.held, r.notServed, r.missed!.map((e) => e.id)])).toEqual([[A, 1, 1, [c.id, b.id]], [B, 1, 0, []]])
     expect(missedEvents(checked).map((e) => e.id)).toEqual([c.id, b.id])
     const down = await checkHeld(relays({}, { down: [A] }), new Map([[A, [a]]]), [{ relay: A, sent: 1, ok: 1, failed: 0, missed: [] }])
     expect(down[0]!.held).toBeUndefined() // could not ask: the relay's own answer stands
+  })
+  it('a profile, a list or an article is checked by its slot: a newer version on the relay is held, not missing; an older one or none is not served', async () => {
+    const oldProfile = ev(me1, '{"name":"old"}', { kind: 0, created_at: 100 }), newProfile = ev(me1, '{"name":"new"}', { kind: 0, created_at: 200 })
+    const follows = ev(me1, '', { kind: 3, created_at: 300 }), art = ev(me1, 'v1', { kind: 30023, created_at: 100, tags: [['d', 'x']] }), artThere = ev(me1, 'v2', { kind: 30023, created_at: 150, tags: [['d', 'x']] })
+    const relays5 = [ev(me1, '', { kind: 3, created_at: 50 })] // an older follow list there: ours should have won, so it is not served
+    const [r] = await checkHeld(relays({ [A]: [newProfile, artThere, ...relays5] }), new Map([[A, [oldProfile, follows, art]]]), [{ relay: A, sent: 3, ok: 3, failed: 0, missed: [] }])
+    expect([r!.held, r!.newer, r!.notServed, r!.missed!.map((e) => e.id)]).toEqual([2, 2, 1, [follows.id]])
   })
   it('the replaceable lists in a file, with their dates', () => {
     expect(snapshots([ev(me1, '', { kind: 1, created_at: 5 }), ev(me1, '{}', { kind: 3, created_at: 7 }), ev(me1, '{}', { kind: 0, created_at: 9 })])).toEqual([{ kind: 0, at: 9 }, { kind: 3, at: 7 }])

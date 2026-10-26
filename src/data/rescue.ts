@@ -71,8 +71,14 @@ export interface CopyResult {
   relay: string; sent: number; ok: number; failed: number; reason?: string
   /** what did not land: refused, never tried after the relay gave up, or (after `checkHeld`) said "ok" but is not served */
   missed?: Event[]
-  /** after `checkHeld`: how many of the accepted ones the relay really serves when asked for them by id */
+  /** after `checkHeld`: how many of the accepted ones the relay really serves */
   held?: number
+  /** never sent: the relay had refused too many in a row */
+  untried?: number
+  /** after `checkHeld`: accepted ("ok") but not served */
+  notServed?: number
+  /** after `checkHeld`: replaceable lists the relay holds a newer version of (it keeps only the newest: not a fault, and not missed) */
+  newer?: number
 }
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -99,31 +105,56 @@ export async function copyNotes(p: Publisher, lacking: Map<string, Event[]>, onP
         outcome = (await p.publish(e, [relay]))[relay] ?? 'no answer from the relay'
       }
       r.sent++; done++; onProgress?.(done, total)
-      if (outcome === 'ok' || /duplicate|already have/i.test(outcome)) { r.ok++; inARow = 0 } else { r.failed++; r.reason = outcome; missed.push(e); if (++inARow >= GIVE_UP) { missed.push(...ordered.slice(i + 1)); done += list.length - r.sent; onProgress?.(done, total); break } }
+      if (outcome === 'ok' || /duplicate|already have/i.test(outcome)) { r.ok++; inARow = 0 } else { r.failed++; r.reason = outcome; missed.push(e); if (++inARow >= GIVE_UP) { r.untried = ordered.length - i - 1; missed.push(...ordered.slice(i + 1)); done += list.length - r.sent; onProgress?.(done, total); break } }
       if (gap) await pause(gap)
     }
     return r
   }))
 }
 
+const replaceable = (k: number) => k === 0 || k === 3 || (k >= 10000 && k < 20000) || (k >= 30000 && k < 40000)
+const dOf = (e: Event) => e.tags.find((t) => t[0] === 'd')?.[1] ?? ''
+const slotOf = (e: Event) => `${e.kind}:${e.pubkey}:${e.kind >= 30000 ? dOf(e) : ''}`
+
 /**
- * "ok" is what a relay says, not what it keeps: some answer ok and never serve the event. So each relay is asked afterwards, by id, for what it
- * accepted; what it does not serve joins `missed`. A replaceable list it does not serve may have lost to a newer version there: that is in the list too.
+ * "ok" is what a relay says, not what it keeps: some answer ok and never serve the event. So each relay is asked afterwards for what it accepted.
+ * Notes, comments and deletions are asked for by id: every one is meant to stay. A profile, a list or an article is asked for by its slot (author,
+ * kind and d tag), because a relay keeps only the newest version: one it holds a newer version of counts as held (`newer`), not as missing.
  */
 export async function checkHeld(f: Fetcher, sent: Map<string, Event[]>, results: CopyResult[]): Promise<CopyResult[]> {
   return Promise.all(results.map(async (r) => {
     const missedIds = new Set((r.missed ?? []).map((e) => e.id))
     const accepted = (sent.get(r.relay) ?? []).filter((e) => !missedIds.has(e.id))
-    if (!accepted.length) return { ...r, held: 0 }
-    const have = new Set<string>()
+    if (!accepted.length) return { ...r, held: 0, notServed: 0, newer: 0 }
+    const plain = accepted.filter((e) => !replaceable(e.kind)), slots = accepted.filter((e) => replaceable(e.kind))
+    const have = new Set<string>(), newestThere = new Map<string, Event>()
     try {
-      for (let i = 0; i < accepted.length; i += 200) {
-        const ids = accepted.slice(i, i + 200).map((e) => e.id)
+      for (let i = 0; i < plain.length; i += 200) {
+        const ids = plain.slice(i, i + 200).map((e) => e.id)
         for (const e of await f.query({ ids, limit: ids.length }, { only: [r.relay], quick: false })) if (ids.includes(e.id)) have.add(e.id)
       }
+      const groups = new Map<string, Event[]>() // one question per author and kind (with the d tags of that kind)
+      for (const e of slots) { const k = `${e.pubkey}:${e.kind}`; groups.set(k, [...(groups.get(k) ?? []), e]) }
+      for (const list of groups.values()) {
+        const first = list[0]!, ds = [...new Set(list.map(dOf))]
+        const filter: Filter = { authors: [first.pubkey], kinds: [first.kind], limit: first.kind >= 30000 ? ds.length * 2 : 2, ...(first.kind >= 30000 ? { '#d': ds } : {}) }
+        for (const e of await f.query(filter, { only: [r.relay], quick: false })) {
+          if (e.pubkey !== first.pubkey || e.kind !== first.kind) continue
+          const o = newestThere.get(slotOf(e))
+          if (!o || e.created_at > o.created_at) newestThere.set(slotOf(e), e)
+        }
+      }
     } catch { return r } // could not ask: the relay's own answers stand
-    const notServed = accepted.filter((e) => !have.has(e.id))
-    return { ...r, held: have.size, missed: [...(r.missed ?? []), ...notServed] }
+    let newer = 0
+    const notServed = accepted.filter((e) => {
+      if (!replaceable(e.kind)) return !have.has(e.id)
+      const there = newestThere.get(slotOf(e))
+      if (!there) return true
+      if (there.id === e.id) return false
+      if (there.created_at > e.created_at) { newer++; return false }
+      return true
+    })
+    return { ...r, held: accepted.length - notServed.length, notServed: notServed.length, newer, missed: [...(r.missed ?? []), ...notServed] }
   }))
 }
 

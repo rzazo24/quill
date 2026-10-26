@@ -565,7 +565,7 @@ export type RescueState =
   | { phase: 'scanning'; done: number; of: number }
   | ScannedState
   | { phase: 'copying'; done: number; of: number; /** what the check said, still shown while copying (the card keeps its size) */ from?: ScannedState; /** sent: now asking each relay what it really kept */ checking?: boolean }
-  | { phase: 'copied'; results: { relay: string; ok: number; failed: number; reason?: string; held?: number }[]; /** events that did not land somewhere */ missed?: number; /** the replaceable lists sent, with their dates */ snapshots?: { kind: number; at: number }[] }
+  | { phase: 'copied'; results: { relay: string; ok: number; failed: number; reason?: string; held?: number; untried?: number; notServed?: number; newer?: number }[]; /** events that did not land somewhere */ missed?: number; /** the replaceable lists sent, with their dates */ snapshots?: { kind: number; at: number }[] }
 export interface RescueProps { state: RescueState; saving: boolean | 'failed' | 'done'; savedCount?: number; onScan: () => void; onCopy: () => void; onSave: () => void; /** a saved file, sent back to the relays as it is */ onRestore?: (file: File) => void; restoreNote?: string; onSaveMissed?: () => void }
 
 export function renderRescue(p: RescueProps, v: View): HTMLElement {
@@ -582,10 +582,16 @@ export function renderRescue(p: RescueProps, v: View): HTMLElement {
       : h('p', {}, h('span', { class: 'meta' }, t(v.lang, sc.total ? 'rescueAllGood' : 'rescueNothing')), ' ', h('button', { type: 'button', class: 'link', onClick: p.onScan }, t(v.lang, 'rescueAgain'))))
   } else if (s.phase === 'copying') body.push(h('p', { class: 'status loading rescue-progress', role: 'status' }, h('span', {}, (s.checking ? t(v.lang, 'rescueChecking') : t(v.lang, 'rescueCopying', { done: s.done, of: s.of })))))
   else {
-    const lost = (r: { ok: number; held?: number }) => r.held !== undefined && r.held < r.ok
-    body.push(h('ul', { class: 'rescue-relays' }, ...s.results.map((r) => h('li', {}, h('span', { class: 'url' }, host(r.relay)), ' ',
-      h('span', { class: r.failed || lost(r) ? 'meta error' : 'meta' }, r.failed ? t(v.lang, 'rescueCopiedSome', { ok: r.ok, of: r.ok + r.failed, reason: r.reason ?? '' }) : `${r.ok} ✓`),
-      lost(r) ? h('span', { class: 'meta error' }, ' · ', t(v.lang, 'rescueNotHeld', { n: r.ok - r.held! })) : null))))
+    // three different failures, kept apart: refused when written, never sent (the relay had refused too many), accepted but not served
+    const lost = (r: { notServed?: number }) => !!r.notServed
+    body.push(h('ul', { class: 'rescue-relays' }, ...s.results.map((r) => {
+      const refused = r.failed
+      return h('li', {}, h('span', { class: 'url' }, host(r.relay)), ' ', h('span', { class: 'meta' }, `${r.held ?? r.ok} ✓`),
+        refused ? h('span', { class: 'meta error' }, ' · ', t(v.lang, 'rescueRefusedN', { n: refused, reason: r.reason ?? '' })) : null,
+        r.untried ? h('span', { class: 'meta error' }, ' · ', t(v.lang, 'rescueUntried', { n: r.untried })) : null,
+        r.notServed ? h('span', { class: 'meta error' }, ' · ', t(v.lang, 'rescueNotHeld', { n: r.notServed })) : null,
+        r.newer ? h('span', { class: 'meta' }, ' · ', t(v.lang, 'rescueNewer', { n: r.newer })) : null)
+    })))
     if (s.results.some((r) => r.failed)) body.push(h('p', { class: 'meta' }, t(v.lang, 'rescueRefused')))
     if (s.results.some(lost)) body.push(h('p', { class: 'meta' }, t(v.lang, 'rescueNotHeldHelp')))
     if (s.snapshots?.length) body.push(h('p', { class: 'meta rescue-snapshots' }, t(v.lang, 'rescueSnapshots'), ' ', s.snapshots.map((x) => `${x.kind === 0 ? t(v.lang, 'rescueKindProfile') : x.kind === 3 ? t(v.lang, 'rescueKindFollows') : x.kind === 10002 ? t(v.lang, 'rescueKindRelays') : `kind ${x.kind}`} ${new Date(x.at * 1000).toISOString().slice(0, 10)}`).join(' · ')))
