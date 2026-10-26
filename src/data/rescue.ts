@@ -96,16 +96,21 @@ export async function copyNotes(p: Publisher, lacking: Map<string, Event[]>, onP
   }))
 }
 
-/** Everything the reader published that the file keeps, from every relay, newest version of each replaceable list only, deleted notes left out. */
+/** Everything the reader published that the file keeps, from every relay, newest version of each replaceable list only, deleted notes left out (by id or by address), the deletions kept. */
 export async function collectBackup(f: Fetcher, me: string, relays: string[]): Promise<Event[]> {
   const all = new Map<string, Event>()
   const groups = [0, 5, 10].map((i) => BACKUP_KINDS.slice(i, i + 5)).filter((g) => g.length) // relays refuse long lists of kinds (khatru's sqlite store: more than 10 fails the whole question)
   await Promise.all(relays.flatMap((r) => groups.map(async (kinds) => { try { for (const e of await allFrom(f, r, me, kinds)) all.set(e.id, e) } catch { /* that relay adds nothing */ } })))
   const deleted = new Set([...all.values()].filter((e) => e.kind === 5).flatMap((e) => e.tags.filter((t) => t[0] === 'e').map((t) => t[1])))
+  // a deletion can also name a replaceable or addressable slot ("kind:pubkey:d"): every version up to that deletion's time is gone
+  const deletedAt = new Map<string, number>()
+  for (const d of all.values()) if (d.kind === 5) for (const t of d.tags) if (t[0] === 'a' && t[1]) deletedAt.set(t[1], Math.max(deletedAt.get(t[1]) ?? 0, d.created_at))
   const newest = new Map<string, Event>() // replaceable (0, 3, 1xxxx) and addressable (3xxxx by d tag): only the newest counts
   const keep: Event[] = []
   for (const e of all.values()) {
     if (deleted.has(e.id)) continue
+    const slot = `${e.kind}:${e.pubkey}:${e.kind >= 30000 && e.kind < 40000 ? e.tags.find((t) => t[0] === 'd')?.[1] ?? '' : ''}`
+    if ((deletedAt.get(slot) ?? -1) >= e.created_at) continue
     const replaceable = e.kind === 0 || e.kind === 3 || (e.kind >= 10000 && e.kind < 20000)
     const addressable = e.kind >= 30000 && e.kind < 40000
     if (!replaceable && !addressable) { keep.push(e); continue }

@@ -83,6 +83,14 @@ describe('your notes, safe', () => {
     expect(file.name).toBe(`nostr-backup-${me.slice(0, 8)}-2026-10-15.json`)
     expect(JSON.parse(file.text)).toMatchObject({ pubkey: me, events: expect.arrayContaining([expect.objectContaining({ id: n1.id, sig: n1.sig })]) })
   })
+
+  it('an article deleted by its address stays out of the file (every version up to the deletion), and the deletion stays in', async () => {
+    const art = ev(me, 'removed', { kind: 30023, created_at: 100, tags: [['d', 'gone']] }), later = ev(me, 'written again', { kind: 30023, created_at: 500, tags: [['d', 'again']] })
+    const again = ev(me, 'republished after', { kind: 30023, created_at: 400, tags: [['d', 'again']] })
+    const del = ev(me, '', { kind: 5, created_at: 200, tags: [['a', `30023:${me}:gone`], ['a', `30023:${me}:again`]] })
+    const events = await collectBackup(relays({ [A]: [art, del, again, later] }), me, [A])
+    expect(events.map((e) => e.id).sort()).toEqual([del.id, later.id].sort())
+  })
 })
 
 describe('restoring from a file', () => {
