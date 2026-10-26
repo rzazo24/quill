@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { ev, pk } from '../core/testutil.js'
 import { answers, type Fetcher } from '../net/fetcher.js'
 import type { Publisher } from '../net/publisher.js'
-import { backupFile, collectBackup, copyNotes, coverage, readBackup, scanNotes } from './rescue.js'
+import { backupFile, checkHeld, collectBackup, copyNotes, coverage, missedEvents, readBackup, scanNotes, snapshots, type CopyResult } from './rescue.js'
 
 const me = pk('a'), other = pk('b')
 const A = 'wss://a.example', B = 'wss://b.example', C = 'wss://c.example'
@@ -65,7 +65,10 @@ describe('your notes, safe', () => {
     const lacking = new Map([[A, [...old, ...fresh]], [B, blocked], [C, [n2, n1]]])
     const progress: number[] = []
     const out = await copyNotes(p, lacking, (d) => progress.push(d), 0)
-    expect(out).toEqual([{ relay: A, sent: 7, ok: 3, failed: 4, reason: 'blocked: not in our web of trust' }, { relay: B, sent: 10, ok: 0, failed: 10, reason: 'blocked: not allowed' }, { relay: C, sent: 2, ok: 2, failed: 0 }])
+    expect(out.map(({ missed, ...r }) => r)).toEqual([{ relay: A, sent: 7, ok: 3, failed: 4, reason: 'blocked: not in our web of trust' }, { relay: B, sent: 10, ok: 0, failed: 10, reason: 'blocked: not allowed' }, { relay: C, sent: 2, ok: 2, failed: 0 }])
+    expect(out[0]!.missed!.map((e) => e.id).sort()).toEqual(old.map((e) => e.id).sort()) // what was refused…
+    expect(out[1]!.missed).toHaveLength(12) // …and what was never tried after the relay gave up
+    expect(out[2]!.missed).toEqual([])
     expect(sent.filter(([r]) => r === A).map(([, id]) => id).slice(0, 3)).toEqual([...fresh].reverse().map((e) => e.id)) // newest first
     expect(sent.filter(([r]) => r === C)).toHaveLength(3) // the slowed-down note was sent again
     expect(progress.at(-1)).toBe(21) // the notes never sent to B still count as done
@@ -94,6 +97,26 @@ describe('your notes, safe', () => {
 })
 
 describe('restoring from a file', () => {
+  const me1 = pk('1')
+  it('deletions are sent last, so they find the note they delete', async () => {
+    const note = ev(me1, 'to delete', { created_at: 100 }), del = ev(me1, '', { kind: 5, created_at: 200, tags: [['e', note.id]] }), other = ev(me1, 'kept', { created_at: 300 })
+    const order: string[] = []
+    const p: Publisher = { publish: async (e, rs) => { order.push(e.id); return { [rs![0]!]: 'ok' } } }
+    await copyNotes(p, new Map([[A, [del, other, note]]]), undefined, 0)
+    expect(order).toEqual([other.id, note.id, del.id])
+  })
+  it('an "ok" is checked by asking the relay for the ids: what it does not serve did not land, and goes in the file of what did not land', async () => {
+    const a = ev(me1, 'kept', { created_at: 1 }), b = ev(me1, 'said ok, not kept', { created_at: 2 }), c = ev(me1, 'refused', { created_at: 3 })
+    const results: CopyResult[] = [{ relay: A, sent: 3, ok: 2, failed: 1, missed: [c] }, { relay: B, sent: 1, ok: 1, failed: 0, missed: [] }]
+    const checked = await checkHeld(relays({ [A]: [a], [B]: [a] }), new Map([[A, [a, b, c]], [B, [a]]]), results)
+    expect(checked.map((r) => [r.relay, r.held, r.missed!.map((e) => e.id)])).toEqual([[A, 1, [c.id, b.id]], [B, 1, []]])
+    expect(missedEvents(checked).map((e) => e.id)).toEqual([c.id, b.id])
+    const down = await checkHeld(relays({}, { down: [A] }), new Map([[A, [a]]]), [{ relay: A, sent: 1, ok: 1, failed: 0, missed: [] }])
+    expect(down[0]!.held).toBeUndefined() // could not ask: the relay's own answer stands
+  })
+  it('the replaceable lists in a file, with their dates', () => {
+    expect(snapshots([ev(me1, '', { kind: 1, created_at: 5 }), ev(me1, '{}', { kind: 3, created_at: 7 }), ev(me1, '{}', { kind: 0, created_at: 9 })])).toEqual([{ kind: 0, at: 9 }, { kind: 3, at: 7 }])
+  })
   const me = pk('1'), ok = (e: Event) => e.content !== 'tampered'
   it('reads the file this app saves, and a plain list too: only this account\'s validly signed events, once each, newest first', () => {
     const a = ev(me, 'first', { created_at: 100 }), b = ev(me, 'second', { created_at: 200 }), theirs = ev(pk('2'), 'not mine'), bad = ev(me, 'tampered')

@@ -564,9 +564,9 @@ export type RescueState =
   | { phase: 'idle' }
   | { phase: 'scanning'; done: number; of: number }
   | ScannedState
-  | { phase: 'copying'; done: number; of: number; /** what the check said, still shown while copying (the card keeps its size) */ from?: ScannedState }
-  | { phase: 'copied'; results: { relay: string; ok: number; failed: number; reason?: string }[] }
-export interface RescueProps { state: RescueState; saving: boolean | 'failed' | 'done'; savedCount?: number; onScan: () => void; onCopy: () => void; onSave: () => void; /** a saved file, sent back to the relays as it is */ onRestore?: (file: File) => void; restoreNote?: string }
+  | { phase: 'copying'; done: number; of: number; /** what the check said, still shown while copying (the card keeps its size) */ from?: ScannedState; /** sent: now asking each relay what it really kept */ checking?: boolean }
+  | { phase: 'copied'; results: { relay: string; ok: number; failed: number; reason?: string; held?: number }[]; /** events that did not land somewhere */ missed?: number; /** the replaceable lists sent, with their dates */ snapshots?: { kind: number; at: number }[] }
+export interface RescueProps { state: RescueState; saving: boolean | 'failed' | 'done'; savedCount?: number; onScan: () => void; onCopy: () => void; onSave: () => void; /** a saved file, sent back to the relays as it is */ onRestore?: (file: File) => void; restoreNote?: string; onSaveMissed?: () => void }
 
 export function renderRescue(p: RescueProps, v: View): HTMLElement {
   const s = p.state, host = (u: string) => u.replace(/^wss:\/\//, '')
@@ -577,13 +577,19 @@ export function renderRescue(p: RescueProps, v: View): HTMLElement {
     const sc = s.phase === 'scanned' ? s : s.from!
     body.push(h('p', { class: 'rescue-summary' }, h('strong', {}, t(v.lang, sc.total === 1 ? 'rescueTotalOne' : 'rescueTotal', { n: sc.total })), sc.total ? ` · ${t(v.lang, 'rescueSingle', { n: sc.single })} · ${t(v.lang, 'rescueMissing', { n: sc.missing })}` : ''))
     body.push(h('ul', { class: 'rescue-relays' }, ...sc.perRelay.map((r) => h('li', {}, h('span', { class: 'url' }, host(r.relay)), ' ', h('span', { class: r.failed ? 'meta error' : 'meta' }, r.failed ? t(v.lang, 'rescueNoAnswer') : String(r.count))))))
-    body.push(s.phase === 'copying' ? h('p', {}, h('button', { type: 'button', class: 'primary rescue-progress', disabled: true, role: 'status' }, h('span', {}, t(v.lang, 'rescueCopying', { done: s.done, of: s.of }))), ' ', h('button', { type: 'button', class: 'link', disabled: true }, t(v.lang, 'rescueAgain'))) // the same buttons, still: the card keeps its size
+    body.push(s.phase === 'copying' ? h('p', {}, h('button', { type: 'button', class: 'primary rescue-progress', disabled: true, role: 'status' }, h('span', {}, (s.checking ? t(v.lang, 'rescueChecking') : t(v.lang, 'rescueCopying', { done: s.done, of: s.of })))), ' ', h('button', { type: 'button', class: 'link', disabled: true }, t(v.lang, 'rescueAgain'))) // the same buttons, still: the card keeps its size
       : sc.toCopy ? h('p', {}, h('button', { type: 'button', class: 'primary', onClick: p.onCopy }, t(v.lang, 'rescueCopy', { n: sc.toCopy })), ' ', h('button', { type: 'button', class: 'link', onClick: p.onScan }, t(v.lang, 'rescueAgain')))
       : h('p', {}, h('span', { class: 'meta' }, t(v.lang, sc.total ? 'rescueAllGood' : 'rescueNothing')), ' ', h('button', { type: 'button', class: 'link', onClick: p.onScan }, t(v.lang, 'rescueAgain'))))
-  } else if (s.phase === 'copying') body.push(h('p', { class: 'status loading rescue-progress', role: 'status' }, h('span', {}, t(v.lang, 'rescueCopying', { done: s.done, of: s.of }))))
+  } else if (s.phase === 'copying') body.push(h('p', { class: 'status loading rescue-progress', role: 'status' }, h('span', {}, (s.checking ? t(v.lang, 'rescueChecking') : t(v.lang, 'rescueCopying', { done: s.done, of: s.of })))))
   else {
-    body.push(h('ul', { class: 'rescue-relays' }, ...s.results.map((r) => h('li', {}, h('span', { class: 'url' }, host(r.relay)), ' ', h('span', { class: r.failed ? 'meta error' : 'meta' }, r.failed ? t(v.lang, 'rescueCopiedSome', { ok: r.ok, of: r.ok + r.failed, reason: r.reason ?? '' }) : `${r.ok} ✓`)))))
+    const lost = (r: { ok: number; held?: number }) => r.held !== undefined && r.held < r.ok
+    body.push(h('ul', { class: 'rescue-relays' }, ...s.results.map((r) => h('li', {}, h('span', { class: 'url' }, host(r.relay)), ' ',
+      h('span', { class: r.failed || lost(r) ? 'meta error' : 'meta' }, r.failed ? t(v.lang, 'rescueCopiedSome', { ok: r.ok, of: r.ok + r.failed, reason: r.reason ?? '' }) : `${r.ok} ✓`),
+      lost(r) ? h('span', { class: 'meta error' }, ' · ', t(v.lang, 'rescueNotHeld', { n: r.ok - r.held! })) : null))))
     if (s.results.some((r) => r.failed)) body.push(h('p', { class: 'meta' }, t(v.lang, 'rescueRefused')))
+    if (s.results.some(lost)) body.push(h('p', { class: 'meta' }, t(v.lang, 'rescueNotHeldHelp')))
+    if (s.snapshots?.length) body.push(h('p', { class: 'meta rescue-snapshots' }, t(v.lang, 'rescueSnapshots'), ' ', s.snapshots.map((x) => `${x.kind === 0 ? t(v.lang, 'rescueKindProfile') : x.kind === 3 ? t(v.lang, 'rescueKindFollows') : x.kind === 10002 ? t(v.lang, 'rescueKindRelays') : `kind ${x.kind}`} ${new Date(x.at * 1000).toISOString().slice(0, 10)}`).join(' · ')))
+    if (s.missed && p.onSaveMissed) body.push(h('p', {}, h('button', { type: 'button', onClick: p.onSaveMissed }, icon('download', 16), t(v.lang, 'rescueSaveMissed', { n: s.missed }))))
     body.push(h('p', {}, h('button', { type: 'button', class: 'link', onClick: p.onScan }, t(v.lang, 'rescueAgain'))))
   }
   const saving = p.saving === true ? h('p', { class: 'status loading', role: 'status' }, h('span', {}, t(v.lang, 'rescueSaving')))

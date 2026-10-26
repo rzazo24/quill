@@ -67,7 +67,13 @@ export function coverage(scan: Scan, mine: string[]): Coverage {
   return { total: scan.notes.size, single, missing, lacking }
 }
 
-export interface CopyResult { relay: string; sent: number; ok: number; failed: number; reason?: string }
+export interface CopyResult {
+  relay: string; sent: number; ok: number; failed: number; reason?: string
+  /** what did not land: refused, never tried after the relay gave up, or (after `checkHeld`) said "ok" but is not served */
+  missed?: Event[]
+  /** after `checkHeld`: how many of the accepted ones the relay really serves when asked for them by id */
+  held?: number
+}
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** Sends each relay the notes it lacks, newest first, a few per second. A relay that says "too fast" is given more time between notes (doubling,
@@ -81,7 +87,11 @@ export async function copyNotes(p: Publisher, lacking: Map<string, Event[]>, onP
   return Promise.all([...lacking].filter(([, list]) => list.length).map(async ([relay, list]): Promise<CopyResult> => {
     const r: CopyResult = { relay, sent: 0, ok: 0, failed: 0 }
     let inARow = 0, gap = gapMs
-    for (const e of [...list].sort((a, b) => b.created_at - a.created_at)) {
+    // deletions go last: one that arrives before the note it deletes finds nothing, and the note that arrives after it simply stays
+    const ordered = [...list].sort((a, b) => Number(a.kind === 5) - Number(b.kind === 5) || b.created_at - a.created_at)
+    const missed: Event[] = []
+    r.missed = missed
+    for (const [i, e] of ordered.entries()) {
       let outcome = (await p.publish(e, [relay]))[relay] ?? 'no answer from the relay'
       for (let i = 0; i < RETRIES && outcome !== 'ok' && slowDown(outcome); i++) {
         gap = Math.min(MAX_GAP, Math.max(gap * 2, gapMs ? 500 : 0))
@@ -89,11 +99,44 @@ export async function copyNotes(p: Publisher, lacking: Map<string, Event[]>, onP
         outcome = (await p.publish(e, [relay]))[relay] ?? 'no answer from the relay'
       }
       r.sent++; done++; onProgress?.(done, total)
-      if (outcome === 'ok' || /duplicate|already have/i.test(outcome)) { r.ok++; inARow = 0 } else { r.failed++; r.reason = outcome; if (++inARow >= GIVE_UP) { done += list.length - r.sent; onProgress?.(done, total); break } }
+      if (outcome === 'ok' || /duplicate|already have/i.test(outcome)) { r.ok++; inARow = 0 } else { r.failed++; r.reason = outcome; missed.push(e); if (++inARow >= GIVE_UP) { missed.push(...ordered.slice(i + 1)); done += list.length - r.sent; onProgress?.(done, total); break } }
       if (gap) await pause(gap)
     }
     return r
   }))
+}
+
+/**
+ * "ok" is what a relay says, not what it keeps: some answer ok and never serve the event. So each relay is asked afterwards, by id, for what it
+ * accepted; what it does not serve joins `missed`. A replaceable list it does not serve may have lost to a newer version there: that is in the list too.
+ */
+export async function checkHeld(f: Fetcher, sent: Map<string, Event[]>, results: CopyResult[]): Promise<CopyResult[]> {
+  return Promise.all(results.map(async (r) => {
+    const missedIds = new Set((r.missed ?? []).map((e) => e.id))
+    const accepted = (sent.get(r.relay) ?? []).filter((e) => !missedIds.has(e.id))
+    if (!accepted.length) return { ...r, held: 0 }
+    const have = new Set<string>()
+    try {
+      for (let i = 0; i < accepted.length; i += 200) {
+        const ids = accepted.slice(i, i + 200).map((e) => e.id)
+        for (const e of await f.query({ ids, limit: ids.length }, { only: [r.relay], quick: false })) if (ids.includes(e.id)) have.add(e.id)
+      }
+    } catch { return r } // could not ask: the relay's own answers stand
+    const notServed = accepted.filter((e) => !have.has(e.id))
+    return { ...r, held: have.size, missed: [...(r.missed ?? []), ...notServed] }
+  }))
+}
+
+/** What did not land anywhere it was sent, once each: a file in the same shape, to load again later (the rerun is the queue). */
+export function missedEvents(results: CopyResult[]): Event[] {
+  const all = new Map<string, Event>()
+  for (const r of results) for (const e of r.missed ?? []) all.set(e.id, e)
+  return [...all.values()].sort((a, b) => b.created_at - a.created_at)
+}
+
+/** The replaceable lists in a set of events (profile, follows, relay lists…), with the date each one carries: a file is a snapshot, not the latest state. */
+export function snapshots(events: Event[]): { kind: number; at: number }[] {
+  return events.filter((e) => e.kind === 0 || e.kind === 3 || (e.kind >= 10000 && e.kind < 20000)).map((e) => ({ kind: e.kind, at: e.created_at })).sort((a, b) => a.kind - b.kind)
 }
 
 /** Everything the reader published that the file keeps, from every relay, newest version of each replaceable list only, deleted notes left out (by id or by address), the deletions kept. */

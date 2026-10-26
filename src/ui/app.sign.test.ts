@@ -509,7 +509,10 @@ describe('sharing a note', () => {
     Object.defineProperty(input, 'files', { value: [file] }); input.dispatchEvent(new Event('change')); await tick(600)
     const sent = pub.sent.map((x) => x.event.id)
     expect(sent.every((id) => id === mine.id)).toBe(true); expect(sent.length).toBeGreaterThan(0)
-    expect(a.root.querySelector('section.rescue')!.textContent).toContain('1 events from the file · 1 left out (not signed by this account)')
+    const card = a.root.querySelector('section.rescue')!
+    expect(card.textContent).toContain('1 events from the file · 1 left out (not signed by this account)')
+    expect(card.textContent).toContain('said ok but are not served') // the fake relays answer ok and never hold it: the check after sending catches that
+    expect([...card.querySelectorAll('button')].some((b) => b.textContent === 'Download what did not land (1)')).toBe(true)
   })
   it('the "…" of a note offers its text, its id and its link, even without a signer; each copies exactly that and says so', async () => {
     const copied: string[] = []; const a = boot({ events: events(), copied }); await tick(100)
