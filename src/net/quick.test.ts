@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Event } from 'nostr-tools'
-import { collectQuick, isQuick, type Subscribe } from './fetcher.js'
+import { collectQuick, isPartial, isQuick, markPartial, memo, type Subscribe } from './fetcher.js'
 
 const ev = (id: string) => ({ id, pubkey: 'p', kind: 1, content: '', tags: [], created_at: 1, sig: 's' }) as Event
 /** Pretend relays: each answers after its own delay (null: never) with its own events. */
@@ -58,5 +58,44 @@ describe('relays that keep failing are left alone for a while', () => {
     for (let i = 0; i < 10; i++) h.fail('a'); expect(h.resting('a')).toBe(true); now += 15 * 60_000 + 1; expect(h.resting('a')).toBe(false) // never more than 15 minutes
     h.ok('a'); h.fail('a'); expect(h.resting('a')).toBe(false) // an answer resets the count
     h.fail('a'); h.fail('b'); h.fail('b'); expect(h.usable(['a', 'b'])).toEqual(['a', 'b']) // everyone resting: ask them all
+  })
+})
+
+describe('collectQuick with poor coverage', () => {
+  /** Relays that fail at once (no coverage, refused connection) and relays that answer later. */
+  function patchy(spec: Record<string, { failAt?: number; after?: number; events?: string[] }>): Subscribe {
+    return (url, _f, on) => {
+      const r = spec[url]!
+      const t = setTimeout(() => { if (r.failAt !== undefined) return on.oneose(true); for (const id of r.events ?? []) on.onevent(ev(id)); on.oneose() }, r.failAt ?? r.after ?? 0)
+      return { close: () => clearTimeout(t) }
+    }
+  }
+  it('relays that fail quickly do not make a "majority": it waits for the ones that work', async () => {
+    vi.useFakeTimers()
+    const spec = { a: { failAt: 5 }, b: { failAt: 5 }, c: { failAt: 5 }, d: { failAt: 5 }, e: { after: 800, events: ['1'] }, f: { after: 900, events: ['2'] }, g: { after: 950, events: ['3'] } }
+    const p = collectQuick(patchy(spec), Object.keys(spec), { kinds: [1] }); await vi.advanceTimersByTimeAsync(1200)
+    const got = await p
+    expect(got.map((e) => e.id).sort()).toEqual(['1', '2', '3']) // before: four quick failures made a majority and it answered empty at 0.2 s
+    expect(isPartial(got)).toBe(true); vi.useRealTimers() // three of seven answered: complete for them, but asked again later
+  })
+  it('an answer cut short by the wait, or given by fewer than half of the relays, is marked partial; a full one is not', async () => {
+    vi.useFakeTimers()
+    const cut = collectQuick(patchy({ a: { after: 10, events: ['k'] }, b: { after: 99_999 }, c: { after: 99_999 } }), ['a', 'b', 'c'], { kinds: [1] }, { maxWait: 1000 }); await vi.advanceTimersByTimeAsync(1100)
+    expect(isPartial(await cut)).toBe(true)
+    const few = collectQuick(patchy({ a: { after: 10, events: ['k'] }, b: { failAt: 1 }, c: { failAt: 1 } }), ['a', 'b', 'c'], { kinds: [1] }); await vi.advanceTimersByTimeAsync(300)
+    expect(isPartial(await few)).toBe(true) // one relay of three: the others could not be reached
+    const full = collectQuick(patchy({ a: { after: 10, events: ['k'] }, b: { after: 20 }, c: { failAt: 1 } }), ['a', 'b', 'c'], { kinds: [1] }); await vi.advanceTimersByTimeAsync(300)
+    expect(isPartial(await full)).toBe(false); vi.useRealTimers()
+  })
+})
+
+describe('memo: a partial answer is asked again', () => {
+  it('keeps a full answer, but asks again for a partial one after emptyMs', async () => {
+    let calls = 0, t = 0, partial = true
+    const inner = { query: async () => { calls++; const r = [ev(`n${calls}`)]; return partial ? markPartial(r) : r } }
+    const m = memo(inner, 30_000, () => t)
+    await m.query({ kinds: [1] }); t = 10_000; await m.query({ kinds: [1] }); expect(calls).toBe(1) // still fresh
+    partial = false; t = 31_000; expect((await m.query({ kinds: [1] }))[0]!.id).toBe('n2') // asked again
+    t = 999_999; await m.query({ kinds: [1] }); expect(calls).toBe(2) // a full answer is kept
   })
 })

@@ -17,7 +17,7 @@ export interface Fetcher {
   reconnect?(): void
   /** When (ms) a question was last sent to the relays, and when any relay last answered one. An empty view asked after `asked` with no answer since
    *  did not hear from anybody: "nothing here" would be a lie, it is "no connection". */
-  activity?(): { asked: number; answered: number }
+  activity?(): { asked: number; answered: number; /** when (ms) an answer last came back partial (cut short, or most relays failed) */ partial?: number }
 }
 
 export const DEFAULT_RELAYS = [
@@ -52,24 +52,42 @@ export function accept(filter: Filter, events: Event[], verify: (e: Event) => bo
 /** Notes, reposts, reactions, profiles and single notes by id: a relay that is slow to answer holds little that the others do not, so they do not wait for the last one. */
 export const isQuick = (filter: Filter): boolean => !!filter.ids || (filter.kinds ?? [-1]).every((k) => [0, 1, 6, 7, 16].includes(k))
 
-/** One subscription to one relay: `onevent` for each event, `oneose` when it has said all it has (or failed: then there is nothing more to wait for there). */
-export type Subscribe = (url: string, filter: Filter, on: { onevent(e: Event): void; oneose(): void; /** Asked BEFORE the signature is checked: an event another relay already sent is not checked again. */ alreadyHaveEvent(id: string): boolean }) => { close(): void }
+/** One subscription to one relay: `onevent` for each event, `oneose` when it has said all it has, or `oneose(true)` when it failed (could not connect,
+ *  closed on us): then there is nothing more to wait for there, but it did not answer either. */
+export type Subscribe = (url: string, filter: Filter, on: { onevent(e: Event): void; oneose(failed?: boolean): void; /** Asked BEFORE the signature is checked: an event another relay already sent is not checked again. */ alreadyHaveEvent(id: string): boolean }) => { close(): void }
+
+/** Answers that may be missing part of what the relays hold: the wait ran out, or most relays failed (poor coverage). They are not to be kept for long. */
+const partials = new WeakSet<Event[]>()
+export const isPartial = (events: Event[]): boolean => partials.has(events)
+export const markPartial = (events: Event[]): Event[] => { partials.add(events); return events }
 
 /**
- * Asks every relay at the same time and answers when a majority has finished (plus a short moment for the ones about to), or when everybody has, or after `maxWait`.
- * What a slower relay sends later is dropped. Each event is kept once, even if several relays send it.
+ * Asks every relay at the same time and answers when a majority of those that can be reached has answered (plus a short moment for the ones about to),
+ * or when everybody has finished, or after `maxWait`. Only an answer counts towards the majority: a relay that fails (no coverage, refused connection)
+ * only lowers how many are waited for. Otherwise, with poor coverage, a few quick failures made a "majority" before any real answer had arrived.
+ * What a slower relay sends later is dropped. Each event is kept once, even if several relays send it. An answer cut short, or given by fewer than half
+ * of the relays, is marked partial (`isPartial`).
  */
 export function collectQuick(subscribe: Subscribe, relays: string[], filter: Filter, { maxWait = 6000, grace = 200, share = 0.6 } = {}): Promise<Event[]> {
   return new Promise((resolve) => {
     const events: Event[] = [], seen = new Set<string>(), closers: { close(): void }[] = []
-    const need = Math.max(1, Math.ceil(relays.length * share))
-    let done = 0, finished = false, graceTimer: ReturnType<typeof setTimeout> | undefined
-    const finish = () => { if (finished) return; finished = true; clearTimeout(graceTimer); clearTimeout(limit); for (const c of closers) try { c.close() } catch { /* already closed */ } resolve(events) }
-    const limit = setTimeout(finish, maxWait)
+    let answered = 0, failed = 0, finished = false, graceTimer: ReturnType<typeof setTimeout> | undefined
+    const finish = (timedOut = false) => {
+      if (finished) return; finished = true; clearTimeout(graceTimer); clearTimeout(limit)
+      for (const c of closers) try { c.close() } catch { /* already closed */ }
+      resolve(timedOut || answered * 2 < relays.length ? markPartial(events) : events)
+    }
+    const limit = setTimeout(() => finish(answered < Math.max(1, Math.ceil((relays.length - failed) * share))), maxWait)
     if (!relays.length) return finish()
     for (const url of relays) {
       let counted = false
-      const oneose = () => { if (counted) return; counted = true; done++; if (done >= relays.length) finish(); else if (done >= need && graceTimer === undefined) graceTimer = setTimeout(finish, grace) }
+      const oneose = (bad?: boolean) => {
+        if (counted) return; counted = true
+        if (bad) failed++; else answered++
+        if (answered + failed >= relays.length) return finish()
+        const need = Math.max(1, Math.ceil((relays.length - failed) * share))
+        if (answered >= need && graceTimer === undefined) graceTimer = setTimeout(() => finish(), grace)
+      }
       closers.push(subscribe(url, filter, { onevent: (e) => { if (!finished && !seen.has(e.id)) { seen.add(e.id); events.push(e) } }, oneose, alreadyHaveEvent: (id) => seen.has(id) }))
     }
   })
@@ -105,29 +123,43 @@ export class RelayHealth {
 /** With `verifyMany`, the relay layer does not check signatures as they arrive (that froze the page): they are checked in one go, off the page, before anything is returned. */
 export function poolFetcher(relays: string[] | (() => string[]) = DEFAULT_RELAYS, maxWait = 6000, verifyMany?: VerifyMany, health = new RelayHealth()): Fetcher {
   const pool: SimplePool = verifyMany ? (new AbstractSimplePool({ verifyEvent: () => true, maxWaitForConnection: 3000 }) as unknown as SimplePool) : new SimplePool()
-  let asked = 0, answeredAt = 0
+  let asked = 0, answeredAt = 0, partialAt = 0
   const check = (filter: Filter, events: Event[]) => (verifyMany ? acceptMany(filter, events, verifyMany) : Promise.resolve(accept(filter, events)))
-  const subscribe: Subscribe = (url, filter, on) => {
-    let answered = false
+  /** One round of questions: the relays that failed in it are only marked as failing if another relay answered. If none did, the reader's connection is
+   *  what failed (no coverage), and resting the relays would keep the good ones away for minutes once it is back. */
+  type Round = { answered: number; failed: string[] }
+  const subscribe = (round: Round): Subscribe => (url, filter, on) => {
+    let answered = false, eose = false
     const sub = pool.subscribeMany([url], filter, {
       maxWait, onevent: (e: Event) => { answeredAt = Date.now(); on.onevent(e) }, alreadyHaveEvent: on.alreadyHaveEvent,
-      oneose: () => { answered = true; on.oneose() }, // (the pool also calls this when a relay cannot be reached: the close reason tells them apart)
+      // the pool also calls this, right before onclose, when a relay cannot be reached: wait a moment to know which it was
+      oneose: () => { eose = true; queueMicrotask(() => { if (!eose) return; answered = true; round.answered++; on.oneose() }) },
       onclose: (reasons: { reason: string }[] | string) => {
         const why = typeof reasons === 'string' ? reasons : reasons?.[0]?.reason ?? ''
-        if (/closed by caller|closed automatically/i.test(why)) { if (answered) { health.ok(url); answeredAt = Date.now() } } else health.fail(url) // closed by us after an answer: fine; any other reason: it failed
-        on.oneose()
+        if (/closed by caller|closed automatically/i.test(why)) { if (answered) { health.ok(url); answeredAt = Date.now() } on.oneose(); return } // closed by us after an answer: fine
+        if (!answered) { eose = false; round.failed.push(url) } // any other reason, before an answer: it failed
+        on.oneose(!answered)
       },
     } as Parameters<SimplePool['subscribeMany']>[2])
     return { close: () => sub.close() }
+  }
+  const quickly = async (list: string[], filter: Filter, options?: QueryOptions): Promise<Event[]> => {
+    const round: Round = { answered: 0, failed: [] }
+    const raw = await collectQuick(subscribe(round), list, filter, { maxWait, ...(options?.grace !== undefined ? { grace: options.grace } : {}) })
+    if (round.answered) for (const url of round.failed) health.fail(url)
+    const out = await check(filter, raw)
+    if (!isPartial(raw)) return out
+    partialAt = Date.now()
+    return markPartial(out)
   }
   return {
     query: async (filter, options) => {
       const list = options?.only?.length ? options.only.filter((u) => !health.resting(u)) : health.usable([...new Set([...(typeof relays === 'function' ? relays() : relays), ...(options?.also ?? []).slice(0, 4)])])
       if (!list.length) return [] // the only relays asked for are resting: nothing to ask
       asked = Date.now()
-      return check(filter, options?.quick ?? isQuick(filter) ? await collectQuick(subscribe, list, filter, { maxWait, ...(options?.grace !== undefined ? { grace: options.grace } : {}) }) : await pool.querySync(list, filter, { maxWait }))
+      return options?.quick ?? isQuick(filter) ? quickly(list, filter, options) : check(filter, await pool.querySync(list, filter, { maxWait }))
     },
-    activity: () => ({ asked, answered: answeredAt }),
+    activity: () => ({ asked, answered: answeredAt, partial: partialAt }),
     reconnect: () => { try { pool.close([...pool.listConnectionStatus()].filter(([, open]) => open).map(([url]) => url)) } catch { /* nothing open */ } }, // (one still connecting is fresh anyway)
   }
 }
@@ -142,7 +174,8 @@ export async function queryAuthors(f: Fetcher, base: Filter, authors: string[], 
 }
 
 /** Remembers answers for the life of the page, so changing a filter setting re-judges without asking the relays again. `clear()` is "refresh".
- *  An empty answer is kept only `emptyMs`: with poor coverage the relays may not have answered in time, and the view should ask again without a refresh. */
+ *  An empty answer, or a partial one (`isPartial`: cut short, or most relays failed), is kept only `emptyMs`: with poor coverage the relays may not have
+ *  answered in time, and the view should ask again without a refresh. */
 export function memo(f: Fetcher, emptyMs = 30_000, now: () => number = Date.now): Fetcher & { clear(): void; reconnect(): void } {
   const cache = new Map<string, { p: Promise<Event[]>; empty?: number }>()
   return {
@@ -152,7 +185,7 @@ export function memo(f: Fetcher, emptyMs = 30_000, now: () => number = Date.now)
       if (hit?.empty !== undefined && now() - hit.empty >= emptyMs) hit = undefined
       if (!hit) {
         const entry: { p: Promise<Event[]>; empty?: number } = { p: f.query(filter, options) }
-        entry.p.then((r) => { if (!r.length) entry.empty = now() }, () => { if (cache.get(key) === entry) cache.delete(key) })
+        entry.p.then((r) => { if (!r.length || isPartial(r)) entry.empty = now() }, () => { if (cache.get(key) === entry) cache.delete(key) })
         cache.set(key, (hit = entry))
       }
       return hit.p
