@@ -627,7 +627,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const unanswered = (n: number) => { const a = fetcher.activity?.(); return n === 0 && !!a && a.asked >= started && a.answered < started }
     const noAnswer = () => h('div', { class: 'empty no-answer', role: 'status' }, h('p', {}, t(lang, 'noAnswer')), h('button', { type: 'button', onClick: refresh }, t(lang, 'searchRetry')))
     // a list that came back while most relays could not be reached may be missing notes: say so, with a way to try again (it is asked again on its own later)
-    const partialNote = (n: number) => { const a = fetcher.activity?.(); return n > 0 && (a?.partial ?? 0) >= started ? h('p', { class: 'meta partial-note', role: 'status' }, t(lang, 'partialAnswer'), ' ', h('button', { type: 'button', class: 'link', onClick: refresh }, t(lang, 'searchRetry'))) : null }
+    const partialNote = (n: number) => { const a = fetcher.activity?.(); return n > 0 && (a?.partial ?? 0) >= started ? h('div', { class: 'partial-note', role: 'status' }, h('span', {}, t(lang, 'partialAnswer')), h('button', { type: 'button', class: 'link', onClick: refresh }, t(lang, 'searchRetry'))) : null }
     if (route.name === 'pick') {
       const pk = await pickOfDay()
       if (!alive()) return null
