@@ -128,6 +128,7 @@ export function poolFetcher(relays: string[] | (() => string[]) = DEFAULT_RELAYS
   /** One round of questions: the relays that failed in it are only marked as failing if another relay answered. If none did, the reader's connection is
    *  what failed (no coverage), and resting the relays would keep the good ones away for minutes once it is back. */
   type Round = { answered: number; failed: string[] }
+  const unreachable = /connection|connect|timed? ?out|network|socket|abort|no relay|unreachable/i
   const subscribe = (round: Round): Subscribe => (url, filter, on) => {
     let answered = false, eose = false
     const sub = pool.subscribeMany([url], filter, {
@@ -137,8 +138,13 @@ export function poolFetcher(relays: string[] | (() => string[]) = DEFAULT_RELAYS
       onclose: (reasons: { reason: string }[] | string) => {
         const why = typeof reasons === 'string' ? reasons : reasons?.[0]?.reason ?? ''
         if (/closed by caller|closed automatically/i.test(why)) { if (answered) { health.ok(url); answeredAt = Date.now() } on.oneose(); return } // closed by us after an answer: fine
-        if (!answered) { eose = false; round.failed.push(url) } // any other reason, before an answer: it failed
-        on.oneose(!answered)
+        if (answered) return on.oneose()
+        eose = false
+        // the relay could not be reached (no coverage, timeout): that is what "failed" means for the wait and for the notice about missing notes. A relay
+        // that was reached and said no (CLOSED: blocked, auth-required, rate-limited…) did answer: the connection works, it just has nothing for us
+        if (!unreachable.test(why)) { health.fail(url); round.answered++; return on.oneose() }
+        round.failed.push(url)
+        on.oneose(true)
       },
     } as Parameters<SimplePool['subscribeMany']>[2])
     return { close: () => sub.close() }
@@ -149,7 +155,9 @@ export function poolFetcher(relays: string[] | (() => string[]) = DEFAULT_RELAYS
     if (round.answered) for (const url of round.failed) health.fail(url)
     const out = await check(filter, raw)
     if (!isPartial(raw)) return out
-    partialAt = Date.now()
+    // only a question to the reader's own relays says something about their connection: one to a single relay, or to someone else's (where they
+    // write, a hint in a link), fails often for reasons of its own, and the notice would never go away
+    if (!options?.only?.length && !options?.also?.length) partialAt = Date.now()
     return markPartial(out)
   }
   return {
