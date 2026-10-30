@@ -488,3 +488,15 @@ label.file-button { display: inline-flex; align-items: center; gap: 6px; cursor:
 .partial-note button.link { flex: none; min-height: 30px; padding: 0 10px; font-size: .82rem; color: var(--accent) }
 .partial-note button.link { transition: border-color .15s, box-shadow .15s }
 .partial-note button.link:active, .partial-note button.link.pressed { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .35) }
+
+/* The tab bar floats: a capsule clear of the screen's edges that stays on screen while you scroll (the search and write buttons still hide).
+   --tab-h stays "the room the bar takes from the bottom", so everything that sits above it (buttons, toasts, the end of the list) still clears it. */
+:root { --pill-h: 54px; --tab-h: 66px }
+html, html.edge-gap body { background: var(--bg) } /* nothing to continue under a floating bar */
+.tabbar { left: 12px; right: 12px; bottom: calc(var(--tab-safe) + var(--tab-lift) + 8px); width: auto; max-width: calc(var(--col) - 24px); height: var(--pill-h); padding: 5px; gap: 4px;
+  border: 1px solid var(--border); border-radius: 999px; background: rgba(17,24,35,.82); -webkit-backdrop-filter: blur(16px) saturate(1.3); backdrop-filter: blur(16px) saturate(1.3); box-shadow: 0 8px 28px rgba(0,0,0,.5) }
+.tabbar .tab { position: relative; min-height: 0; padding: 0; border-top: 0; border-radius: 999px; transition: background .2s }
+.tabbar .tab.on { background: rgba(var(--accent-rgb),.14) } /* the open tab: a lighter capsule inside the bar */
+html.edge-gap .tabbar .tab { padding-top: 0 }
+#app.bars-hidden .tabbar { transform: none } /* it no longer gives its room back while reading */
+.tab .badge { top: 4px; right: 14px }
