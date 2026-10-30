@@ -491,9 +491,9 @@ label.file-button { display: inline-flex; align-items: center; gap: 6px; cursor:
 
 /* The tab bar floats: a capsule clear of the screen's edges that stays on screen while you scroll (the search and write buttons still hide).
    --tab-h stays "the room the bar takes from the bottom", so everything that sits above it (buttons, toasts, the end of the list) still clears it. */
-:root { --pill-h: 52px; --tab-h: calc(var(--pill-h) + 18px + env(safe-area-inset-bottom) * .35) } /* with --tab-safe (half the inset): the bar's top plus a little air */
+:root { --pill-h: 52px; --bar-inset: env(safe-area-inset-bottom); --tab-h: calc(var(--pill-h) + 18px + var(--bar-inset) * .35) } /* with --tab-safe (half the inset): the bar's top plus a little air */
 html, html.edge-gap body { background: var(--bg) } /* nothing to continue under a floating bar */
-.tabbar { left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom) * .7 + 10px); width: auto; max-width: calc(var(--col) - 24px); height: var(--pill-h); padding: 5px; gap: 4px;
+.tabbar { left: 12px; right: 12px; bottom: calc(var(--bar-inset) * .7 + 10px); width: auto; max-width: calc(var(--col) - 24px); height: var(--pill-h); padding: 5px; gap: 4px;
   border: 1px solid var(--border); border-radius: 999px; background: color-mix(in srgb, var(--panel) 88%, transparent); -webkit-backdrop-filter: blur(16px) saturate(1.3); backdrop-filter: blur(16px) saturate(1.3); box-shadow: 0 8px 28px rgba(0,0,0,.45) }
 html[data-scheme=light] .tabbar { box-shadow: 0 6px 22px rgba(23,33,43,.16) } /* the bar's own colour in every theme, light included */
 .tabbar .tab { position: relative; min-height: 0; padding: 0; border-top: 0; border-radius: 999px; transition: background .2s }
@@ -501,3 +501,10 @@ html[data-scheme=light] .tabbar { box-shadow: 0 6px 22px rgba(23,33,43,.16) } /*
 html.edge-gap .tabbar .tab { padding-top: 0 }
 #app.bars-hidden .tabbar { transform: none } /* it no longer gives its room back while reading */
 .tab .badge { top: 4px; right: 14px }
+
+/* The installed iPhone app draws under the status bar (black-translucent), so the top takes the page's own colour in every theme. iOS then sizes the
+   page as if the status bar were outside it, and the page stops that much short of the bottom. main.ts measures the shortfall (--edge-gap); the app
+   shell is stretched by it down to the screen's edge, so the list runs under the floating bar, and the bar keeps clear of the home indicator (the page
+   reports no bottom inset there, hence the fixed 34px, the indicator's usual room). */
+html.edge-gap body { bottom: calc(-1 * var(--edge-gap, 0px)) }
+html.edge-gap { --bar-inset: 34px; --tab-safe: 17px; --tab-lift: 6px }
