@@ -493,7 +493,7 @@ label.file-button { display: inline-flex; align-items: center; gap: 6px; cursor:
    --tab-h stays "the room the bar takes from the bottom", so everything that sits above it (buttons, toasts, the end of the list) still clears it. */
 :root { --pill-h: 52px; --bar-inset: env(safe-area-inset-bottom); --tab-h: calc(var(--pill-h) + 18px + var(--bar-inset) * .35) } /* with --tab-safe (half the inset): the bar's top plus a little air */
 html, html.edge-gap body { background: var(--bg) } /* nothing to continue under a floating bar */
-.tabbar { left: 12px; right: 12px; bottom: calc(var(--bar-inset) * .7 + 10px); width: auto; max-width: calc(var(--col) - 24px); height: var(--pill-h); padding: 5px; gap: 4px;
+.tabbar { left: 12px; right: 12px; bottom: calc(var(--bar-inset) * .7 + 7px); width: auto; max-width: calc(var(--col) - 24px); height: var(--pill-h); padding: 5px; gap: 4px;
   border: 1px solid var(--border); border-radius: 999px; background: color-mix(in srgb, var(--panel) 88%, transparent); -webkit-backdrop-filter: blur(16px) saturate(1.3); backdrop-filter: blur(16px) saturate(1.3); box-shadow: 0 8px 28px rgba(0,0,0,.45) }
 html[data-scheme=light] .tabbar { box-shadow: 0 6px 22px rgba(23,33,43,.16) } /* the bar's own colour in every theme, light included */
 .tabbar .tab { position: relative; min-height: 0; padding: 0; border-top: 0; border-radius: 999px; transition: background .2s }
@@ -506,3 +506,6 @@ html.edge-gap .tabbar .tab { padding-top: 0 }
    a page shorter than the screen (innerHeight: main.ts marks it edge-gap) and no bottom inset, although the page does reach the screen's edge: so the
    shell is NOT stretched (that pushed the bar off the screen), and the bar keeps the home indicator's usual room itself (34px). */
 html.edge-gap { --bar-inset: 34px; --tab-safe: 17px; --tab-lift: 6px }
+
+/* the search and write buttons: a little smaller, and a little closer to the floating bar */
+.fab, .fab-search { width: 53px; height: 53px; min-height: 53px; bottom: calc(var(--tab-h) + var(--tab-safe) + 8px) }
