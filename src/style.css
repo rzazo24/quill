@@ -508,4 +508,4 @@ html.edge-gap .tabbar .tab { padding-top: 0 }
 html.edge-gap { --bar-inset: 34px; --tab-safe: 17px; --tab-lift: 6px }
 
 /* the search and write buttons: a little smaller, and a little closer to the floating bar */
-.fab, .fab-search { width: 53px; height: 53px; min-height: 53px; bottom: calc(var(--tab-h) + var(--tab-safe) + 8px) }
+.fab, .fab-search { width: 53px; height: 53px; min-height: 53px; bottom: calc(var(--tab-h) + var(--tab-safe) + 5px) }
