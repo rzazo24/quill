@@ -1620,6 +1620,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     const colAnchors = new Map([...root.querySelectorAll<HTMLElement>('.col[data-col]')].map((c) => [c.dataset.col!, anchorIn(c)]))
     const route = parseRoute(deps.location.hash)
     const isWide = wide() && !!me && route.name !== 'settings' && route.name !== 'help'
+    const showTabs = !!me && !isWide && route.name !== 'settings' && route.name !== 'help' // Settings and Help are pages you leave with Back: no tab bar over them
     if (confirmingDisconnect && ((route.name !== 'me' && !isWide) || signer?.state !== 'connected')) confirmingDisconnect = false // a question left behind is forgotten
     if (confirmingSignOut && ((route.name !== 'me' && !isWide) || !me)) confirmingSignOut = false
     if (shareConfirm && signer?.state !== 'connected') shareConfirm = null
@@ -1663,7 +1664,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
       h('header', { class: 'top' }, halloween() ? h('span', { class: 'cobweb', 'aria-hidden': 'true' }, cobweb()) : null, updateReady ? h('div', { class: 'update', role: 'status' }, h('span', {}, t(lang, 'updateAvailable')), h('button', { type: 'button', class: 'primary', ...(busy ? { disabled: true } : {}), onClick: () => deps.reload?.() }, t(lang, 'updateNow'))) : null, h('div', { class: 'brand' }, h('h1', {}, h('a', { href: '#/', class: 'wordmark' }, logo(26, halloween()), 'Quill', halloween() ? pumpkin(22) : null)), h('span', { class: 'tag' }, t(lang, 'tagline'))), me && wide() ? h('button', { type: 'button', class: route.name === 'search' ? 'icon on' : 'icon', 'aria-label': t(lang, 'search'), title: t(lang, 'search'), 'aria-pressed': String(route.name === 'search'), onClick: () => deps.setHash(route.name === 'search' ? '' : '#/search') }, icon('search', 18)) : null, me ? h('button', { type: 'button', class: status ? 'icon spinning' : 'icon', 'aria-label': t(lang, 'refresh'), title: t(lang, 'refresh'), ...(status ? { 'aria-busy': 'true' } : {}), onClick: refresh }, icon('refresh', 18)) : null, pills, me ? h('button', { type: 'button', class: route.name === 'settings' ? 'icon on' : 'icon', 'aria-label': t(lang, 'prefsTitle'), title: t(lang, 'prefsTitle'), 'aria-pressed': String(route.name === 'settings'), onClick: () => deps.setHash(route.name === 'settings' ? '' : '#/settings') }, icon('gear', 18)) : null, h('button', { type: 'button', class: route.name === 'help' ? 'icon on' : 'icon', 'aria-label': t(lang, 'helpTitle'), title: t(lang, 'helpTitle'), 'aria-pressed': String(route.name === 'help'), onClick: () => deps.setHash(route.name === 'help' ? '' : '#/help') }, icon('help', 18)), statusEl),
       // the search button lives inside <main>, like the write button: on iOS the scrolling <main> is a layer of its own, and a button outside it would cover the notices shown inside it
       h('main', { class: isWide ? 'view wide' : 'view' }, isWide ? null : lateButton(null), ...content, me && !isWide && route.name !== 'search' && route.name !== 'settings' && route.name !== 'help' ? h('button', { type: 'button', class: 'fab-search', 'aria-label': t(lang, 'search'), title: t(lang, 'search'), onClick: () => deps.setHash('#/search') }, icon('search', 26)) : null),
-      me && !isWide ? h('nav', { class: 'tabbar' }, tab('following', '#/'), tab('mentions', '#/mentions'), tab('me', '#/me')) : null,
+      showTabs ? h('nav', { class: 'tabbar' }, tab('following', '#/'), tab('mentions', '#/mentions'), tab('me', '#/me')) : null,
     ]
     // put the reader back where they were (unless this is a new view)
     if (scrollToTop || flash || composer || review || result || followFlow || shareConfirm || deleteConfirm || connectOpen) barsHidden = false // a new view, or something that talks to you: the bars stay
@@ -1681,7 +1682,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     if (keep) { const again = root.querySelector<HTMLTextAreaElement>(`[data-keep-focus="${keep.key}"]`); if (again && root.ownerDocument.activeElement !== again) { again.focus({ preventScroll: true }); try { again.setSelectionRange(keep.start ?? again.value.length, keep.end ?? again.value.length) } catch { /* not a text box */ } } }
     root.classList.toggle('bars-hidden', barsHidden && !isWide)
     root.classList.toggle('wide', isWide)
-    root.classList.toggle('has-tabs', !!me && !isWide)
+    root.classList.toggle('has-tabs', showTabs)
     root.classList.toggle('wide-screen', wide()) // the screen is wide, whatever page is shown: the header keeps its place
     for (const c of root.querySelectorAll<HTMLElement>('.col[data-col]')) {
       const id = c.dataset.col as keyof typeof panes
