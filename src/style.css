@@ -502,9 +502,7 @@ html.edge-gap .tabbar .tab { padding-top: 0 }
 #app.bars-hidden .tabbar { transform: none } /* it no longer gives its room back while reading */
 .tab .badge { top: 4px; right: 14px }
 
-/* The installed iPhone app draws under the status bar (black-translucent), so the top takes the page's own colour in every theme. iOS then sizes the
-   page as if the status bar were outside it, and the page stops that much short of the bottom. main.ts measures the shortfall (--edge-gap); the app
-   shell is stretched by it down to the screen's edge, so the list runs under the floating bar, and the bar keeps clear of the home indicator (the page
-   reports no bottom inset there, hence the fixed 34px, the indicator's usual room). */
-html.edge-gap body { bottom: calc(-1 * var(--edge-gap, 0px)) }
+/* The installed iPhone app draws under the status bar (black-translucent), so the top takes the page's own colour in every theme. There iOS reports
+   a page shorter than the screen (innerHeight: main.ts marks it edge-gap) and no bottom inset, although the page does reach the screen's edge: so the
+   shell is NOT stretched (that pushed the bar off the screen), and the bar keeps the home indicator's usual room itself (34px). */
 html.edge-gap { --bar-inset: 34px; --tab-safe: 17px; --tab-lift: 6px }
