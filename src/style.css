@@ -501,8 +501,3 @@ html[data-scheme=light] .tabbar { box-shadow: 0 6px 22px rgba(23,33,43,.16) } /*
 html.edge-gap .tabbar .tab { padding-top: 0 }
 #app.bars-hidden .tabbar { transform: none } /* it no longer gives its room back while reading */
 .tab .badge { top: 4px; right: 14px }
-
-/* Experiment (2026-10-30): where the installed app stops short of the bottom, stretch the app shell past the page's end by that much, so the list can run
-   under the floating bar down to the screen's edge, if iOS draws there. The bar keeps its usual room above the home indicator. */
-html.edge-gap body { bottom: calc(-1 * var(--edge-gap, 0px)) }
-html.edge-gap { --tab-safe: calc(var(--edge-gap, 0px) * .5); --tab-lift: calc(var(--edge-gap, 0px) * .18) }
