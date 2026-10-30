@@ -24,6 +24,7 @@ describe('the web app manifest', () => {
     expect(css).toContain(`--bg:${manifest.background_color}`)
     expect(manifest.theme_color).toBeUndefined() // iOS painted the installed app's status bar with it, dark over a light page
     expect(html).toContain('name="theme-color" content="#f5f7f9" media="(prefers-color-scheme: light)"'); expect(html).toContain(`name="theme-color" content="${manifest.background_color}" media="(prefers-color-scheme: dark)"`)
+    expect(html).toContain('<script src="/theme-boot.js"></script>') // the theme goes on <html> before the first drawing
   })
 })
 
