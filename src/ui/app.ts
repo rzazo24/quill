@@ -174,11 +174,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (on) doc.documentElement.setAttribute('data-theme', 'halloween'); else doc.documentElement.removeAttribute('data-theme')
     const light = !on && (scheme === 'light' || (scheme === 'auto' && !!deps.prefersLight?.())) // Halloween is dark, whatever the scheme
     if (light) doc.documentElement.setAttribute('data-scheme', 'light'); else doc.documentElement.removeAttribute('data-scheme')
-    // In the installed app iOS paints the strip it sometimes leaves under the page with this colour: the tab bar's (--panel), so the
-    // strip always looks like part of the bar. In the browser it tints the toolbar instead: the page background (--bg) there.
-    const win = doc.defaultView as (Window & { navigator: Navigator & { standalone?: boolean } }) | null
-    const installed = !!win && (win.matchMedia?.('(display-mode: standalone)').matches || win.navigator.standalone === true)
-    doc.querySelector('meta[name=theme-color]')?.setAttribute('content', installed ? (on ? '#181022' : light ? '#ffffff' : '#111823') : on ? '#0f0a16' : light ? '#f5f7f9' : '#0b0f16')
+    // the status bar (installed app) and the browser's toolbar take the page background (--bg); public/theme-boot.js sets the same before the first paint
+    doc.querySelector('meta[name=theme-color]')?.setAttribute('content', on ? '#0f0a16' : light ? '#f5f7f9' : '#0b0f16')
     setSpooky(on)
   }
   const applyFont = () => root.ownerDocument.documentElement.setAttribute('data-font', font)
