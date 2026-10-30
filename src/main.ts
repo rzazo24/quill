@@ -13,7 +13,9 @@ import { detectEnv } from './ui/install.js'
 function markEdgeGap(): void {
   const installed = matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true
   const tall = innerHeight >= innerWidth ? Math.max(screen.height, screen.width) : Math.min(screen.height, screen.width)
-  document.documentElement.classList.toggle('edge-gap', installed && tall - innerHeight > 20)
+  const gap = installed ? tall - innerHeight : 0
+  document.documentElement.classList.toggle('edge-gap', gap > 20)
+  document.documentElement.style.setProperty('--edge-gap', `${gap > 20 ? gap : 0}px`) // how far short of the screen's bottom the page stops
 }
 markEdgeGap(); addEventListener('resize', markEdgeGap)
 import { isNewer } from './ui/update.js'
