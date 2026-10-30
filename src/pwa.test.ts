@@ -19,11 +19,11 @@ describe('the web app manifest', () => {
     for (const i of pngs) { const { w, h } = png(`public${i.src}`); expect(`${w}x${h}`, i.src).toBe(i.sizes) }
     for (const i of manifest.icons) expect(() => read(`public${i.src}`), i.src).not.toThrow()
   })
-  it('its background is the page\'s, and it fixes no theme colour: the page\'s theme-color (set before the first paint, per theme) decides the status bar', () => {
+  it('its background is the page\'s, and it fixes no theme colour: the page\'s own theme-color tags (one per system mode) decide the status bar', () => {
     const css = text('src/style.css'), html = text('index.html')
     expect(css).toContain(`--bg:${manifest.background_color}`)
     expect(manifest.theme_color).toBeUndefined() // iOS painted the installed app's status bar with it, dark over a light page
-    expect(html).toContain('name="theme-color"'); expect(html).toContain('<script src="/theme-boot.js"></script>')
+    expect(html).toContain('name="theme-color" content="#f5f7f9" media="(prefers-color-scheme: light)"'); expect(html).toContain(`name="theme-color" content="${manifest.background_color}" media="(prefers-color-scheme: dark)"`)
   })
 })
 

@@ -174,8 +174,8 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     if (on) doc.documentElement.setAttribute('data-theme', 'halloween'); else doc.documentElement.removeAttribute('data-theme')
     const light = !on && (scheme === 'light' || (scheme === 'auto' && !!deps.prefersLight?.())) // Halloween is dark, whatever the scheme
     if (light) doc.documentElement.setAttribute('data-scheme', 'light'); else doc.documentElement.removeAttribute('data-scheme')
-    // the status bar (installed app) and the browser's toolbar take the page background (--bg); public/theme-boot.js sets the same before the first paint
-    doc.querySelector('meta[name=theme-color]')?.setAttribute('content', on ? '#0f0a16' : light ? '#f5f7f9' : '#0b0f16')
+    // the browser's toolbar takes the page background (--bg); the installed iPhone app keeps what index.html says (it follows the system's mode)
+    for (const m of doc.querySelectorAll('meta[name=theme-color]')) m.setAttribute('content', on ? '#0f0a16' : light ? '#f5f7f9' : '#0b0f16')
     setSpooky(on)
   }
   const applyFont = () => root.ownerDocument.documentElement.setAttribute('data-font', font)
