@@ -1127,8 +1127,11 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
   function changeReposts(on: boolean): void { showReposts = on; safeSet(kv, 'reposts', on ? null : '0'); void load() }
   function changeRealAvatars(on: boolean): void { realAvatars = on; safeSet(kv, 'realAvatars', on ? '1' : null); draw(); void load() }
   function changeOutbox(on: boolean): void { readOutbox = on; safeSet(kv, 'outbox', on ? null : '0'); void load() }
-  function changeScheme(x: Scheme): void { scheme = x; safeSet(kv, 'scheme', x === 'dark' ? null : x); applyTheme(); draw() }
-  function changeTheme(on: boolean): void { themeChoice = on ? 'halloween' : 'default'; safeSet(kv, 'theme', themeChoice); applyTheme(); draw() } // an explicit choice, kept, wins over the season
+  // The installed iPhone app paints the strip under the status bar once, when it opens, and keeps that colour after a change of theme (a dark strip over
+  // a light page until it is reopened). So there a new theme reloads the page, which is what reopening does. In a browser it changes in place.
+  const reloadIfInstalled = () => { const w = root.ownerDocument.defaultView as (Window & { navigator: Navigator & { standalone?: boolean } }) | null; if (w && (w.matchMedia?.('(display-mode: standalone)').matches || w.navigator.standalone === true)) deps.reload?.() }
+  function changeScheme(x: Scheme): void { scheme = x; safeSet(kv, 'scheme', x === 'dark' ? null : x); applyTheme(); draw(); reloadIfInstalled() }
+  function changeTheme(on: boolean): void { themeChoice = on ? 'halloween' : 'default'; safeSet(kv, 'theme', themeChoice); applyTheme(); draw(); reloadIfInstalled() } // an explicit choice, kept, wins over the season
   function changeFont(f: FontSize): void { font = f; safeSet(kv, 'font', f); applyFont(); draw() }
   /** A new relay list: stored, handed to the network code, and everything is read again from it. */
   function changeRelays(list: string[]): void {
