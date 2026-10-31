@@ -24,7 +24,7 @@ import { Engagement, loadEngagement, normReaction } from '../data/engaged.js'
 import { loadReach, loadOthersReach, type Reach } from '../data/reach.js'
 import { invoiceMatches, lnurlOf, MAX_ZAP_COMMENT, MAX_ZAP_SATS, parseNwc, payUrlOf, zapRequestTemplate, type NwcConnection } from '../core/zapsend.js'
 import { getJson, payInfo, zapInvoice, ZapError, type GetJson } from '../net/lnurl.js'
-import { BLOSSOM_SERVERS_KIND, imetaTag, MAX_PHOTO_BYTES, normalizeServer, serversFrom, sha256Hex, SUGGESTED_SERVERS, upload, uploadAuthTemplate, type Photo } from '../core/blossom.js'
+import { BLOSSOM_SERVERS_KIND, serverListTemplate, imetaTag, MAX_PHOTO_BYTES, normalizeServer, serversFrom, sha256Hex, SUGGESTED_SERVERS, upload, uploadAuthTemplate, type Photo } from '../core/blossom.js'
 import { preparePhoto } from './photo.js'
 import { nwcCall, type NwcMethod } from '../net/nwc.js'
 import { countNew, reactionTarget, groupReactions, groupReposts, loadActivity, mergeKnown, newFollowers, parseKnown, type Activity } from '../data/activity.js'
@@ -1324,6 +1324,12 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
       if (me === who) { myBlossom = serversFrom(newest); draw() }
     } catch { if (blossomFor === who) blossomFor = null }
   }
+  /** The chosen server becomes the writer's published list: every app then uploads to it, and finds the photos there by their hash. */
+  async function publishPhotoList(): Promise<void> {
+    if (!photoServer || !me) return
+    const who = me, servers = [photoServer]
+    if (await send(serverListTemplate(servers, nowSec())) && me === who) { myBlossom = servers; say('info', t(lang, 'photoListPublished')); draw() }
+  }
   function setPhotos(on: boolean): void { photosOn = on; safeSet(kv, 'photos', on ? '1' : null); if (on) void loadBlossomList(); draw() }
   function choosePhotoServer(raw: string): void {
     const s = normalizeServer(raw)
@@ -1717,7 +1723,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     const helpPage = renderHelp(view(), helpOpen, (id, isOpen) => { if (isOpen) helpOpen.add(id); else helpOpen.delete(id) })
     const content: (HTMLElement | null)[] = route.name === 'help' ? [signArea, helpPage]
       : !me ? [...(route.name === 'note' && guestBody ? [guestBody] : []), loginForm, signArea, route.name === 'note' ? null : guestPick]
-      : route.name === 'settings' ? [signArea, renderPrefs({ ...(signer ? { photos: { on: photosOn, listed: myBlossom ?? [], chosen: photoServer, suggested: SUGGESTED_SERVERS, onToggle: setPhotos, onChoose: choosePhotoServer } } : {}), font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, realAvatars, onRealAvatars: changeRealAvatars, scheme, onScheme: changeScheme, halloween: halloween(), onHalloween: changeTheme, autoImages, onAutoImages: changeAutoImages, interests, onInterests: changeInterests, reposts: showReposts, onReposts: changeReposts, clientTag, onClientTag: changeClientTag, outbox: readOutbox, onOutbox: changeOutbox, nwc: { relay: nwcOf()?.relays[0] ?? null, state: nwcState, error: nwcError, canSign: signer?.state === 'connected' }, onNwcSave: saveNwc, onNwcRemove: removeNwc, onNwcTest: () => void testNwc(), relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
+      : route.name === 'settings' ? [signArea, renderPrefs({ ...(signer ? { photos: { on: photosOn, listed: myBlossom ?? [], chosen: photoServer, suggested: SUGGESTED_SERVERS, onToggle: setPhotos, onChoose: choosePhotoServer, ...(signer.state === 'connected' ? { onPublishList: () => void publishPhotoList() } : {}) } } : {}), font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, realAvatars, onRealAvatars: changeRealAvatars, scheme, onScheme: changeScheme, halloween: halloween(), onHalloween: changeTheme, autoImages, onAutoImages: changeAutoImages, interests, onInterests: changeInterests, reposts: showReposts, onReposts: changeReposts, clientTag, onClientTag: changeClientTag, outbox: readOutbox, onOutbox: changeOutbox, nwc: { relay: nwcOf()?.relays[0] ?? null, state: nwcState, error: nwcError, canSign: signer?.state === 'connected' }, onNwcSave: saveNwc, onNwcRemove: removeNwc, onNwcTest: () => void testNwc(), relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
         onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderRescue({ state: rescue, saving: rescueSaving, savedCount: rescueSaved, restoreNote, onSaveMissed: () => void saveMissed(), ...(publisher ? { onRestore: (f: File) => void restoreRescue(f) } : {}), onScan: () => void scanRescue(), onCopy: () => void copyRescue(), onSave: () => void saveRescue() }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
       : isWide ? [wideView(route, signArea, signOut)]

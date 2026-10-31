@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Event } from 'nostr-tools'
 import { checkTemplate } from '../sign/policy.js'
-import { AUTH_TTL_S, checkImeta, checkUploadAuth, imetaTag, normalizeServer, serversFrom, upload, uploadAuthTemplate, UploadError } from './blossom.js'
+import { AUTH_TTL_S, checkServerList, serverListTemplate, checkImeta, checkUploadAuth, imetaTag, normalizeServer, serversFrom, upload, uploadAuthTemplate, UploadError } from './blossom.js'
 
 const H = 'a'.repeat(64)
 const photo = { url: `https://blossom.example/${H}.jpg`, sha256: H, mime: 'image/jpeg', size: 1234, dim: '800x600' }
@@ -12,6 +12,13 @@ describe('Blossom photos', () => {
     expect(serversFrom(list)).toEqual(['https://blossom.example'])
     expect(serversFrom({ kind: 1, tags: [['server', 'https://a.example']] })).toEqual([])
     expect(normalizeServer('https://user:pw@a.example')).toBeNull()
+  })
+  it('publishes the writer\'s server list with server addresses only', () => {
+    const t = serverListTemplate(['https://blossom.band'], 1)
+    expect(checkServerList(t)).toBe(true); expect(checkTemplate(t)).toBeNull()
+    expect(checkTemplate({ ...t, tags: [['server', 'http://plain.example']] })).toBe('server-list')
+    expect(checkTemplate({ ...t, tags: [['server', 'https://a.example'], ['r', 'wss://x.example']] })).toBe('server-list')
+    expect(checkTemplate({ ...t, tags: [] })).toBe('server-list')
   })
   it('signs only an upload of one file, by its hash, for a few minutes', () => {
     const t = uploadAuthTemplate(H, 1000)

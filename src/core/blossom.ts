@@ -10,7 +10,7 @@ export const BLOSSOM_SERVERS_KIND = 10063
 export const AUTH_TTL_S = 300
 export const MAX_PHOTO_BYTES = 5_000_000
 /** Offered when the writer has no list of their own; the choice is theirs, and is kept on this device only. */
-export const SUGGESTED_SERVERS = ['https://blossom.primal.net', 'https://blossom.nostr.build'] as const
+export const SUGGESTED_SERVERS = ['https://blossom.primal.net', 'https://blossom.nostr.build', 'https://blossom.band'] as const
 const HEX64 = /^[0-9a-f]{64}$/
 
 /** A tidy https server address (no path, no trailing slash), or null. */
@@ -28,6 +28,17 @@ export function serversFrom(list: Pick<Event, 'kind' | 'tags'> | null | undefine
   const out: string[] = []
   for (const t of list.tags) { const s = t[0] === 'server' && t[1] ? normalizeServer(t[1]) : null; if (s && !out.includes(s)) out.push(s) }
   return out.slice(0, 5)
+}
+
+/** BUD-03: the writer's list of Blossom servers, published so every client uploads to, and looks for their files on, the same ones. */
+export function serverListTemplate(servers: string[], nowSec: number): Template {
+  return { kind: BLOSSOM_SERVERS_KIND, content: '', tags: servers.map((s) => ['server', s]), created_at: nowSec }
+}
+
+/** What Quill agrees to sign of kind 10063: one to five tidy https servers, nothing else. */
+export function checkServerList(t: Template): boolean {
+  const urls = t.tags.map((x) => (x.length === 2 && x[0] === 'server' ? x[1]! : ''))
+  return t.kind === BLOSSOM_SERVERS_KIND && t.content === '' && urls.length >= 1 && urls.length <= 5 && urls.every((u) => u !== '' && normalizeServer(u) === u) && new Set(urls).size === urls.length
 }
 
 /** BUD-02: "I am uploading the file with this hash", good for a few minutes. */

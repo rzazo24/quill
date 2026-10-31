@@ -12,7 +12,7 @@ describe('checkTemplate: Quill only asks for notes and reactions', () => {
     expect(checkTemplate(note('🦞', [['e', id], ['p', id], ['k', '1']], 7))).toBeNull()
   })
   it('refuses every other kind: deleting, follow lists, relay-list lookalikes of other kinds, DMs (a profile only as a description change)', () => {
-    expect(checkTemplate(note('x', [], 0))).toBe('profile'); expect(checkTemplate(note('x', [], 5))).toBe('delete'); for (const kind of [4, 10050, 10063, 14, 30023, 22242, 24133]) expect(checkTemplate(note('x', [], kind)), String(kind)).toBe('kind')
+    expect(checkTemplate(note('x', [], 0))).toBe('profile'); expect(checkTemplate(note('x', [], 5))).toBe('delete'); for (const kind of [4, 10050, 14, 30023, 22242, 24133]) expect(checkTemplate(note('x', [], kind)), String(kind)).toBe('kind'); expect(checkTemplate(note('x', [], 10063))).toBe('server-list') // the photo server list only as server addresses
   })
   it('refuses empty and over-long notes, counting characters', () => {
     expect(checkTemplate(note('   \n '))).toBe('empty')

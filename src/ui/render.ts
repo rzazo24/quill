@@ -460,7 +460,7 @@ export const SOURCE_URL = 'https://github.com/rzazo24/quill'
 
 export interface PrefsProps {
   /** Photos in notes (Blossom): off by default; the servers are the writer's own list, or one chosen here. */
-  photos?: { on: boolean; listed: string[]; chosen: string | null; suggested: readonly string[]; onToggle: (on: boolean) => void; onChoose: (server: string) => void }
+  photos?: { on: boolean; listed: string[]; chosen: string | null; suggested: readonly string[]; onToggle: (on: boolean) => void; onChoose: (server: string) => void; /** publish the chosen server as the writer's list (kind 10063) */ onPublishList?: () => void }
   font: FontSize; avatars: AvatarStyle; sampleKey: string; onAvatars: (s: AvatarStyle) => void; realAvatars?: boolean; onRealAvatars?: (on: boolean) => void; reposts: boolean; onReposts: (on: boolean) => void; clientTag?: boolean; onClientTag?: (on: boolean) => void; outbox: boolean; onOutbox: (on: boolean) => void; nwc?: { relay: string | null; state: { testing: true } | { balance: number | null } | { error: string } | null; error: string | null; canSign: boolean }; onNwcSave?: (text: string) => void; onNwcRemove?: () => void; onNwcTest?: () => void; interests: string[]; onInterests: (text: string) => void; autoImages: boolean; onAutoImages: (on: boolean) => void; scheme: Scheme; onScheme: (s: Scheme) => void; halloween: boolean; onHalloween: (on: boolean) => void; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
   /** The list published on Nostr compared with this one, and what can be done about it. */
   list: { state: ListState; publishedCount: number; canSign: boolean; confirming: boolean }
@@ -475,7 +475,8 @@ function renderPhotoPrefs(ph: NonNullable<PrefsProps['photos']>, v: View): HTMLE
     : h('div', { class: 'photo-servers' }, h('p', { class: 'meta' }, t(v.lang, 'photoServersNone')),
       ...ph.suggested.map((s) => h('label', { class: 'radio' }, h('input', { type: 'radio', name: 'photo-server', ...(ph.chosen === s ? { checked: true } : {}), onChange: () => ph.onChoose(s) }), ' ', s.replace(/^https:\/\//, ''))),
       h('form', { class: 'row', onSubmit: (e: Event) => { e.preventDefault(); ph.onChoose(custom.value) } }, custom, ' ', h('button', { type: 'submit' }, t(v.lang, 'photoServerUse'))),
-      ph.chosen && !ph.suggested.includes(ph.chosen) ? h('p', { class: 'meta' }, t(v.lang, 'photoServerChosen', { server: ph.chosen.replace(/^https:\/\//, '') })) : null)
+      ph.chosen && !ph.suggested.includes(ph.chosen) ? h('p', { class: 'meta' }, t(v.lang, 'photoServerChosen', { server: ph.chosen.replace(/^https:\/\//, '') })) : null,
+      ph.chosen && ph.onPublishList ? h('p', {}, h('button', { type: 'button', onClick: ph.onPublishList }, t(v.lang, 'photoPublishList')), ' ', h('span', { class: 'meta' }, t(v.lang, 'photoPublishHelp'))) : null)
   return h('div', { class: 'photo-prefs' },
     h('label', { class: 'check' }, h('span', {}, t(v.lang, 'photosOn')), h('input', { type: 'checkbox', role: 'switch', ...(ph.on ? { checked: true } : {}), onChange: (e: Event) => ph.onToggle((e.target as HTMLInputElement).checked) })),
     h('p', { class: 'meta' }, t(v.lang, 'photosHelp')),

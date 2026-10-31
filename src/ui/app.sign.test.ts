@@ -509,10 +509,15 @@ describe('sharing a note', () => {
     expect(sw.checked).toBe(false); expect(a.root.querySelector('.photo-servers')).toBeNull()
     sw.checked = true; sw.dispatchEvent(new Event('change')); await tick(200)
     const radios = [...a.root.querySelectorAll('.photo-servers input[type=radio]')] as HTMLInputElement[]
-    expect(radios).toHaveLength(2)
+    expect(radios).toHaveLength(3)
     radios[0]!.checked = true; radios[0]!.dispatchEvent(new Event('change')); await tick(50)
     expect((a.root.querySelectorAll('.photo-servers input[type=radio]')[0] as HTMLInputElement).checked).toBe(true)
-    ;(a.root.querySelector('button.fab') as HTMLButtonElement | null)?.click()
+    const pub = (a as unknown as { pub?: unknown }).pub
+    void pub
+    const publish = [...a.root.querySelectorAll('.photo-servers button')].find((b) => b.textContent === 'Publish as my list') as HTMLButtonElement
+    expect(publish).toBeTruthy(); publish.click(); await tick(300)
+    expect(sg.log).toContain('sign 10063')
+    expect(a.root.querySelector('.photo-servers')).toBeNull() // the list is now yours: it is shown instead of the choice
   })
   it('with photos on, the composer uploads a cleaned photo to the chosen Blossom server and the note carries its address and imeta', async () => {
     const puts: { url: string; auth: string }[] = []

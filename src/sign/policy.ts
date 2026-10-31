@@ -10,11 +10,11 @@ import { checkRepost, REPOST_KIND, type RepostProblem } from '../core/repost.js'
 import type { Event } from 'nostr-tools'
 import { MAX_RELAYS, normalizeRelay } from '../net/relays.js'
 import { checkZapRequest, ZAP_REQUEST_KIND } from '../core/zapsend.js'
-import { BLOSSOM_AUTH_KIND, checkImeta, checkUploadAuth } from '../core/blossom.js'
+import { BLOSSOM_AUTH_KIND, BLOSSOM_SERVERS_KIND, checkImeta, checkServerList, checkUploadAuth } from '../core/blossom.js'
 
 /** NIP-65: the list of relays a person writes to and reads from. */
 export const RELAY_LIST_KIND = 10002
-export const ALLOWED_KINDS = [PROFILE_KIND, 1, COMMENT_KIND, FOLLOW_LIST_KIND, DELETION_KIND, REPOST_KIND, 7, MUTE_LIST_KIND, RELAY_LIST_KIND, ZAP_REQUEST_KIND, BLOSSOM_AUTH_KIND] as const
+export const ALLOWED_KINDS = [PROFILE_KIND, 1, COMMENT_KIND, FOLLOW_LIST_KIND, DELETION_KIND, REPOST_KIND, 7, MUTE_LIST_KIND, RELAY_LIST_KIND, ZAP_REQUEST_KIND, BLOSSOM_AUTH_KIND, BLOSSOM_SERVERS_KIND] as const
 export const MAX_NOTE_CHARS = 1000
 export const MAX_SIGNATURES_PER_HOUR = 20
 /** Reactions have their own allowance: a run of likes never stops a note, and a like is the least that can be signed. */
@@ -22,7 +22,7 @@ export const MAX_REACTIONS_PER_HOUR = 40
 
 export interface Template { kind: number; content: string; tags: string[][]; created_at: number }
 
-export type Problem = 'upload' | 'zap' | 'kind' | 'empty' | 'too-long' | 'reaction' | 'tags' | 'reaction-target' | 'relay-list' | 'quote' | 'follow' | 'profile' | 'delete' | RepostProblem
+export type Problem = 'server-list' | 'upload' | 'zap' | 'kind' | 'empty' | 'too-long' | 'reaction' | 'tags' | 'reaction-target' | 'relay-list' | 'quote' | 'follow' | 'profile' | 'delete' | RepostProblem
 
 const TAG_NAMES = new Set(['e', 'p', 't', 'k', 'a', 'q', 'E', 'A', 'I', 'K', 'P']) // the upper-case ones: the root of a NIP-22 comment
 /** NIP-89: says the event was made with Quill (a setting, on by default). Allowed exactly like this, once, on notes and reactions. */
@@ -52,6 +52,7 @@ export interface CheckContext { followBase?: Event | null; /** the reader, for a
 export function checkTemplate(t: Template, ctx: CheckContext = {}): Problem | null {
   if (!(ALLOWED_KINDS as readonly number[]).includes(t.kind)) return 'kind'
   if (t.kind === ZAP_REQUEST_KIND) return checkZapRequest(t) ? null : 'zap' // signed to pay a zap, never published by Quill
+  if (t.kind === BLOSSOM_SERVERS_KIND) return checkServerList(t) ? null : 'server-list' // the reader's Blossom servers: only `server` addresses
   if (t.kind === BLOSSOM_AUTH_KIND) return checkUploadAuth(t) ? null : 'upload' // signed to upload ONE photo to the writer's Blossom server, never published
   if (t.kind === DELETION_KIND) return ctx.deleteTarget && isDeletionOf(ctx.deleteTarget, t) ? null : 'delete' // exactly one note, named by id
   if (t.kind === PROFILE_KIND) return ctx.profileBase && isAboutChange(ctx.profileBase, t) ? null : 'profile' // only the description changes, everything else as it was
