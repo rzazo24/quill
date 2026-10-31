@@ -516,3 +516,13 @@ html.edge-gap { --bar-inset: 34px; --tab-safe: 17px; --tab-lift: 6px }
 .photo-servers form.row { display: flex; gap: 8px; margin-top: 6px } .photo-servers form.row input { flex: 1; min-width: 0 }
 .photo-list ol { margin: 6px 0; padding-left: 22px } .photo-list li { display: flex; align-items: center; gap: 8px; padding: 2px 0 } .photo-list li .url { flex: 1; min-width: 0; overflow-wrap: anywhere }
 .photo-add-servers { display: flex; flex-wrap: wrap; gap: 6px }
+
+/* The result of publishing, an error or a notice: a floating card like the tab bar, not a strip stuck to it. Above the bar when there is one, else
+   near the bottom edge; all good, it is one line that goes away by itself. */
+#app:not(.wide) .sign .toast { left: 12px; right: 12px; width: auto; max-width: calc(var(--col) - 24px); margin: 0 auto; padding: 10px 14px; border: 1px solid var(--border); border-radius: 18px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); box-shadow: 0 8px 28px rgba(0,0,0,.35) }
+html[data-scheme=light] #app:not(.wide) .sign .toast { box-shadow: 0 6px 22px rgba(23,33,43,.16) }
+#app.has-tabs:not(.wide) .sign .toast { bottom: calc(var(--tab-h) + var(--tab-safe) + 6px) }
+#app:not(.has-tabs):not(.wide) .sign .toast { bottom: calc(var(--bar-inset) * .7 + 10px) }
+.sign .toast .result-relays summary { cursor: pointer; color: var(--muted); font-size: .85rem; margin-top: 2px }
+.sign .toast .result-relays ul { margin-top: 6px }

@@ -1259,6 +1259,8 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
       try {
         result = await signAndPublish({ signer, publisher, kv, now: deps.nowMs, signal: mine.signal, followBase: opts.followBase, ...(opts.profileBase ? { profileBase: opts.profileBase } : {}), ...(opts.deleteTarget ? { deleteTarget: opts.deleteTarget } : {}) }, clientTag ? withClientTag(template) : template, (s) => { step = s; draw() })
         step = null; fetcher.clear()
+        const shown = result
+        if (shown && !failedRelays(shown.outcomes).length) setTimeout(() => { if (result === shown) { result = null; draw() } }, 5000) // all went well: the card goes by itself
         return true
       } catch (e) { step = null; if (!(mine.signal.aborted && signing !== mine)) sayPipelineError(e); return false } finally { if (signing === mine) { busy = false; signing = null } draw() }
     })()

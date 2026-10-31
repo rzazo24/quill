@@ -281,7 +281,9 @@ function renderResult(r: Published, relays: string[], hd: SignUiHandlers, v: Vie
   return h('div', { class: 'result', role: 'status' },
     h('div', { class: 'result-head' }, h('p', { class: failed.length === Object.keys(r.outcomes).length ? 'error' : 'status' }, ok ? t(v.lang, 'published', { ok, total: Object.keys(r.outcomes).length }) : t(v.lang, 'publishedNone')),
       h('button', { type: 'button', class: 'icon close', 'aria-label': t(v.lang, 'dismiss'), title: t(v.lang, 'dismiss'), onClick: hd.dismissResult }, '×')),
-    h('ul', {}, ...relays.map((url) => h('li', {}, `${r.outcomes[url] === 'ok' ? '✓' : '✗'} ${url.replace(/^wss:\/\//, '')}`, r.outcomes[url] === 'ok' ? null : ` — ${r.outcomes[url] ?? ''}`))),
+    // all went well: one line, the relays folded away (and it goes on its own); something failed: the list is open, with what each relay said
+    (() => { const list = h('ul', {}, ...relays.map((url) => h('li', {}, `${r.outcomes[url] === 'ok' ? '✓' : '✗'} ${url.replace(/^wss:\/\//, '')}`, r.outcomes[url] === 'ok' ? null : ` — ${r.outcomes[url] ?? ''}`)))
+      return failed.length ? list : h('details', { class: 'result-relays' }, h('summary', {}, t(v.lang, 'showRelays')), list) })(),
     failed.length ? h('p', { class: 'buttons' }, h('button', { type: 'button', onClick: hd.retry }, t(v.lang, 'retryFailed'))) : null,
   )
 }
