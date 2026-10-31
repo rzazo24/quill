@@ -502,6 +502,18 @@ describe('sharing a note', () => {
     await a.go('#/me'); await click(a.root, 'Connect a signer')
     expect(a.text()).not.toContain('Use the browser extension')
   })
+  it('while a note is written or reviewed there is no tab bar over it (it hid Publish under a long text); it comes back after', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)
+    expect(a.root.querySelector('.tabbar')).not.toBeNull()
+    ;(a.root.querySelector('button.fab') as HTMLButtonElement).click(); await tick(50)
+    expect(a.root.querySelector('.tabbar')).toBeNull()
+    const area = a.root.querySelector('.composer textarea') as HTMLTextAreaElement
+    area.value = 'hello'; area.dispatchEvent(new Event('input'))
+    await click(a.root, 'Review'); await tick(50)
+    expect(a.root.querySelector('.tabbar')).toBeNull()
+    await click(a.root, 'Publish'); await tick(300)
+    expect(a.root.querySelector('.tabbar')).not.toBeNull()
+  })
   it('Settings: the zap history, folded until opened, lists sent and received zaps from the public receipts', async () => {
     const zr = (from: string, to: string, at: number, content: string) => ev(pk('9'), '', { kind: 9735, created_at: at, tags: [['p', to], ['P', from], ['bolt11', 'lnbc210n1xyz'], ['description', JSON.stringify(ev(from, content, { kind: 9734, tags: [['p', to], ['amount', '21000']] }))]] })
     const sg = fakeSigner(); const a = boot({ signer: sg, verifyAll: true, events: [...world, zr(friend, me, 7000, 'nice one'), zr(me, other, 7100, 'thanks')] }); await tick(100); await connectClave(a, sg)

@@ -1732,7 +1732,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     const colAnchors = new Map([...root.querySelectorAll<HTMLElement>('.col[data-col]')].map((c) => [c.dataset.col!, anchorIn(c)]))
     const route = parseRoute(deps.location.hash)
     const isWide = wide() && !!me && route.name !== 'settings' && route.name !== 'help'
-    const showTabs = !!me && !isWide && route.name !== 'settings' && route.name !== 'help' // Settings and Help are pages you leave with Back: no tab bar over them
+    const showTabs = !!me && !isWide && route.name !== 'settings' && route.name !== 'help' && !composer && !review // no tab bar over Settings and Help (left with Back), nor over a note being written or reviewed (it hid Publish under a long text)
     if (confirmingDisconnect && ((route.name !== 'me' && !isWide) || signer?.state !== 'connected')) confirmingDisconnect = false // a question left behind is forgotten
     if (confirmingSignOut && ((route.name !== 'me' && !isWide) || !me)) confirmingSignOut = false
     if (shareConfirm && signer?.state !== 'connected') shareConfirm = null
