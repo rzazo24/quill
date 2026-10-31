@@ -511,7 +511,11 @@ describe('sharing a note', () => {
     area.value = 'hello'; area.dispatchEvent(new Event('input'))
     await click(a.root, 'Review'); await tick(50)
     expect(a.root.querySelector('.tabbar')).toBeNull()
-    await click(a.root, 'Publish'); await tick(300)
+    let firstSeen: { tabs: boolean } | null = null // the moment the result appears, the bar must already be there (it used to pop in later and push the notice up)
+    const watch = new MutationObserver(() => { if (!firstSeen && a.root.querySelector('.toast .result')) firstSeen = { tabs: !!a.root.querySelector('.tabbar') } })
+    watch.observe(a.root, { childList: true, subtree: true })
+    await click(a.root, 'Publish'); await tick(300); watch.disconnect()
+    expect(firstSeen).toEqual({ tabs: true })
     expect(a.root.querySelector('.tabbar')).not.toBeNull()
   })
   it('Settings: the zap history, folded until opened, lists sent and received zaps from the public receipts', async () => {

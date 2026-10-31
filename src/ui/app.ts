@@ -1415,7 +1415,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     if (!review) return
     const replyingTo = review.quote ? undefined : review.target, written = composer, ok = await send(review.template) // a quote is not a reply: the note quoted is not marked as answered
     if (ok) { if (written) writeDraft(draftKey(written), null) // published: the draft is done
-      if (replyingTo) { engagement.addReply(replyingTo.id); rebar(replyingTo) } review = null; composer = null; void load() }
+      if (replyingTo) { engagement.addReply(replyingTo.id); rebar(replyingTo) } review = null; composer = null; draw(); void load() }
   }
   async function react(target: NostrEvent, emoji: string): Promise<void> {
     const template: Template = { kind: 7, content: emoji, tags: reactionTags(target), created_at: Math.floor((deps.nowMs?.() ?? Date.now()) / 1000) }
@@ -1732,7 +1732,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     const colAnchors = new Map([...root.querySelectorAll<HTMLElement>('.col[data-col]')].map((c) => [c.dataset.col!, anchorIn(c)]))
     const route = parseRoute(deps.location.hash)
     const isWide = wide() && !!me && route.name !== 'settings' && route.name !== 'help'
-    const showTabs = !!me && !isWide && route.name !== 'settings' && route.name !== 'help' && !composer && !review // no tab bar over Settings and Help (left with Back), nor over a note being written or reviewed (it hid Publish under a long text)
+    const showTabs = !!me && !isWide && route.name !== 'settings' && route.name !== 'help' && (!(composer || review) || !!result) // no tab bar over Settings and Help (left with Back), nor over a note being written or reviewed (it hid Publish under a long text)
     if (confirmingDisconnect && ((route.name !== 'me' && !isWide) || signer?.state !== 'connected')) confirmingDisconnect = false // a question left behind is forgotten
     if (confirmingSignOut && ((route.name !== 'me' && !isWide) || !me)) confirmingSignOut = false
     if (shareConfirm && signer?.state !== 'connected') shareConfirm = null
