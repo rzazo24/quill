@@ -26,6 +26,8 @@ import { invoiceMatches, lnurlOf, MAX_ZAP_COMMENT, MAX_ZAP_SATS, parseNwc, payUr
 import { getJson, payInfo, zapInvoice, ZapError, type GetJson } from '../net/lnurl.js'
 import { BLOSSOM_SERVERS_KIND, serverListTemplate, imetaTag, MAX_PHOTO_BYTES, normalizeServer, serversFrom, sha256Hex, SUGGESTED_SERVERS, upload, uploadAuthTemplate, type Photo } from '../core/blossom.js'
 import { preparePhoto } from './photo.js'
+import { zapHistory as readZapHistory, type ZapEntry } from '../core/zaphistory.js'
+import { ZAP_RECEIPT_KIND } from '../core/zap.js'
 import { nwcCall, type NwcMethod } from '../net/nwc.js'
 import { countNew, reactionTarget, groupReactions, groupReposts, loadActivity, mergeKnown, newFollowers, parseKnown, type Activity } from '../data/activity.js'
 import { contextOf, loadGraphInfo, loadOwnLists, pendingGraph, type Session } from '../data/session.js'
@@ -122,6 +124,20 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let font: FontSize = parseFont(safeGet(kv, 'font'))
   let showReposts = parseReposts(safeGet(kv, 'reposts'))
   // photos in notes (Blossom): off unless turned on; uploads go to the writer's own servers (their kind 10063 list) or one chosen here
+  let zapHistoryOpen = false, zapHistoryState: 'loading' | 'failed' | ZapEntry[] | null = null // read when the box is opened, again on each opening
+  async function loadZapHistory(): Promise<void> {
+    if (!me) return
+    const who = me
+    zapHistoryState = 'loading'; draw()
+    try {
+      const [got, sent] = await Promise.all([fetcher.query({ kinds: [ZAP_RECEIPT_KIND], '#p': [who], limit: 60 }, { quick: false }), fetcher.query({ kinds: [ZAP_RECEIPT_KIND], '#P': [who], limit: 60 }, { quick: false })])
+      if (me !== who) return
+      const list = readZapHistory([...got, ...sent], who, deps.verify ?? verifyEvent)
+      zapHistoryState = list
+      void nameKeys(list.flatMap((e) => (e.other ? [e.other] : []))).then(() => { if (zapHistoryOpen) draw() }).catch(() => {})
+    } catch { zapHistoryState = 'failed' }
+    draw()
+  }
   let photosOn = safeGet(kv, 'photos') === '1'
   let photoServer = normalizeServer(safeGet(kv, 'photoServer') ?? '')
   let myBlossom: string[] | null = null, blossomFor: string | null = null, blossomDraft: string[] | null = null // an edit of the published list, not yet published
@@ -365,7 +381,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const followersSeen = new Set<string>() // everybody seen following you since this page opened (the known ones are in `knownFollowers`)
   /** How many accounts have been seen following the reader: only a lower bound (each relay knows part of them), and it only grows. Null while nothing has been looked at yet. */
   const followerCount = (): number | null => { const k = loadKnown(); return k === null && followersSeen.size === 0 ? null : new Set([...(k ?? []), ...followersSeen]).size }
-  const forgetAccount = () => { myBlossom = null; blossomFor = null; blossomDraft = null; listPages.clear(); rescue = { phase: 'idle' }; rescueLacking = null; rescueMissed = []; restoreNote = ''; rescueSaving = false; pageCache.clear(); myProfile = undefined; zapMap.clear(); zapFlow = null; nwcState = null; nwcError = null; aboutEdit = null; reachMap.clear(); reachAsked.clear(); reachAskedAt.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
+  const forgetAccount = () => { zapHistoryOpen = false; zapHistoryState = null; myBlossom = null; blossomFor = null; blossomDraft = null; listPages.clear(); rescue = { phase: 'idle' }; rescueLacking = null; rescueMissed = []; restoreNote = ''; rescueSaving = false; pageCache.clear(); myProfile = undefined; zapMap.clear(); zapFlow = null; nwcState = null; nwcError = null; aboutEdit = null; reachMap.clear(); reachAsked.clear(); reachAskedAt.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
   const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
@@ -1731,7 +1747,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     const helpPage = renderHelp(view(), helpOpen, (id, isOpen) => { if (isOpen) helpOpen.add(id); else helpOpen.delete(id) })
     const content: (HTMLElement | null)[] = route.name === 'help' ? [signArea, helpPage]
       : !me ? [...(route.name === 'note' && guestBody ? [guestBody] : []), loginForm, signArea, route.name === 'note' ? null : guestPick]
-      : route.name === 'settings' ? [signArea, renderPrefs({ ...(signer ? { photos: { on: photosOn, listed: myBlossom ?? [], chosen: photoServer, suggested: SUGGESTED_SERVERS, onToggle: setPhotos, onChoose: choosePhotoServer, draft: blossomDraft, ...(signer.state === 'connected' ? { onPublishList: () => void publishPhotoList(), onDraft: (l: string[]) => { blossomDraft = JSON.stringify(l) === JSON.stringify(myBlossom) ? null : l; draw() }, onPublishDraft: () => void publishPhotoDraft() } : {}) } } : {}), font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, realAvatars, onRealAvatars: changeRealAvatars, scheme, onScheme: changeScheme, halloween: halloween(), onHalloween: changeTheme, autoImages, onAutoImages: changeAutoImages, interests, onInterests: changeInterests, reposts: showReposts, onReposts: changeReposts, clientTag, onClientTag: changeClientTag, outbox: readOutbox, onOutbox: changeOutbox, nwc: { relay: nwcOf()?.relays[0] ?? null, state: nwcState, error: nwcError, canSign: signer?.state === 'connected' }, onNwcSave: saveNwc, onNwcRemove: removeNwc, onNwcTest: () => void testNwc(), relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
+      : route.name === 'settings' ? [signArea, renderPrefs({ zapHistory: { open: zapHistoryOpen, state: zapHistoryState, onToggle: (o: boolean) => { zapHistoryOpen = o; if (o) void loadZapHistory(); else draw() } }, ...(signer ? { photos: { on: photosOn, listed: myBlossom ?? [], chosen: photoServer, suggested: SUGGESTED_SERVERS, onToggle: setPhotos, onChoose: choosePhotoServer, draft: blossomDraft, ...(signer.state === 'connected' ? { onPublishList: () => void publishPhotoList(), onDraft: (l: string[]) => { blossomDraft = JSON.stringify(l) === JSON.stringify(myBlossom) ? null : l; draw() }, onPublishDraft: () => void publishPhotoDraft() } : {}) } } : {}), font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, realAvatars, onRealAvatars: changeRealAvatars, scheme, onScheme: changeScheme, halloween: halloween(), onHalloween: changeTheme, autoImages, onAutoImages: changeAutoImages, interests, onInterests: changeInterests, reposts: showReposts, onReposts: changeReposts, clientTag, onClientTag: changeClientTag, outbox: readOutbox, onOutbox: changeOutbox, nwc: { relay: nwcOf()?.relays[0] ?? null, state: nwcState, error: nwcError, canSign: signer?.state === 'connected' }, onNwcSave: saveNwc, onNwcRemove: removeNwc, onNwcTest: () => void testNwc(), relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
         onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderRescue({ state: rescue, saving: rescueSaving, savedCount: rescueSaved, restoreNote, onSaveMissed: () => void saveMissed(), ...(publisher ? { onRestore: (f: File) => void restoreRescue(f) } : {}), onScan: () => void scanRescue(), onCopy: () => void copyRescue(), onSave: () => void saveRescue() }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
       : isWide ? [wideView(route, signArea, signOut)]

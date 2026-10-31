@@ -2,6 +2,7 @@
 import { nip19 } from 'nostr-tools'
 import { interestsIn } from '../core/interests.js'
 import { formatSats } from '../core/zap.js'
+import type { ZapEntry } from '../core/zaphistory.js'
 import { markdownBlocks } from '../core/markdown.js'
 import { articleInfo, type ArticleInfo } from '../data/article.js'
 import { COMMENT_KIND } from '../core/thread.js'
@@ -461,6 +462,8 @@ export const SOURCE_URL = 'https://github.com/rzazo24/quill'
 export interface PrefsProps {
   /** Photos in notes (Blossom): off by default; the servers are the writer's own list, or one chosen here. */
   photos?: { on: boolean; listed: string[]; chosen: string | null; suggested: readonly string[]; onToggle: (on: boolean) => void; onChoose: (server: string) => void; /** publish the chosen server as the writer's list (kind 10063) */ onPublishList?: () => void; /** a published list being edited here (null: not edited) */ draft?: string[] | null; onDraft?: (list: string[]) => void; onPublishDraft?: () => void }
+  /** The reader's zap history (from the public receipts), folded until opened: then it is read. */
+  zapHistory?: { open: boolean; state: 'loading' | 'failed' | ZapEntry[] | null; onToggle: (open: boolean) => void }
   font: FontSize; avatars: AvatarStyle; sampleKey: string; onAvatars: (s: AvatarStyle) => void; realAvatars?: boolean; onRealAvatars?: (on: boolean) => void; reposts: boolean; onReposts: (on: boolean) => void; clientTag?: boolean; onClientTag?: (on: boolean) => void; outbox: boolean; onOutbox: (on: boolean) => void; nwc?: { relay: string | null; state: { testing: true } | { balance: number | null } | { error: string } | null; error: string | null; canSign: boolean }; onNwcSave?: (text: string) => void; onNwcRemove?: () => void; onNwcTest?: () => void; interests: string[]; onInterests: (text: string) => void; autoImages: boolean; onAutoImages: (on: boolean) => void; scheme: Scheme; onScheme: (s: Scheme) => void; halloween: boolean; onHalloween: (on: boolean) => void; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
   /** The list published on Nostr compared with this one, and what can be done about it. */
   list: { state: ListState; publishedCount: number; canSign: boolean; confirming: boolean }
@@ -536,6 +539,26 @@ export function renderPrefs(p: PrefsProps, v: View): HTMLElement {
     p.nwc ? walletArea(p, v) : null)
 }
 
+/** The zap history: sent (↑) and received (↓), who, how much, when and the comment; a tap opens the note it was for. */
+function zapHistoryArea(p: PrefsProps, v: View): HTMLElement | null {
+  const z = p.zapHistory
+  if (!z) return null
+  const body = !z.open ? null : z.state === 'loading' || z.state === null ? h('p', { class: 'status loading', role: 'status' }, h('span', {}, t(v.lang, 'zapHistoryLoading')))
+    : z.state === 'failed' ? h('p', { class: 'error' }, t(v.lang, 'zapHistoryFailed'))
+    : !z.state.length ? h('p', { class: 'meta' }, t(v.lang, 'zapHistoryEmpty'))
+    : h('ul', { class: 'zap-history' }, ...z.state.map((e) => {
+      const who = e.other ? h('a', { href: userHref(e.other) }, nameOf(v, e.other)) : h('span', { class: 'meta' }, t(v.lang, 'zapAnonymous'))
+      return h('li', { class: e.dir === 'in' ? 'in' : 'out' },
+        h('span', { class: 'zap-dir', 'aria-label': t(v.lang, e.dir === 'in' ? 'zapReceived' : 'zapSentDir') }, e.dir === 'in' ? '↓' : '↑'),
+        h('span', { class: 'zap-main' }, h('strong', {}, `⚡ ${formatSats(e.sats, v.lang)}`), ' ', t(v.lang, e.dir === 'in' ? 'zapFrom' : 'zapTo'), ' ', who,
+          e.comment ? h('span', { class: 'zap-comment' }, ` · ${e.comment}`) : null),
+        e.note ? h('a', { class: 'meta', href: `#/note/${e.note}` }, ago(v.lang, e.at, v.nowMs)) : h('span', { class: 'meta' }, ago(v.lang, e.at, v.nowMs)))
+    }), h('p', { class: 'meta' }, t(v.lang, 'zapHistoryHelp')))
+  const d = h('details', { class: 'zap-history-box', ...(z.open ? { open: true } : {}) }, h('summary', {}, t(v.lang, 'zapHistoryTitle')), body)
+  d.addEventListener('toggle', () => { if ((d as HTMLDetailsElement).open !== z.open) z.onToggle((d as HTMLDetailsElement).open) })
+  return d
+}
+
 /** The wallet for zaps: the risk is said before anything can be pasted, and again how it is kept once it is. */
 function walletArea(p: PrefsProps, v: View): HTMLElement {
   const w = p.nwc!
@@ -544,13 +567,13 @@ function walletArea(p: PrefsProps, v: View): HTMLElement {
     h('p', { class: 'meta' }, t(v.lang, 'nwcSaved', { relay: w.relay.replace(/^wss:\/\//, '') })), said,
     w.canSign ? null : h('p', { class: 'meta' }, t(v.lang, 'nwcNeedSigner')),
     h('p', { class: 'buttons' }, h('button', { type: 'button', onClick: () => p.onNwcTest?.() }, t(v.lang, 'nwcTest')), ' ', h('button', { type: 'button', class: 'danger', onClick: () => p.onNwcRemove?.() }, t(v.lang, 'nwcRemove'))),
-    h('p', { class: 'meta wallet-risk' }, t(v.lang, 'nwcRisk')))
+    h('p', { class: 'meta wallet-risk' }, t(v.lang, 'nwcRisk')), zapHistoryArea(p, v))
   const input = h('input', { type: 'password', class: 'nwc-input', autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false', placeholder: t(v.lang, 'nwcPlaceholder'), 'aria-label': t(v.lang, 'nwcTitle') }) as HTMLInputElement
   return h('div', { class: 'wallet' }, h('h3', {}, t(v.lang, 'nwcTitle')),
     h('p', { class: 'meta' }, t(v.lang, 'nwcHelp')),
     h('p', { class: 'warning wallet-risk', role: 'note' }, t(v.lang, 'nwcRisk')),
     h('form', { class: 'nwc-form', onSubmit: (e: Event) => { e.preventDefault(); p.onNwcSave?.(input.value) } }, input, h('button', { type: 'submit' }, t(v.lang, 'nwcSave'))),
-    w.error ? h('p', { class: 'error', role: 'alert' }, w.error) : null)
+    w.error ? h('p', { class: 'error', role: 'alert' }, w.error) : null, zapHistoryArea(p, v))
 }
 
 function interestsArea(p: PrefsProps): HTMLElement {

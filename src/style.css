@@ -526,3 +526,11 @@ html[data-scheme=light] #app:not(.wide) .sign .toast { box-shadow: 0 6px 22px rg
 #app:not(.has-tabs):not(.wide) .sign .toast { bottom: calc(var(--bar-inset) * .7 + 10px) }
 .sign .toast .result-relays summary { cursor: pointer; color: var(--muted); font-size: .85rem; margin-top: 2px }
 .sign .toast .result-relays ul { margin-top: 6px }
+
+/* the zap history in Settings: one line per zap, the direction first */
+.zap-history-box { margin-top: 10px } .zap-history-box summary { cursor: pointer; font-weight: 600 }
+ul.zap-history { list-style: none; margin: 8px 0; padding: 0 }
+ul.zap-history li { display: flex; align-items: baseline; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border) }
+ul.zap-history .zap-dir { flex: none; width: 1em; text-align: center; font-weight: 700 } ul.zap-history li.in .zap-dir { color: var(--accent) } ul.zap-history li.out .zap-dir { color: var(--amber) }
+ul.zap-history .zap-main { flex: 1; min-width: 0; overflow-wrap: anywhere } ul.zap-history .zap-comment { color: var(--muted) }
+ul.zap-history li > .meta { flex: none; font-size: .8rem }

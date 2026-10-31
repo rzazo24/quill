@@ -502,6 +502,18 @@ describe('sharing a note', () => {
     await a.go('#/me'); await click(a.root, 'Connect a signer')
     expect(a.text()).not.toContain('Use the browser extension')
   })
+  it('Settings: the zap history, folded until opened, lists sent and received zaps from the public receipts', async () => {
+    const zr = (from: string, to: string, at: number, content: string) => ev(pk('9'), '', { kind: 9735, created_at: at, tags: [['p', to], ['P', from], ['bolt11', 'lnbc210n1xyz'], ['description', JSON.stringify(ev(from, content, { kind: 9734, tags: [['p', to], ['amount', '21000']] }))]] })
+    const sg = fakeSigner(); const a = boot({ signer: sg, verifyAll: true, events: [...world, zr(friend, me, 7000, 'nice one'), zr(me, other, 7100, 'thanks')] }); await tick(100); await connectClave(a, sg)
+    await a.go('#/settings'); await tick(100)
+    const box = a.root.querySelector('details.zap-history-box') as HTMLDetailsElement
+    expect(box).not.toBeNull(); expect(box.open).toBe(false); expect(a.root.querySelector('ul.zap-history')).toBeNull()
+    box.open = true; box.dispatchEvent(new Event('toggle')); await tick(300)
+    const rows = [...a.root.querySelectorAll('ul.zap-history li')].map((li) => li.textContent!)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toContain('↑'); expect(rows[0]).toContain('21'); expect(rows[0]).toContain('thanks')
+    expect(rows[1]).toContain('↓'); expect(rows[1]).toContain('nice one')
+  })
   it('Settings: photos are off by default; turned on, with no server list of your own, a server is chosen and kept on this device', async () => {
     const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)
     await a.go('#/settings'); await tick(100)
