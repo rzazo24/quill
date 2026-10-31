@@ -24,6 +24,8 @@ import { Engagement, loadEngagement, normReaction } from '../data/engaged.js'
 import { loadReach, loadOthersReach, type Reach } from '../data/reach.js'
 import { invoiceMatches, lnurlOf, MAX_ZAP_COMMENT, MAX_ZAP_SATS, parseNwc, payUrlOf, zapRequestTemplate, type NwcConnection } from '../core/zapsend.js'
 import { getJson, payInfo, zapInvoice, ZapError, type GetJson } from '../net/lnurl.js'
+import { BLOSSOM_SERVERS_KIND, imetaTag, MAX_PHOTO_BYTES, normalizeServer, serversFrom, sha256Hex, SUGGESTED_SERVERS, upload, uploadAuthTemplate, type Photo } from '../core/blossom.js'
+import { preparePhoto } from './photo.js'
 import { nwcCall, type NwcMethod } from '../net/nwc.js'
 import { countNew, reactionTarget, groupReactions, groupReposts, loadActivity, mergeKnown, newFollowers, parseKnown, type Activity } from '../data/activity.js'
 import { contextOf, loadGraphInfo, loadOwnLists, pendingGraph, type Session } from '../data/session.js'
@@ -55,6 +57,8 @@ export interface Deps {
   /** Where profile pictures are asked for as small thumbnails (this site's /avatar); without it they come straight from their own sites. */
   avatarProxy?: string
   /** Zaps: the recipient's Lightning server (https) and the reader's wallet (NWC). Real ones by default; tests pass fakes. */
+  /** photos: made ready in the browser and uploaded over HTTP (tests pass their own) */
+  photoNet?: { prepare: (f: Blob) => Promise<{ blob: Blob; dim: string }>; fetch: typeof fetch }
   zapNet?: { getJson: GetJson; nwc: (c: NwcConnection, method: NwcMethod, params?: Record<string, unknown>) => Promise<Record<string, unknown>> }
   /** Reads the clipboard (needs a tap; may be refused). */
   readClipboard?: () => Promise<string>
@@ -117,6 +121,11 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let relays = parseRelays(safeGet(kv, 'relays')) ?? defaultRelays
   let font: FontSize = parseFont(safeGet(kv, 'font'))
   let showReposts = parseReposts(safeGet(kv, 'reposts'))
+  // photos in notes (Blossom): off unless turned on; uploads go to the writer's own servers (their kind 10063 list) or one chosen here
+  let photosOn = safeGet(kv, 'photos') === '1'
+  let photoServer = normalizeServer(safeGet(kv, 'photoServer') ?? '')
+  let myBlossom: string[] | null = null, blossomFor: string | null = null
+  const photoServers = (): string[] => (myBlossom?.length ? myBlossom : photoServer ? [photoServer] : [])
   let clientTag = safeGet(kv, 'clientTag') !== '0' // say "published with Quill" (NIP-89 client tag) on notes and reactions: on unless turned off
   let readOutbox = parseReposts(safeGet(kv, 'outbox')) // on unless turned off ('0'), like reposts
   let realAvatars = safeGet(kv, 'realAvatars') === '1' // off unless turned on
@@ -356,7 +365,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const followersSeen = new Set<string>() // everybody seen following you since this page opened (the known ones are in `knownFollowers`)
   /** How many accounts have been seen following the reader: only a lower bound (each relay knows part of them), and it only grows. Null while nothing has been looked at yet. */
   const followerCount = (): number | null => { const k = loadKnown(); return k === null && followersSeen.size === 0 ? null : new Set([...(k ?? []), ...followersSeen]).size }
-  const forgetAccount = () => { listPages.clear(); rescue = { phase: 'idle' }; rescueLacking = null; rescueMissed = []; restoreNote = ''; rescueSaving = false; pageCache.clear(); myProfile = undefined; zapMap.clear(); zapFlow = null; nwcState = null; nwcError = null; aboutEdit = null; reachMap.clear(); reachAsked.clear(); reachAskedAt.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
+  const forgetAccount = () => { myBlossom = null; blossomFor = null; listPages.clear(); rescue = { phase: 'idle' }; rescueLacking = null; rescueMissed = []; restoreNote = ''; rescueSaving = false; pageCache.clear(); myProfile = undefined; zapMap.clear(); zapFlow = null; nwcState = null; nwcError = null; aboutEdit = null; reachMap.clear(); reachAsked.clear(); reachAskedAt.clear(); quotedMap.clear(); trustMap.clear(); startBackground = null; backgroundRun = null; engagement = new Engagement(); for (const p of Object.values(panes)) { p.body = null; p.run++; p.resetScroll = true } detailKey = ''; followFlow = null; knownFollowing = null; shareConfirm = null; lastVerify = 0; seenAt = null; markFrom = null; badge = 0; knownFollowers = null; followersMark = null; followersSeen.clear() }
   const nowSec = () => Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
   const loadSeen = () => { const n = Number(safeGet(kv, seenKey())); seenAt = Number.isInteger(n) && n > 0 ? n : null }
   const markSeen = () => { seenAt = nowSec(); safeSet(kv, seenKey(), String(seenAt)); badge = 0 }
@@ -797,6 +806,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       if (back && now - back.at < PAGE_KEEP_MS && back.stamp === pageStamp()) { body = back.body; shownRoute = key; lateWaiting = null; restoreScroll = back.scroll; status = null; markFrom = null; followersMark = null; draw(); return } // (leaving Mentions ends its visit, as below)
     }
     if (key !== shownRoute) { body = null; shownRoute = key; lateWaiting = null; scrollToTop = true; profileMode = 'notes'; goToNote = route.name === 'note' ? route.id : null; if (route.name !== 'mentions') { markFrom = null; followersMark = null } }
+    if (route.name === 'settings' && photosOn) void loadBlossomList()
     if (route.name === 'settings' || route.name === 'help') { pageCache.clear(); status = null; body = null; draw(); return } // a change made there must show in every list
     // the same page again (the graph came, or numbers, or a title): quiet, it is only drawn once it is ready
     const quiet = key === shownRoute && body !== null && !scrollToTop && !loudLoad
@@ -1255,7 +1265,12 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     return current
   }
 
-  function templateFor(text: string, target?: NostrEvent, mode: Composer['mode'] = target ? 'reply' : 'note'): Template {
+  function templateFor(text: string, target?: NostrEvent, mode: Composer['mode'] = target ? 'reply' : 'note', photos: Photo[] = []): Template {
+    const t0 = baseTemplate(text, target, mode)
+    const shown = photos.filter((ph) => t0.content.includes(ph.url)) // a photo whose address was deleted from the text is not described either
+    return shown.length ? { ...t0, tags: [...t0.tags, ...shown.map(imetaTag)] } : t0
+  }
+  function baseTemplate(text: string, target?: NostrEvent, mode: Composer['mode'] = target ? 'reply' : 'note'): Template {
     const auto = mergeTags(mentionTags(text), hashtagTags(text))
     const created_at = Math.floor((deps.nowMs?.() ?? Date.now()) / 1000)
     // a quote is a note of its own (not a reply): the comment, then a reference to the quoted note, with the q tag that points at it
@@ -1285,7 +1300,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     const kept = Object.entries(all).filter(([, d]) => d && typeof d.text === 'string' && typeof d.at === 'number' && now - d.at < 30 * 86400).sort((a, b) => b[1].at - a[1].at).slice(0, 20)
     safeSet(kv, draftsKey(), kept.length ? JSON.stringify(Object.fromEntries(kept)) : null)
   }
-  function openComposer(c: Composer): Composer { const d = readDrafts()[draftKey(c)]; return d && typeof d.text === 'string' && d.text.trim() ? { ...c, text: d.text, restored: true } : c }
+  function openComposer(c: Composer): Composer { if (photosOn) void loadBlossomList(); const d = readDrafts()[draftKey(c)]; return d && typeof d.text === 'string' && d.text.trim() ? { ...c, text: d.text, restored: true } : c }
   function startReply(target: NostrEvent): void { knowFollowNames(); composer = openComposer({ mode: 'reply', target, text: '' }); review = null; result = null; flash = null; draw(); root.querySelector('textarea')?.focus() }
   /** From the share panel: a quote asks for the reader's comment first. */
   function startQuote(target: NostrEvent): void { knowFollowNames(); shareConfirm = null; composer = openComposer({ mode: 'quote', target, text: '' }); review = null; result = null; flash = null; draw(); root.querySelector('textarea')?.focus() }
@@ -1294,10 +1309,57 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     if (!composer) return
     let template: Template
     if (composer.mode === 'quote' && !composer.text.trim()) { say('error', t(lang, 'quoteEmpty')); return draw() }
-    try { template = templateFor(composer.text, composer.target, composer.mode) } catch { return say('error', t(lang, 'p_tags')), draw() }
+    try { template = templateFor(composer.text, composer.target, composer.mode, composer.photos) } catch { return say('error', t(lang, 'p_tags')), draw() }
     const problem = checkTemplate(template)
     if (problem) { say('error', problemText(lang, problem, { max: MAX_NOTE_CHARS })); return draw() }
     flash = null; review = { template: clientTag ? withClientTag(template) : template, target: composer.target, mentions: template.tags.filter((x) => x[0] === 'p').length, quote: composer.mode === 'quote' }; draw()
+  }
+  /** The writer's Blossom server list (kind 10063), read once per account. */
+  async function loadBlossomList(): Promise<void> {
+    if (!me || blossomFor === me) return
+    const who = me; blossomFor = who
+    try {
+      const got = await fetcher.query({ kinds: [BLOSSOM_SERVERS_KIND], authors: [who], limit: 2 }, { quick: false })
+      const newest = got.filter((e) => e.pubkey === who).sort((a, b) => b.created_at - a.created_at)[0]
+      if (me === who) { myBlossom = serversFrom(newest); draw() }
+    } catch { if (blossomFor === who) blossomFor = null }
+  }
+  function setPhotos(on: boolean): void { photosOn = on; safeSet(kv, 'photos', on ? '1' : null); if (on) void loadBlossomList(); draw() }
+  function choosePhotoServer(raw: string): void {
+    const s = normalizeServer(raw)
+    if (!s) { say('error', t(lang, 'photoServerInvalid')); return draw() }
+    photoServer = s; safeSet(kv, 'photoServer', s); draw()
+  }
+  /** A photo for the note being written: cleaned and made smaller here, named by its hash, the upload permission signed, sent to the writer's
+   *  servers in turn until one takes it, and its address added to the text. */
+  async function addPhoto(file: File): Promise<void> {
+    if (!composer || composer.uploading || !signer || signer.state !== 'connected') return
+    const servers = photoServers()
+    if (!servers.length) { say('error', t(lang, 'photoNoServer')); return draw() }
+    const writing = composer, net = deps.photoNet ?? { prepare: preparePhoto, fetch: (...a: Parameters<typeof fetch>) => fetch(...a) }
+    composer = { ...writing, uploading: true }; draw()
+    let reason = ''
+    try {
+      const { blob, dim } = await net.prepare(file)
+      if (blob.size > MAX_PHOTO_BYTES) throw new Error(t(lang, 'photoTooBig'))
+      const hash = await sha256Hex(await blob.arrayBuffer())
+      const auth = await signOnly({ signer, kv, now: deps.nowMs }, uploadAuthTemplate(hash, nowSec()))
+      let photo: Photo | null = null
+      for (const server of servers) {
+        try { photo = { ...(await upload(net.fetch, server, blob, hash, auth)), dim }; break } catch (e) { reason = e instanceof Error ? e.message : String(e) }
+      }
+      if (!photo) throw new Error(reason || 'no server took it')
+      if (composer && composer.mode === writing.mode && composer.target?.id === writing.target?.id) {
+        const text = composer.text.trimEnd(), next = `${text}${text ? '\n' : ''}${photo.url}`
+        composer = { ...composer, text: next, photos: [...(composer.photos ?? []), photo], uploading: false }
+        writeDraft(draftKey(composer), next)
+      }
+    } catch (e) {
+      if (composer) composer = { ...composer, uploading: false }
+      const msg = e instanceof Error ? e.message : String(e)
+      say('error', msg === t(lang, 'photoTooBig') ? msg : t(lang, 'photoFailed', { reason: msg }))
+    }
+    draw()
   }
   async function publish(): Promise<void> {
     if (!review) return
@@ -1633,13 +1695,14 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
       h('details', { class: 'newcomer' }, h('summary', {}, t(lang, 'newTitle')), h('ol', {}, h('li', {}, t(lang, 'newStep1')), h('li', {}, t(lang, 'newStep2')), h('li', {}, t(lang, 'newStep3')))),
       loginError ? h('p', { class: 'error', role: 'alert' }, loginError) : null)
     const signArea = signer ? renderSignArea({
-      emojiPicker: isWide, signer: signer.state, extension: !!signer.hasExtension?.(), who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, zapFlow, flash, composer, review, step, result, relays, bunkerText, linkOpen, confirmDisconnect: confirmingDisconnect, shareConfirm, deleteConfirm, followPanel: followPanel(),
+      emojiPicker: isWide, photos: photosOn && photoServers().length > 0 && signer.state === 'connected', signer: signer.state, extension: !!signer.hasExtension?.(), who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, zapFlow, flash, composer, review, step, result, relays, bunkerText, linkOpen, confirmDisconnect: confirmingDisconnect, shareConfirm, deleteConfirm, followPanel: followPanel(),
     }, {
       openConnect, startLink, pasteBunker: () => void pasteBunker(), useExtension: () => void useExtension(), cancelConnect, bunker: (x) => void bunker(x), dismissFlash: () => { flash = null; draw() }, confirmFollow: () => void confirmFollow(), acceptList, cancelFollow: () => { followFlow = null; draw() }, confirmShare: () => void share(), startQuote: () => { if (shareConfirm) startQuote(shareConfirm) }, cancelShare: () => { shareConfirm = null; draw() }, confirmDelete: () => void deleteNote(), cancelDelete: () => { deleteConfirm = null; draw() }, askDisconnect: () => { confirmingDisconnect = true; draw() }, cancelDisconnect: () => { confirmingDisconnect = false; draw() },
       disconnect: () => { confirmingDisconnect = false; void signer.disconnect(); composer = review = result = null; flash = null; draw() }, copy: (x) => { deps.copy?.(x); say('info', t(lang, 'copied')); draw() },
       edit: (x) => { if (composer) { composer.text = x; writeDraft(draftKey(composer), x) } }, discardDraft: () => { if (composer) { writeDraft(draftKey(composer), null); composer = { ...composer, text: '', restored: false }; draw(); root.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus() } }, review: doReview, publish: () => void publish(), back: () => { review = null; draw() }, cancelComposer: () => { if (composer?.text.trim()) say('info', t(lang, 'draftKept')); composer = null; review = null; draw() },
       retry: () => void retry(), dismissResult: () => { result = null; draw() }, startNote, cancelSigning: () => signing?.abort(),
       editBunker: (x) => { bunkerText = x }, setLinkOpen: (o) => { linkOpen = o },
+      addPhoto: (f: File) => void addPhoto(f),
       zapPick: (n) => { if (zapFlow) { zapFlow = { ...zapFlow, sats: n, stage: 'choose' }; draw() } }, zapCustom: (n) => { if (zapFlow) zapFlow = { ...zapFlow, sats: n } }, zapComment: (x) => { if (zapFlow) zapFlow = { ...zapFlow, comment: x.slice(0, MAX_ZAP_COMMENT) } },
       confirmZap: () => void confirmZap(), cancelZap: () => { if (zapFlow?.stage !== 'working') { zapFlow = null; draw() } },
     }, view(), true, !me || route.name === 'me' || isWide ? 'me' : 'feed', !!me && !isWide && ['following', 'mentions', 'note', 'user', 'me', 'people'].includes(route.name)) : null
@@ -1654,7 +1717,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     const helpPage = renderHelp(view(), helpOpen, (id, isOpen) => { if (isOpen) helpOpen.add(id); else helpOpen.delete(id) })
     const content: (HTMLElement | null)[] = route.name === 'help' ? [signArea, helpPage]
       : !me ? [...(route.name === 'note' && guestBody ? [guestBody] : []), loginForm, signArea, route.name === 'note' ? null : guestPick]
-      : route.name === 'settings' ? [signArea, renderPrefs({ font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, realAvatars, onRealAvatars: changeRealAvatars, scheme, onScheme: changeScheme, halloween: halloween(), onHalloween: changeTheme, autoImages, onAutoImages: changeAutoImages, interests, onInterests: changeInterests, reposts: showReposts, onReposts: changeReposts, clientTag, onClientTag: changeClientTag, outbox: readOutbox, onOutbox: changeOutbox, nwc: { relay: nwcOf()?.relays[0] ?? null, state: nwcState, error: nwcError, canSign: signer?.state === 'connected' }, onNwcSave: saveNwc, onNwcRemove: removeNwc, onNwcTest: () => void testNwc(), relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
+      : route.name === 'settings' ? [signArea, renderPrefs({ ...(signer ? { photos: { on: photosOn, listed: myBlossom ?? [], chosen: photoServer, suggested: SUGGESTED_SERVERS, onToggle: setPhotos, onChoose: choosePhotoServer } } : {}), font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, realAvatars, onRealAvatars: changeRealAvatars, scheme, onScheme: changeScheme, halloween: halloween(), onHalloween: changeTheme, autoImages, onAutoImages: changeAutoImages, interests, onInterests: changeInterests, reposts: showReposts, onReposts: changeReposts, clientTag, onClientTag: changeClientTag, outbox: readOutbox, onOutbox: changeOutbox, nwc: { relay: nwcOf()?.relays[0] ?? null, state: nwcState, error: nwcError, canSign: signer?.state === 'connected' }, onNwcSave: saveNwc, onNwcRemove: removeNwc, onNwcTest: () => void testNwc(), relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
         onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderRescue({ state: rescue, saving: rescueSaving, savedCount: rescueSaved, restoreNote, onSaveMissed: () => void saveMissed(), ...(publisher ? { onRestore: (f: File) => void restoreRescue(f) } : {}), onScan: () => void scanRescue(), onCopy: () => void copyRescue(), onSave: () => void saveRescue() }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
       : isWide ? [wideView(route, signArea, signOut)]

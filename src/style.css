@@ -509,3 +509,8 @@ html.edge-gap { --bar-inset: 34px; --tab-safe: 17px; --tab-lift: 6px }
 
 /* the search and write buttons: a little smaller, and a little closer to the floating bar */
 .fab, .fab-search { width: 53px; height: 53px; min-height: 53px; bottom: calc(var(--tab-h) + var(--tab-safe) + 5px) }
+
+/* photos in notes: the add-photo button sits with the composer's others; the server choice in Settings, one per line */
+.photo-add { min-height: 36px; padding: 0 12px; font-size: .9rem }
+.photo-servers label.radio { display: flex; align-items: center; gap: 8px; padding: 4px 0 }
+.photo-servers form.row { display: flex; gap: 8px; margin-top: 6px } .photo-servers form.row input { flex: 1; min-width: 0 }

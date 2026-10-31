@@ -10,10 +10,11 @@ import { checkRepost, REPOST_KIND, type RepostProblem } from '../core/repost.js'
 import type { Event } from 'nostr-tools'
 import { MAX_RELAYS, normalizeRelay } from '../net/relays.js'
 import { checkZapRequest, ZAP_REQUEST_KIND } from '../core/zapsend.js'
+import { BLOSSOM_AUTH_KIND, checkImeta, checkUploadAuth } from '../core/blossom.js'
 
 /** NIP-65: the list of relays a person writes to and reads from. */
 export const RELAY_LIST_KIND = 10002
-export const ALLOWED_KINDS = [PROFILE_KIND, 1, COMMENT_KIND, FOLLOW_LIST_KIND, DELETION_KIND, REPOST_KIND, 7, MUTE_LIST_KIND, RELAY_LIST_KIND, ZAP_REQUEST_KIND] as const
+export const ALLOWED_KINDS = [PROFILE_KIND, 1, COMMENT_KIND, FOLLOW_LIST_KIND, DELETION_KIND, REPOST_KIND, 7, MUTE_LIST_KIND, RELAY_LIST_KIND, ZAP_REQUEST_KIND, BLOSSOM_AUTH_KIND] as const
 export const MAX_NOTE_CHARS = 1000
 export const MAX_SIGNATURES_PER_HOUR = 20
 /** Reactions have their own allowance: a run of likes never stops a note, and a like is the least that can be signed. */
@@ -21,7 +22,7 @@ export const MAX_REACTIONS_PER_HOUR = 40
 
 export interface Template { kind: number; content: string; tags: string[][]; created_at: number }
 
-export type Problem = 'zap' | 'kind' | 'empty' | 'too-long' | 'reaction' | 'tags' | 'reaction-target' | 'relay-list' | 'quote' | 'follow' | 'profile' | 'delete' | RepostProblem
+export type Problem = 'upload' | 'zap' | 'kind' | 'empty' | 'too-long' | 'reaction' | 'tags' | 'reaction-target' | 'relay-list' | 'quote' | 'follow' | 'profile' | 'delete' | RepostProblem
 
 const TAG_NAMES = new Set(['e', 'p', 't', 'k', 'a', 'q', 'E', 'A', 'I', 'K', 'P']) // the upper-case ones: the root of a NIP-22 comment
 /** NIP-89: says the event was made with Quill (a setting, on by default). Allowed exactly like this, once, on notes and reactions. */
@@ -51,6 +52,7 @@ export interface CheckContext { followBase?: Event | null; /** the reader, for a
 export function checkTemplate(t: Template, ctx: CheckContext = {}): Problem | null {
   if (!(ALLOWED_KINDS as readonly number[]).includes(t.kind)) return 'kind'
   if (t.kind === ZAP_REQUEST_KIND) return checkZapRequest(t) ? null : 'zap' // signed to pay a zap, never published by Quill
+  if (t.kind === BLOSSOM_AUTH_KIND) return checkUploadAuth(t) ? null : 'upload' // signed to upload ONE photo to the writer's Blossom server, never published
   if (t.kind === DELETION_KIND) return ctx.deleteTarget && isDeletionOf(ctx.deleteTarget, t) ? null : 'delete' // exactly one note, named by id
   if (t.kind === PROFILE_KIND) return ctx.profileBase && isAboutChange(ctx.profileBase, t) ? null : 'profile' // only the description changes, everything else as it was
   if (t.kind === FOLLOW_LIST_KIND || t.kind === MUTE_LIST_KIND) return ctx.followBase !== undefined && followChange(ctx.followBase, t, ctx.me) ? null : 'follow' // only ONE account more or less than the list it was built from
@@ -61,7 +63,10 @@ export function checkTemplate(t: Template, ctx: CheckContext = {}): Problem | nu
     return ok ? null : 'relay-list'
   }
   if (t.tags.filter((tag) => Array.isArray(tag) && isClientTag(tag)).length > 1) return 'tags'
-  if (t.tags.length > 40 || !t.tags.every((tag) => Array.isArray(tag) && (isClientTag(tag) || (tag.length >= 2 && tag.length <= 4 && tag.every((v) => typeof v === 'string' && v.length <= 300) && TAG_NAMES.has(tag[0]!))))) return 'tags'
+  // a photo (NIP-92): only on notes and comments, at most 4, each describing an address that is in the text
+  const imetas = t.tags.filter((tag) => Array.isArray(tag) && tag[0] === 'imeta')
+  if (imetas.length && ((t.kind !== 1 && t.kind !== COMMENT_KIND) || imetas.length > 4 || !imetas.every((tag) => checkImeta(tag, t.content)))) return 'tags'
+  if (t.tags.length > 40 || !t.tags.every((tag) => Array.isArray(tag) && (isClientTag(tag) || tag[0] === 'imeta' || (tag.length >= 2 && tag.length <= 4 && tag.every((v) => typeof v === 'string' && v.length <= 300) && TAG_NAMES.has(tag[0]!))))) return 'tags'
   if (t.kind !== 1 && t.tags.some((x) => x[0] === 'q')) return 'tags'
   if (t.kind === COMMENT_KIND) { // an answer to a comment: one parent (e, k, p) and a root scope (K plus E, A or I)
     const has = (n: string) => t.tags.filter((x) => x[0] === n).length

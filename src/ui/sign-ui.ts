@@ -10,6 +10,7 @@ import { failedRelays } from '../net/publisher.js'
 import type { Published, Step } from '../sign/pipeline.js'
 import { MAX_NOTE_CHARS, type Template } from '../sign/policy.js'
 import { MAX_ZAP_COMMENT, MAX_ZAP_SATS, ZAP_AMOUNTS } from '../core/zapsend.js'
+import type { Photo } from '../core/blossom.js'
 import { h, menuKeys } from './dom.js'
 import { t } from './i18n.js'
 import { icon } from './icons.js'
@@ -20,7 +21,7 @@ export const REACTIONS = ['+', '❤️', '🤙', '😂', '🙏', '🔥', '😮',
 /** Added behind the others while the Halloween theme is on. */
 export const HALLOWEEN_REACTIONS = ['🎃', '👻', '🦇', '💀', '🕷️']
 
-export interface Composer { mode: 'note' | 'reply' | 'quote'; target?: NostrEvent; text: string; /** the text came back from a saved draft */ restored?: boolean }
+export interface Composer { mode: 'note' | 'reply' | 'quote'; target?: NostrEvent; text: string; /** the text came back from a saved draft */ restored?: boolean; /** photos uploaded for this note (their addresses are in the text) */ photos?: Photo[]; /** a photo is being prepared or uploaded */ uploading?: boolean }
 export interface Review { template: Template; target?: NostrEvent; mentions: number; quote?: boolean }
 /** The panel of a follow / unfollow: reading the list, the confirmation, or why Quill will not go on. */
 export type FollowPanel =
@@ -41,6 +42,8 @@ export interface SignUiState {
   composer: Composer | null
   /** A wide screen has no emoji keyboard: the composer offers a small picker. */
   emojiPicker?: boolean
+  /** Photos are turned on in Settings and there is a server to upload to: the composer offers to add one. */
+  photos?: boolean
   review: Review | null
   step: Step | null
   result: Published | null
@@ -63,6 +66,7 @@ export interface SignUiHandlers {
   openConnect(): void; cancelConnect(): void; bunker(text: string): void; dismissFlash(): void; confirmFollow(): void; acceptList(): void; cancelFollow(): void; confirmShare(): void; confirmDelete(): void; cancelDelete(): void; startQuote(): void; cancelShare(): void; askDisconnect(): void; cancelDisconnect(): void; disconnect(): void; copy(text: string): void
   edit(text: string): void; discardDraft(): void; review(): void; publish(): void; back(): void; cancelComposer(): void; retry(): void; dismissResult(): void
   startNote(): void; cancelSigning(): void; startLink(): void; useExtension?(): void; pasteBunker(): void; editBunker(text: string): void; setLinkOpen(open: boolean): void
+  addPhoto?(file: File): void
   zapPick?(sats: number): void; zapCustom?(sats: number): void; zapComment?(text: string): void; confirmZap?(): void; cancelZap?(): void
 }
 
@@ -137,6 +141,14 @@ const FLOATING = ['fab', 'popup', 'sheet', 'toast']
 /** Writing happens on top of the page, not in the middle of it: a panel at the top of the screen over a dimmed background, so the keyboard never covers it and the feed keeps its place. */
 const sheet = (inner: HTMLElement): HTMLElement => h('div', { class: 'sheet' }, inner)
 
+/** Add a photo: a file picker that looks like the other buttons (the input stays inside, reachable by keyboard); while one uploads, a quiet status. */
+function photoButton(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement | null {
+  if (!s.photos || !hd.addPhoto || !s.composer) return null
+  if (s.composer.uploading) return h('span', { class: 'meta photo-uploading', role: 'status' }, t(v.lang, 'photoUploading'), ' ')
+  return h('span', {}, h('label', { class: 'button file-button photo-add' }, icon('image', 16), t(v.lang, 'photoAdd'),
+    h('input', { type: 'file', accept: 'image/*', class: 'visually-hidden', onChange: (e: Event) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) hd.addPhoto!(f) } })), ' ')
+}
+
 function renderComposer(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement {
   const c = s.composer
   if (!c) return h('div', {})
@@ -184,7 +196,7 @@ function renderComposer(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElemen
   return h('div', { class: 'composer' },
     (c.mode === 'reply' || c.mode === 'quote') && c.target ? h('p', { class: 'replying' }, t(v.lang, c.mode === 'quote' ? 'quotingTo' : 'replyingTo', { who: nameOf(v, c.target.pubkey) }), ': ', h('q', {}, excerpt(c.target))) : null,
     c.restored ? h('p', { class: 'meta draft-line' }, t(v.lang, 'draftRestored'), ' ', h('button', { type: 'button', class: 'link', onClick: hd.discardDraft }, t(v.lang, 'draftDiscard'))) : null,
-    area, suggest, picker, h('p', { class: 'composer-buttons' }, count, ' ', toggle, toggle ? ' ' : null, h('button', { type: 'button', onClick: hd.review }, t(v.lang, 'review')), ' ', h('button', { type: 'button', onClick: hd.cancelComposer }, t(v.lang, 'cancel'))),
+    area, suggest, picker, h('p', { class: 'composer-buttons' }, count, ' ', toggle, toggle ? ' ' : null, photoButton(s, hd, v), h('button', { type: 'button', onClick: hd.review }, t(v.lang, 'review')), ' ', h('button', { type: 'button', onClick: hd.cancelComposer }, t(v.lang, 'cancel'))),
   )
 }
 

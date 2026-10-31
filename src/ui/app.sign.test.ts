@@ -56,7 +56,7 @@ const publisherFake = (outcomes: Record<string, string> = { 'wss://r1.example': 
   return { p, sent }
 }
 
-function boot(o: { verifyAll?: boolean; events?: Event[]; signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; stored?: Record<string, string>; clipboard?: string | Error; copied?: string[]; wide?: boolean; errorMs?: number; verifyWaits?: number[]; zapNet?: Parameters<typeof startApp>[1]['zapNet'] } = {}) {
+function boot(o: { verifyAll?: boolean; events?: Event[]; signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; stored?: Record<string, string>; clipboard?: string | Error; copied?: string[]; wide?: boolean; errorMs?: number; verifyWaits?: number[]; zapNet?: Parameters<typeof startApp>[1]['zapNet']; photoNet?: Parameters<typeof startApp>[1]['photoNet'] } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = [], mem = new Map(Object.entries(o.stored ?? { me }))
   const pub = o.pub ?? publisherFake()
@@ -68,6 +68,7 @@ function boot(o: { verifyAll?: boolean; events?: Event[]; signer?: ReturnType<ty
     ...(o.signer ? { signer: o.signer.s, publisher: pub.p } : {}),
     ...(o.verifyAll ? { verify: () => true } : {}), // the test events carry fake signatures
     ...(o.zapNet ? { zapNet: o.zapNet } : {}),
+    ...(o.photoNet ? { photoNet: o.photoNet } : {}),
   })
   const go = async (hash: string) => { location.hash = hash; listeners.forEach((l) => l()); await tick(60) }
   return { root, mem, pub, go, text: () => root.textContent ?? '' }
@@ -500,6 +501,46 @@ describe('sharing a note', () => {
     const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100)
     await a.go('#/me'); await click(a.root, 'Connect a signer')
     expect(a.text()).not.toContain('Use the browser extension')
+  })
+  it('Settings: photos are off by default; turned on, with no server list of your own, a server is chosen and kept on this device', async () => {
+    const sg = fakeSigner(); const a = boot({ signer: sg }); await tick(100); await connectClave(a, sg)
+    await a.go('#/settings'); await tick(100)
+    const sw = [...a.root.querySelectorAll('.photo-prefs input[role=switch]')][0] as HTMLInputElement
+    expect(sw.checked).toBe(false); expect(a.root.querySelector('.photo-servers')).toBeNull()
+    sw.checked = true; sw.dispatchEvent(new Event('change')); await tick(200)
+    const radios = [...a.root.querySelectorAll('.photo-servers input[type=radio]')] as HTMLInputElement[]
+    expect(radios).toHaveLength(2)
+    radios[0]!.checked = true; radios[0]!.dispatchEvent(new Event('change')); await tick(50)
+    expect((a.root.querySelectorAll('.photo-servers input[type=radio]')[0] as HTMLInputElement).checked).toBe(true)
+    ;(a.root.querySelector('button.fab') as HTMLButtonElement | null)?.click()
+  })
+  it('with photos on, the composer uploads a cleaned photo to the chosen Blossom server and the note carries its address and imeta', async () => {
+    const puts: { url: string; auth: string }[] = []
+    const photoNet = {
+      prepare: async () => ({ blob: new Blob(['clean-jpeg'], { type: 'image/jpeg' }), dim: '640x480' }),
+      fetch: (async (url: string, init: RequestInit) => {
+        const sha = (init.headers as Record<string, string>)['X-SHA-256']!
+        puts.push({ url, auth: (init.headers as Record<string, string>).Authorization! })
+        return new Response(JSON.stringify({ url: `https://b.example/${sha}.jpg`, sha256: sha, size: 10, type: 'image/jpeg' }))
+      }) as unknown as typeof fetch,
+    }
+    const sg = fakeSigner(), pub = publisherFake()
+    const a = boot({ signer: sg, pub, photoNet, stored: { me, photos: '1', photoServer: 'https://b.example' } }); await tick(100); await connectClave(a, sg)
+    ;(a.root.querySelector('button.fab') as HTMLButtonElement).click(); await tick(50)
+    const input = a.root.querySelector('.composer input[type=file]') as HTMLInputElement
+    expect(input).not.toBeNull()
+    Object.defineProperty(input, 'files', { value: [new File(['raw'], 'IMG_0001.jpg', { type: 'image/jpeg' })] }); input.dispatchEvent(new Event('change')); await tick(300)
+    expect(puts).toHaveLength(1); expect(puts[0]!.url).toBe('https://b.example/upload')
+    const auth = JSON.parse(atob(puts[0]!.auth.replace('Nostr ', ''))) as Event
+    expect(auth.kind).toBe(24242); expect(auth.tags.find((x) => x[0] === 't')![1]).toBe('upload')
+    const area = a.root.querySelector('.composer textarea') as HTMLTextAreaElement
+    expect(area.value).toMatch(/^https:\/\/b\.example\/[0-9a-f]{64}\.jpg$/)
+    area.value = `A cat\n${area.value}`; area.dispatchEvent(new Event('input'))
+    await click(a.root, 'Review'); await tick(50); await click(a.root, 'Publish'); await tick(300)
+    const note = pub.sent.map((x) => x.event).find((e) => e.kind === 1)!
+    const imeta = note.tags.find((x) => x[0] === 'imeta')!
+    expect(imeta).toContain(`url ${area.value.split('\n')[1]}`); expect(imeta).toContain('dim 640x480'); expect(imeta).toContain('m image/jpeg')
+    expect(sg.log).toContain('sign 24242')
   })
   it('Settings can restore a saved file: this account\'s events go back to its relays as they are, and the rest is left out', async () => {
     const mine = ev(me, 'kept in a file', { created_at: 9000 }), theirs = ev(friend, 'not mine', { created_at: 9001 })

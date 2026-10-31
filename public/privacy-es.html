@@ -3,7 +3,7 @@
 <title>Quill · Política de privacidad</title><link rel="stylesheet" href="/privacy.css"><link rel="icon" href="/favicon.svg" type="image/svg+xml"></head>
 <body><main>
 <h1>Política de privacidad de Quill</h1>
-<p class="meta">Última actualización: 2026-10-25 · <a href="/privacy.html">In English</a> · <a href="/">Volver a Quill</a></p>
+<p class="meta">Última actualización: 2026-10-31 · <a href="/privacy.html">In English</a> · <a href="/">Volver a Quill</a></p>
 
 <h2>Quién está detrás de Quill</h2>
 <p>Quill lo hace y lo mantiene una persona, no una empresa. No hay cuentas de Quill. Contacto en Nostr: <code>npub1v7nf76fh474q4dnqfjpnkyqsmg439n5uw9x9jdpvzmmgczvrwhcsuhvl8a</code>. El código fuente es público: <a rel="noopener noreferrer" href="https://github.com/rzazo24/quill">github.com/rzazo24/quill</a>.</p>
@@ -28,6 +28,9 @@
 <li><strong>Versiones nuevas:</strong> Quill consulta un pequeño archivo público (<code>/version.json</code>) para saber si hay una versión nueva. No se envía nada sobre ti.</li>
 <li><strong>relay.hivescope.xyz</strong> guarda los eventos que se publican en él (se borran a los 180 días, salvo perfiles y listas) y anota un fragmento corto de la clave de los eventos que rechaza, para frenar el spam.</li>
 </ul>
+
+<h2>Fotos</h2>
+<p>Añadir fotos a las notas está desactivado salvo que lo actives en Ajustes. Al añadir una, Quill primero la vuelve a dibujar en tu navegador, lo que elimina lo que la cámara escribe en el archivo (como el lugar donde se hizo), y la reduce. Después se sube directamente desde tu navegador a un servidor Blossom: uno de tu propia lista publicada, o uno que hayas elegido. El servidor de Quill nunca la recibe. Ese servidor Blossom ve tu dirección IP y la foto, según sus propias normas, y la foto es pública, como la nota que la muestra. Tu firmador firma un permiso para esa única subida, que solo ve ese servidor.</p>
 
 <h2>Lo que publicas</h2>
 <p>Las notas y reacciones escritas con Quill llevan una etiqueta pública <code>["client","Quill"]</code>, para que otras apps puedan mostrar que se escribieron con Quill. Está activada de serie y se puede quitar en Ajustes.</p>

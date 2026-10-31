@@ -3,7 +3,7 @@
 <title>Quill · Privacy policy</title><link rel="stylesheet" href="/privacy.css"><link rel="icon" href="/favicon.svg" type="image/svg+xml"></head>
 <body><main>
 <h1>Quill privacy policy</h1>
-<p class="meta">Last updated: 2026-10-25 · <a href="/privacy-es.html">En español</a> · <a href="/">Back to Quill</a></p>
+<p class="meta">Last updated: 2026-10-31 · <a href="/privacy-es.html">En español</a> · <a href="/">Back to Quill</a></p>
 
 <h2>Who runs Quill</h2>
 <p>Quill is made and run by one person, not a company. There is no Quill account. Contact on Nostr: <code>npub1v7nf76fh474q4dnqfjpnkyqsmg439n5uw9x9jdpvzmmgczvrwhcsuhvl8a</code>. The source code is public: <a rel="noopener noreferrer" href="https://github.com/rzazo24/quill">github.com/rzazo24/quill</a>.</p>
@@ -28,6 +28,9 @@
 <li><strong>New versions:</strong> Quill checks a small public file (<code>/version.json</code>) to know whether a new version exists. Nothing about you is sent.</li>
 <li><strong>relay.hivescope.xyz</strong> stores the events published to it (deleted after 180 days, except profiles and lists) and logs a short prefix of the key of events it rejects, to deal with spam.</li>
 </ul>
+
+<h2>Photos</h2>
+<p>Adding photos to notes is off unless you turn it on in Settings. When you add one, Quill first draws it again in your browser, which removes what the camera writes into the file (such as the place it was taken), and makes it smaller. It is then uploaded straight from your browser to a Blossom server: one from your own published list, or one you chose. Quill's server never receives it. That Blossom server sees your IP address and the photo, under its own rules, and the photo is public, like the note that shows it. Your signer signs a permission for that one upload, which only that server sees.</p>
 
 <h2>What you publish</h2>
 <p>Notes and reactions written with Quill carry a public <code>["client","Quill"]</code> tag, so other apps can show they were written with Quill. It is on by default and can be turned off in Settings.</p>
