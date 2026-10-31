@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Event } from 'nostr-tools'
 import { checkTemplate } from '../sign/policy.js'
-import { AUTH_TTL_S, checkServerList, serverListTemplate, checkImeta, checkUploadAuth, imetaTag, normalizeServer, serversFrom, upload, uploadAuthTemplate, UploadError } from './blossom.js'
+import { AUTH_TTL_S, checkServerList, hashFromUrl, photoCandidates, serverListTemplate, checkImeta, checkUploadAuth, imetaTag, normalizeServer, serversFrom, upload, uploadAuthTemplate, UploadError } from './blossom.js'
 
 const H = 'a'.repeat(64)
 const photo = { url: `https://blossom.example/${H}.jpg`, sha256: H, mime: 'image/jpeg', size: 1234, dim: '800x600' }
@@ -48,5 +48,37 @@ describe('Blossom photos', () => {
     await expect(upload(other as unknown as typeof fetch, 'https://blossom.example', new Blob(['x']), H, auth)).rejects.toBeInstanceOf(UploadError)
     const refused = vi.fn(async () => new Response('', { status: 402, headers: { 'X-Reason': 'payment required' } }))
     await expect(upload(refused as unknown as typeof fetch, 'https://blossom.example', new Blob(['x']), H, auth)).rejects.toThrow('payment required')
+  })
+})
+
+describe('finding a photo again by its hash', () => {
+  const A = 'b1674191a88ec5cdd733e4240a81803105dc412d6c6708d53ab94fc248f4f553', U = 'ec4425ff5e9446080d2f70440188e3ca5d6da8713db7bdeef73d0ed54d9093f0'
+  it('the hash is the last 64-hex string in the path (BUD-03 examples, two hashes included)', () => {
+    expect(hashFromUrl(`https://cdn.example.com/${A}.pdf`)).toBe(A)
+    expect(hashFromUrl(`https://cdn.example.com/user/${U}/media/${A}.pdf`)).toBe(A)
+    expect(hashFromUrl(`https://cdn.example.com/${A}`)).toBe(A)
+    expect(hashFromUrl('https://image.example/cat.jpg')).toBeNull()
+  })
+  it('candidates: the imeta fallbacks of that address first, then the author’s servers by hash with the extension; each once, never the failed host, at most five', () => {
+    const url = `https://dead.example/${A}.jpg`
+    const tags = [['imeta', `url ${url}`, `x ${A}`, `fallback https://b.example/${A}.jpg`, `fallback https://dead.example/${A}.png`, 'fallback http://plain.example/x.jpg', 'colour red']]
+    const servers = ['https://b.example', 'https://C.example/', 'https://dead.example', 'ftp://no.example', 'https://d.example', 'https://e.example', 'https://f.example']
+    expect(photoCandidates(url, tags, servers)).toEqual([`https://b.example/${A}.jpg`, `https://c.example/${A}.jpg`, `https://d.example/${A}.jpg`, `https://e.example/${A}.jpg`, `https://f.example/${A}.jpg`])
+  })
+  it('an imeta of another address is ignored; a fallback that is not https is dropped; a claimed hash that differs means nothing to look for', () => {
+    const url = `https://dead.example/${A}.jpg`
+    expect(photoCandidates(url, [['imeta', `url https://other.example/${A}.jpg`, `fallback https://b.example/${A}.jpg`]], [])).toEqual([])
+    expect(photoCandidates(url, [['imeta', `url ${url}`, 'fallback http://b.example/x.jpg']], [])).toEqual([])
+    expect(photoCandidates(url, [['imeta', `url ${url}`, `x ${U}`, `fallback https://b.example/${A}.jpg`]], ['https://c.example'])).toBeNull()
+  })
+  it('without a hash there is nothing to look for', () => {
+    expect(photoCandidates('https://image.example/cat.jpg', [], ['https://c.example'])).toBeNull()
+  })
+  it('Quill’s own imeta may carry up to two fallbacks with the same hash', () => {
+    const p = { url: `https://a.example/${H}.jpg`, sha256: H, mime: 'image/jpeg', size: 10, fallbacks: [`https://b.example/${H}.jpg`] }
+    const tag = imetaTag(p)
+    expect(tag).toContain(`fallback https://b.example/${H}.jpg`)
+    expect(checkImeta(tag, p.url)).toBe(true)
+    expect(checkImeta([...imetaTag({ ...p, fallbacks: [] }), 'fallback https://evil.example/other.jpg'], p.url)).toBe(false)
   })
 })

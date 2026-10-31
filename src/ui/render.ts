@@ -3,6 +3,7 @@ import { nip19 } from 'nostr-tools'
 import { interestsIn } from '../core/interests.js'
 import { formatSats } from '../core/zap.js'
 import type { ZapEntry } from '../core/zaphistory.js'
+import { photoCandidates } from '../core/blossom.js'
 import { markdownBlocks } from '../core/markdown.js'
 import { articleInfo, type ArticleInfo } from '../data/article.js'
 import { COMMENT_KIND } from '../core/thread.js'
@@ -27,7 +28,7 @@ import type { ThreadNode } from '../data/feed.js'
 import { hasReach, reactionTotal, type Reach } from '../data/reach.js'
 import { ago, otherKind, reason, t, tallyLabel, type Lang } from './i18n.js'
 
-export interface View { lang: Lang; names: ReadonlyMap<string, string>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; /** The Halloween theme is on: extra reactions. */ halloween?: boolean; /** What a note of the reader's got from others (reactions, reposts, replies), once it is known. */ reach?: (id: string) => Reach | undefined; /** A note quoted in a text, once it is known (undefined: not yet asked; null: not found); `wantQuote` asks for it. */ quoted?: (id: string) => Judged | null | undefined; wantQuote?: (id: string, relays?: string[]) => void; /** An article's title once it is known (undefined: not asked yet; null: not found); `wantArticle` asks for it. */ articleTitle?: (pubkey: string, identifier: string) => string | null | undefined; wantArticle?: (pubkey: string, identifier: string, relays?: string[]) => void; /** Pictures linked in a note by this author load by themselves (the reader's setting); otherwise each waits for a tap. */ autoImages?: (pubkey: string) => boolean; /** Inside a quoted note (itself one link): addresses are plain text, no links or buttons inside the link. */ plainLinks?: boolean; /** Told about every note handed to a list or drawn, so the search can find it later. */ seen?: (notes: Judged[]) => void; /** The topics the reader cares about: a note that talks about one is marked. */ interests?: readonly string[]; /** With a signer: the "…" menu offers to mute (or unmute) the author. */ mute?: (pubkey: string) => void; isMuted?: (pubkey: string) => boolean; /** With a signer: the "…" of the reader's own notes offers to delete them. */ deleteNote?: (e: Judged['event']) => void; /** One of the reader's notes is on screen without its numbers: ask for them (the view batches the questions). */ wantReach?: (id: string) => void; /** A real profile picture for this key, when the reader wants them and follows it (undefined: the drawn avatar). */ picture?: (pubkey: string, px: number) => string | undefined; /** The zaps of someone else's note, once asked (undefined: not known yet; asking is the view's business). */ zapsOf?: (id: string) => Reach | undefined; /** Notes the reader deleted: shown as a line that says so. */ deleted?: ReadonlySet<string>; /** The reader's key: their own notes offer Delete, the others Mute. */ self?: string; /** Notes saved for later (this device): the "…" offers Save / Remove. */ saved?: { has: (id: string) => boolean; toggle: (e: Judged['event']) => void }; /** Accounts to offer while typing "@name" in the composer (people you follow first). */ suggestPeople?: (word: string) => { pubkey: string; name: string; relation: 'follow' | 'network' | 'none' }[]; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** The relays put in a copied id/link as places to look for the note. */ hints?: readonly string[]; /** How far "Show more" went in each list, by its key. */ pages?: Map<string, number>; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
+export interface View { lang: Lang; names: ReadonlyMap<string, string>; /** the author's Blossom servers (kind 10063), read only when the reader asks to look for a photo again */ photoServersOf?: (pubkey: string) => Promise<string[]>; nowMs?: number; /** What the round pictures are made of (default: initials). */ avatars?: AvatarStyle; /** The Halloween theme is on: extra reactions. */ halloween?: boolean; /** What a note of the reader's got from others (reactions, reposts, replies), once it is known. */ reach?: (id: string) => Reach | undefined; /** A note quoted in a text, once it is known (undefined: not yet asked; null: not found); `wantQuote` asks for it. */ quoted?: (id: string) => Judged | null | undefined; wantQuote?: (id: string, relays?: string[]) => void; /** An article's title once it is known (undefined: not asked yet; null: not found); `wantArticle` asks for it. */ articleTitle?: (pubkey: string, identifier: string) => string | null | undefined; wantArticle?: (pubkey: string, identifier: string, relays?: string[]) => void; /** Pictures linked in a note by this author load by themselves (the reader's setting); otherwise each waits for a tap. */ autoImages?: (pubkey: string) => boolean; /** Inside a quoted note (itself one link): addresses are plain text, no links or buttons inside the link. */ plainLinks?: boolean; /** Told about every note handed to a list or drawn, so the search can find it later. */ seen?: (notes: Judged[]) => void; /** The topics the reader cares about: a note that talks about one is marked. */ interests?: readonly string[]; /** With a signer: the "…" menu offers to mute (or unmute) the author. */ mute?: (pubkey: string) => void; isMuted?: (pubkey: string) => boolean; /** With a signer: the "…" of the reader's own notes offers to delete them. */ deleteNote?: (e: Judged['event']) => void; /** One of the reader's notes is on screen without its numbers: ask for them (the view batches the questions). */ wantReach?: (id: string) => void; /** A real profile picture for this key, when the reader wants them and follows it (undefined: the drawn avatar). */ picture?: (pubkey: string, px: number) => string | undefined; /** The zaps of someone else's note, once asked (undefined: not known yet; asking is the view's business). */ zapsOf?: (id: string) => Reach | undefined; /** Notes the reader deleted: shown as a line that says so. */ deleted?: ReadonlySet<string>; /** The reader's key: their own notes offer Delete, the others Mute. */ self?: string; /** Notes saved for later (this device): the "…" offers Save / Remove. */ saved?: { has: (id: string) => boolean; toggle: (e: Judged['event']) => void }; /** Accounts to offer while typing "@name" in the composer (people you follow first). */ suggestPeople?: (word: string) => { pubkey: string; name: string; relation: 'follow' | 'network' | 'none' }[]; actions?: (j: Judged) => Child[]; /** Copies a text (a note's id or link) for the "…" menu of each note; without it the menu is not offered. */ copy?: (text: string) => void; /** The relays put in a copied id/link as places to look for the note. */ hints?: readonly string[]; /** How far "Show more" went in each list, by its key. */ pages?: Map<string, number>; /** Notes that arrived after the reader's last visit are marked. */ isNew?: (e: Judged['event']) => boolean }
 
 export const nameOf = (v: View, pubkey: string): string => v.names.get(pubkey) ?? shortNpub(pubkey)
 
@@ -56,9 +57,9 @@ function quoteCard(j: Judged, v: View, href: string, vouch: string[]): HTMLEleme
   if (j.event.kind !== 1 && j.event.kind !== COMMENT_KIND && j.event.kind !== POLL_KIND) return h('div', { class: 'quote' }, head, h('span', { class: 'quote-body meta' }, otherKind(v.lang, j.event.kind)))
   if (j.event.kind === POLL_KIND) { // a poll (NIP-88): its question and its options, as text; voting is for another client (it opens nowhere here)
     const options = j.event.tags.filter((x) => x[0] === 'option' && x[2]).slice(0, 12).map((x) => h('li', {}, x[2]!))
-    return h('div', { class: 'quote' }, head, j.verdict.hidden ? h('span', { class: 'quote-hidden' }, `${t(v.lang, 'hiddenBy')}: `, reason(v.lang, j.verdict)) : h('span', { class: 'quote-body' }, h('span', { class: 'poll-tag meta' }, t(v.lang, 'poll'), ' · ', t(v.lang, 'pollElsewhere')), renderContent(j.event.content, inner, undefined, [j.event.pubkey, ...vouch]), options.length ? h('ul', { class: 'poll-options' }, ...options) : null))
+    return h('div', { class: 'quote' }, head, j.verdict.hidden ? h('span', { class: 'quote-hidden' }, `${t(v.lang, 'hiddenBy')}: `, reason(v.lang, j.verdict)) : h('span', { class: 'quote-body' }, h('span', { class: 'poll-tag meta' }, t(v.lang, 'poll'), ' · ', t(v.lang, 'pollElsewhere')), renderContent(j.event.content, inner, undefined, [j.event.pubkey, ...vouch], { author: j.event.pubkey, tags: j.event.tags }), options.length ? h('ul', { class: 'poll-options' }, ...options) : null))
   }
-  return h('a', { class: 'quote', href }, head, j.verdict.hidden ? h('span', { class: 'quote-hidden' }, `${t(v.lang, 'hiddenBy')}: `, reason(v.lang, j.verdict)) : h('span', { class: 'quote-body' }, renderContent(j.event.content, inner, undefined, [j.event.pubkey, ...vouch])))
+  return h('a', { class: 'quote', href }, head, j.verdict.hidden ? h('span', { class: 'quote-hidden' }, `${t(v.lang, 'hiddenBy')}: `, reason(v.lang, j.verdict)) : h('span', { class: 'quote-body' }, renderContent(j.event.content, inner, undefined, [j.event.pubkey, ...vouch], { author: j.event.pubkey, tags: j.event.tags })))
 }
 
 /** A link to a picture (an https address ending in a picture's extension). */
@@ -67,22 +68,67 @@ export const isImageUrl = (href: string): boolean => { try { const u = new URL(h
 const shortHost = (href: string): string => { const n = new URL(href).hostname; return n.length > 28 ? '…' + n.split('.').slice(-2).join('.') : n }
 /** A link inside a quoted note (itself one link, so nothing in it can be tapped on its own): a picture shows itself if it would load by itself, else
  *  a short "[picture · site]"; a video says "[video · site]"; any other address stays as text. */
-function plainLink(href: string, text: string, v: View, auto: boolean): HTMLElement {
-  if (isImageUrl(href) && auto) return h('span', { class: 'pic' }, h('img', { src: href, alt: t(v.lang, 'imageAlt', { host: shortHost(href) }), loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' }))
+function plainLink(href: string, text: string, v: View, auto: boolean, media?: Media): HTMLElement {
+  if (isImageUrl(href) && auto) {
+    const box = h('span', { class: 'pic' })
+    const img = h('img', { src: href, alt: t(v.lang, 'imageAlt', { host: shortHost(href) }), loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' })
+    img.addEventListener('error', () => box.replaceChildren(failedPhoto(href, v, box, media, false)))
+    box.append(img)
+    return box
+  }
   if (isImageUrl(href) || isVideoUrl(href)) return h('span', { class: 'meta' }, `[${t(v.lang, isImageUrl(href) ? 'imageWord' : 'videoWord')} · ${shortHost(href)}]`)
   return h('span', { class: 'ext' }, text)
 }
+/** The note a picture is in: its author (whose servers may have a copy) and its tags (an imeta may name copies). Someone else's tags: untrusted. */
+export interface Media { author: string; tags: string[][] }
+
+/** Load one address as a picture; true if it arrives. */
+const loads = (src: string): Promise<boolean> => new Promise((resolve) => {
+  const img = new Image()
+  img.referrerPolicy = 'no-referrer'
+  img.onload = () => resolve(true); img.onerror = () => resolve(false)
+  img.src = src
+})
+
+/** A picture that did not load: its address and "could not load", and, if its address carries a hash, a button to look for it on the author's other
+ *  servers (BUD-03) and the note's own fallbacks (NIP-92). Never by itself: each server tried sees the reader's IP address. */
+function failedPhoto(href: string, v: View, box: HTMLElement, media: Media | undefined, linked: boolean): HTMLElement {
+  const stop = (e: Event) => { e.preventDefault(); e.stopPropagation() } // inside a quoted note, which is itself a link
+  const notice = h('span', { class: 'pic-failed' },
+    linked ? h('a', { class: 'ext', href, rel: 'noopener noreferrer nofollow', target: '_blank', onclick: (e: Event) => e.stopPropagation() }, href) : h('span', { class: 'ext' }, href),
+    ' ', h('span', { class: 'meta' }, t(v.lang, 'imageFailed')))
+  if (!media || !v.photoServersOf || photoCandidates(href, media.tags, []) === null) return notice
+  const btn = h('button', { type: 'button', class: 'link pic-find' }, t(v.lang, 'photoFind')) as HTMLButtonElement
+  btn.addEventListener('click', async (e) => {
+    stop(e)
+    btn.disabled = true; btn.textContent = t(v.lang, 'photoFinding')
+    let servers: string[] = []
+    try { servers = await v.photoServersOf!(media.author) } catch { servers = [] }
+    const tried = photoCandidates(href, media.tags, servers) ?? []
+    for (const c of tried) {
+      if (!(await loads(c))) continue
+      box.replaceChildren(h('img', { src: c, alt: t(v.lang, 'imageAlt', { host: shortHost(c) }), decoding: 'async', referrerpolicy: 'no-referrer' }),
+        h('span', { class: 'pic-host meta' }, t(v.lang, 'photoFoundAt'), ' ', h('span', { class: 'ext' }, c))) // the whole address of the copy, never a hidden one
+      return
+    }
+    btn.remove()
+    notice.append(h('span', { class: 'meta pic-notfound' }, ' · ', t(v.lang, tried.length ? 'photoNotFound' : 'photoNoServers'), tried.length ? h('ul', { class: 'pic-tried' }, ...tried.map((c) => h('li', {}, h('span', { class: 'ext' }, c)))) : null))
+  })
+  notice.append(' ', btn)
+  return notice
+}
+
 /** Pictures the reader asked for in this visit: they stay open when the page is drawn again. */
 const shownImages = new Set<string>()
 /** A picture linked in a note. Quill keeps no copy: the reader's browser asks the site where it lives, which sees their IP address, so by default
  *  it waits for a tap on a button that names that site. Open, it shows the picture (a tap opens it whole) and where it came from. */
-function imageEl(href: string, v: View, auto: boolean): HTMLElement {
+function imageEl(href: string, v: View, auto: boolean, media?: Media): HTMLElement {
   const host = shortHost(href)
   const box = h('span', { class: 'pic' })
   const show = () => {
     shownImages.add(href)
     const img = h('img', { src: href, alt: t(v.lang, 'imageAlt', { host }), loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' }) as HTMLImageElement
-    img.addEventListener('error', () => box.replaceChildren(h('a', { class: 'ext', href, rel: 'noopener noreferrer nofollow', target: '_blank', onclick: (e: Event) => e.stopPropagation() }, href), ' ', h('span', { class: 'meta' }, t(v.lang, 'imageFailed'))))
+    img.addEventListener('error', () => box.replaceChildren(failedPhoto(href, v, box, media, true)))
     box.replaceChildren(h('a', { class: 'pic-open', href, rel: 'noopener noreferrer nofollow', target: '_blank', onclick: (e: Event) => e.stopPropagation() }, img), h('span', { class: 'pic-host meta' }, host))
   }
   if (auto || shownImages.has(href)) show()
@@ -114,7 +160,7 @@ function videoEl(href: string, v: View): HTMLElement {
 
 /** `vouch`: the author, and whoever brought the note to the reader (a followed account that reposted it or quotes it). Its pictures load by themselves
  *  (with the setting on) when any of them is followed. */
-export function renderContent(raw: string, v: View, fromId?: string, vouch: string[] = []): DocumentFragment {
+export function renderContent(raw: string, v: View, fromId?: string, vouch: string[] = [], media?: Media): DocumentFragment {
   const frag = document.createDocumentFragment()
   const auto = vouch.some((k) => !!v.autoImages?.(k))
   for (const part of refs(cleanText(raw, 4000))) {
@@ -133,7 +179,7 @@ export function renderContent(raw: string, v: View, fromId?: string, vouch: stri
       frag.append(q ? quoteCard(q, v, href, vouch) : threadChip(href, v, 'quotedNote')) // the quoted note itself, inside; until it is known (or if no relay has it), the button to it
     }
     else for (const seg of segments(part.value)) {
-      frag.append(seg.type !== 'link' ? seg.value : v.plainLinks ? plainLink(seg.href, seg.value, v, auto) : isImageUrl(seg.href) ? imageEl(seg.href, v, auto) : isVideoUrl(seg.href) ? videoEl(seg.href, v) : h('a', { class: 'ext', href: seg.href, rel: 'noopener noreferrer nofollow', target: '_blank' }, seg.value))
+      frag.append(seg.type !== 'link' ? seg.value : v.plainLinks ? plainLink(seg.href, seg.value, v, auto, media) : isImageUrl(seg.href) ? imageEl(seg.href, v, auto, media) : isVideoUrl(seg.href) ? videoEl(seg.href, v) : h('a', { class: 'ext', href: seg.href, rel: 'noopener noreferrer nofollow', target: '_blank' }, seg.value))
       const d = seg.type === 'link' && !v.plainLinks && vouch[0] ? primalArticle(seg.href) : null
       if (d) { // an article shared as a Primal address: if its author really has one by that name, offer to read it here
         const title = v.articleTitle?.(vouch[0]!, d)
@@ -245,7 +291,7 @@ function card(j: Judged, v: View, extra: Child[] = []): HTMLElement {
           h('time', { datetime: new Date(event.created_at * 1000).toISOString() }, ago(v.lang, event.created_at, v.nowMs))),
         h('span', { class: 'head-end' }, threadChip(`#/note/${event.id}`, v), moreMenu(event, v)),
       ),
-      h('div', { class: 'body tappable', onclick: (e: Event) => openThread(e, event.id) }, renderContent(event.content, v, event.id, [event.pubkey, ...(j.repostedBy ?? [])])),
+      h('div', { class: 'body tappable', onclick: (e: Event) => openThread(e, event.id) }, renderContent(event.content, v, event.id, [event.pubkey, ...(j.repostedBy ?? [])], { author: event.pubkey, tags: event.tags })),
       reachLine(event.pubkey === v.self ? v.reach?.(event.id) ?? (v.wantReach?.(event.id), undefined) : v.reach?.(event.id) ?? v.zapsOf?.(event.id), v, event.id),
       ...extra, ...(v.actions?.(j) ?? []),
     ),
@@ -390,13 +436,13 @@ export function renderArticle(e: Judged['event'], info: ArticleInfo, verdict: Ju
   const body: HTMLElement[] = []
   let list: HTMLElement | null = null
   v = { ...v, autoImages: () => true } // opening an article is already the reader's choice: its pictures load by themselves, whoever wrote it
-  if (info.image) body.push(imageEl(info.image, v, true)) // the cover
+  if (info.image) body.push(imageEl(info.image, v, true, { author: e.pubkey, tags: e.tags })) // the cover
   for (const b of markdownBlocks(e.content.slice(0, 100_000))) {
-    if (b.type === 'item') { const want = b.ordered ? 'OL' : 'UL'; if (!list || list.tagName !== want) { list = h(b.ordered ? 'ol' : 'ul', {}); body.push(list) } list.append(h('li', {}, renderContent(b.text, v, undefined, [e.pubkey]))); continue }
+    if (b.type === 'item') { const want = b.ordered ? 'OL' : 'UL'; if (!list || list.tagName !== want) { list = h(b.ordered ? 'ol' : 'ul', {}); body.push(list) } list.append(h('li', {}, renderContent(b.text, v, undefined, [e.pubkey], { author: e.pubkey, tags: e.tags }))); continue }
     list = null
     if (b.type === 'heading') body.push(h(b.level === 1 ? 'h3' : 'h4', {}, b.text))
-    else if (b.type === 'paragraph') body.push(h('p', {}, renderContent(b.text, v, undefined, [e.pubkey])))
-    else if (b.type === 'quote') body.push(h('blockquote', {}, renderContent(b.text, v, undefined, [e.pubkey])))
+    else if (b.type === 'paragraph') body.push(h('p', {}, renderContent(b.text, v, undefined, [e.pubkey], { author: e.pubkey, tags: e.tags })))
+    else if (b.type === 'quote') body.push(h('blockquote', {}, renderContent(b.text, v, undefined, [e.pubkey], { author: e.pubkey, tags: e.tags })))
     else if (b.type === 'code') body.push(h('pre', { class: 'article-code' }, b.text))
     else body.push(h('hr', {}))
   }

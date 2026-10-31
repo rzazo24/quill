@@ -138,6 +138,18 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     } catch { zapHistoryState = 'failed' }
     draw()
   }
+  // other authors' Blossom servers, read once each and only when the reader asks to look for a photo that did not load
+  const authorServers = new Map<string, Promise<string[]>>()
+  const photoServersOf = (pk: string): Promise<string[]> => {
+    let p = authorServers.get(pk)
+    if (!p) {
+      p = fetcher.query({ kinds: [BLOSSOM_SERVERS_KIND], authors: [pk], limit: 2 }, { quick: false })
+        .then((got) => serversFrom(got.filter((e) => e.pubkey === pk).sort((a, b) => b.created_at - a.created_at)[0]))
+        .catch(() => { authorServers.delete(pk); return [] })
+      authorServers.set(pk, p)
+    }
+    return p
+  }
   let photosOn = safeGet(kv, 'photos') === '1'
   let photoServer = normalizeServer(safeGet(kv, 'photoServer') ?? '')
   let myBlossom: string[] | null = null, blossomFor: string | null = null, blossomDraft: string[] | null = null // an edit of the published list, not yet published
@@ -395,7 +407,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   }
   /** The lists are built once and reused between redraws, so a bar already on screen keeps what it showed: redo the bar(s) of this note in place. */
   const rebar = (e: NostrEvent) => { for (const old of root.querySelectorAll(`article.note[data-id="${e.id}"] .actions`)) old.replaceWith(barFor(e)) }
-  const view = (): View => ({ pages: listPages, lang, names, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), wantReach, picture: (pk: string, px: number) => { const u = realAvatars && (pk === me || !!session?.follows.has(pk)) ? pictures.get(pk) : undefined; return u && deps.avatarProxy ? `${deps.avatarProxy}?u=${encodeURIComponent(u)}&s=${px}` : u }, zapsOf: (id: string) => { const z = zapMap.get(id); if (z === undefined) wantZaps(id); return z ?? undefined }, quoted: (id: string) => quotedMap.get(id), wantQuote, suggestPeople: (word: string) => (session ? matchPeople(names, word, ctx(), 50).filter((p) => fold(p.name).split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(fold(word)))).slice(0, 5) : []), articleTitle: (pk: string, d: string) => (articleTitles.has(`${pk}:${d}`) ? articleTitles.get(`${pk}:${d}`) ?? null : undefined), wantArticle, ...(me ? { saved: { has: (id: string) => savedNotes().some((x) => x.event.id === id), toggle: toggleSaved } } : {}), seen: rememberNotes, interests, deleted: deletedIds(), ...(me ? { self: me } : {}), ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk), deleteNote: (e: NostrEvent) => { if (e.pubkey === me && e.kind === 1) { deleteConfirm = e; draw() } } } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
+  const view = (): View => ({ pages: listPages, lang, names, photoServersOf, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), wantReach, picture: (pk: string, px: number) => { const u = realAvatars && (pk === me || !!session?.follows.has(pk)) ? pictures.get(pk) : undefined; return u && deps.avatarProxy ? `${deps.avatarProxy}?u=${encodeURIComponent(u)}&s=${px}` : u }, zapsOf: (id: string) => { const z = zapMap.get(id); if (z === undefined) wantZaps(id); return z ?? undefined }, quoted: (id: string) => quotedMap.get(id), wantQuote, suggestPeople: (word: string) => (session ? matchPeople(names, word, ctx(), 50).filter((p) => fold(p.name).split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(fold(word)))).slice(0, 5) : []), articleTitle: (pk: string, d: string) => (articleTitles.has(`${pk}:${d}`) ? articleTitles.get(`${pk}:${d}`) ?? null : undefined), wantArticle, ...(me ? { saved: { has: (id: string) => savedNotes().some((x) => x.event.id === id), toggle: toggleSaved } } : {}), seen: rememberNotes, interests, deleted: deletedIds(), ...(me ? { self: me } : {}), ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk), deleteNote: (e: NostrEvent) => { if (e.pubkey === me && e.kind === 1) { deleteConfirm = e; draw() } } } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
   const ctx = () => contextOf(session!, { mutedWords: words, mutedKeys: [] })
   const who = () => (signer?.pubkey ? nameOf(view(), signer.pubkey) : '')
 
@@ -1375,10 +1387,14 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
       const hash = await sha256Hex(await blob.arrayBuffer())
       const auth = await signOnly({ signer, kv, now: deps.nowMs }, uploadAuthTemplate(hash, nowSec()))
       let photo: Photo | null = null
-      for (const server of servers) {
-        try { photo = { ...(await upload(net.fetch, server, blob, hash, auth)), dim }; break } catch (e) { reason = e instanceof Error ? e.message : String(e) }
+      let at = -1
+      for (const [i, server] of servers.entries()) {
+        try { photo = { ...(await upload(net.fetch, server, blob, hash, auth)), dim }; at = i; break } catch (e) { reason = e instanceof Error ? e.message : String(e) }
       }
       if (!photo) throw new Error(reason || 'no server took it')
+      // a copy on the next server of the list, with the same permission (it names the file, not the server): readers can find it there if the first goes
+      const next = servers[at + 1]
+      if (next) { try { const copy = await upload(net.fetch, next, blob, hash, auth); if (copy.url !== photo.url) photo = { ...photo, fallbacks: [copy.url] } } catch { /* one copy is enough to publish */ } }
       if (composer && composer.mode === writing.mode && composer.target?.id === writing.target?.id) {
         const text = composer.text.trimEnd(), next = `${text}${text ? '\n' : ''}${photo.url}`
         composer = { ...composer, text: next, photos: [...(composer.photos ?? []), photo], uploading: false }

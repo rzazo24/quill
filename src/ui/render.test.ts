@@ -185,3 +185,49 @@ describe('the "…" menu with a keyboard', () => {
     el.remove()
   })
 })
+
+describe('a photo that does not load', () => {
+  const A = 'b1674191a88ec5cdd733e4240a81803105dc412d6c6708d53ab94fc248f4f553'
+  const dead = `https://dead.example/${A}.jpg`
+  /** Pictures load only from the addresses given; everything asked is recorded. */
+  function fakeImages(good: string[]) {
+    const asked: string[] = []
+    class FakeImage { onload: (() => void) | null = null; onerror: (() => void) | null = null; referrerPolicy = ''
+      set src(s: string) { asked.push(s); setTimeout(() => (good.includes(s) ? this.onload?.() : this.onerror?.()), 0) } }
+    const old = globalThis.Image; (globalThis as { Image: unknown }).Image = FakeImage
+    return { asked, restore: () => { (globalThis as { Image: unknown }).Image = old } }
+  }
+  const fail = (root: Element) => root.querySelectorAll('img').forEach((i) => i.dispatchEvent(new Event('error')))
+
+  it('loaded by itself and failing: a button to look elsewhere, and nothing is asked of any other server until it is pressed', async () => {
+    const imgs = fakeImages([`https://b.example/${A}.jpg`]); let asked = 0
+    const view = { ...v, autoImages: () => true, photoServersOf: async () => { asked++; return ['https://b.example'] } }
+    const el = document.createElement('div'); el.append(renderContent(`look ${dead}`, view, undefined, [pk('a')], { author: pk('a'), tags: [] }))
+    fail(el)
+    const btn = el.querySelector('button.pic-find') as HTMLButtonElement
+    expect(btn).not.toBeNull(); expect(asked).toBe(0); expect(imgs.asked).toEqual([])
+    btn.click(); await new Promise((r) => setTimeout(r, 20))
+    expect(asked).toBe(1); expect(imgs.asked).toEqual([`https://b.example/${A}.jpg`])
+    expect(el.querySelector('img')!.getAttribute('src')).toBe(`https://b.example/${A}.jpg`)
+    expect(el.textContent).toContain(`https://b.example/${A}.jpg`) // the copy's whole address is shown
+    imgs.restore()
+  })
+  it('found nowhere: says so and lists what was tried', async () => {
+    const imgs = fakeImages([])
+    const view = { ...v, autoImages: () => true, photoServersOf: async () => ['https://b.example', 'https://c.example'] }
+    const el = document.createElement('div'); el.append(renderContent(dead, view, undefined, [pk('a')], { author: pk('a'), tags: [] }))
+    fail(el); (el.querySelector('button.pic-find') as HTMLButtonElement).click(); await new Promise((r) => setTimeout(r, 30))
+    expect([...el.querySelectorAll('.pic-tried li')].map((li) => li.textContent)).toEqual([`https://b.example/${A}.jpg`, `https://c.example/${A}.jpg`])
+    expect(el.querySelector('button.pic-find')).toBeNull()
+    imgs.restore()
+  })
+  it('an address without a hash, or a note whose imeta claims another hash: no button', () => {
+    const view = { ...v, autoImages: () => true, photoServersOf: async () => ['https://b.example'] }
+    for (const [url, tags] of [['https://dead.example/cat.jpg', []], [dead, [['imeta', `url ${dead}`, `x ${'c'.repeat(64)}`]]]] as const) {
+      const el = document.createElement('div'); el.append(renderContent(url, view, undefined, [pk('a')], { author: pk('a'), tags: tags as unknown as string[][] }))
+      fail(el)
+      expect(el.querySelector('button.pic-find')).toBeNull()
+      expect(el.textContent).toContain('did not load')
+    }
+  })
+})

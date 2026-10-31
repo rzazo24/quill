@@ -534,3 +534,4 @@ ul.zap-history li { display: flex; align-items: baseline; gap: 8px; padding: 6px
 ul.zap-history .zap-dir { flex: none; width: 1em; text-align: center; font-weight: 700 } ul.zap-history li.in .zap-dir { color: var(--accent) } ul.zap-history li.out .zap-dir { color: var(--amber) }
 ul.zap-history .zap-main { flex: 1; min-width: 0; overflow-wrap: anywhere } ul.zap-history .zap-comment { color: var(--muted) }
 ul.zap-history li > .meta { flex: none; font-size: .8rem }
+.pic-failed { display: inline } .pic-find { margin-left: 4px } .pic-tried { margin: 4px 0 0; padding-left: 18px; font-size: .8rem } .pic-tried li { overflow-wrap: anywhere }

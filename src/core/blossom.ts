@@ -58,25 +58,27 @@ export function checkUploadAuth(t: Template): boolean {
   return left > 0 && left <= AUTH_TTL_S
 }
 
-export interface Photo { url: string; sha256: string; mime: string; size: number; dim?: string }
+export interface Photo { url: string; sha256: string; mime: string; size: number; dim?: string; /** copies on the author's other servers (NIP-92) */ fallbacks?: string[] }
 
 /** NIP-92: what a client needs to show the photo, and to find it elsewhere by its hash if this server goes away. */
 export function imetaTag(p: Photo): string[] {
-  return ['imeta', `url ${p.url}`, `m ${p.mime}`, `x ${p.sha256}`, `size ${p.size}`, ...(p.dim ? [`dim ${p.dim}`] : [])]
+  return ['imeta', `url ${p.url}`, `m ${p.mime}`, `x ${p.sha256}`, `size ${p.size}`, ...(p.dim ? [`dim ${p.dim}`] : []), ...(p.fallbacks ?? []).slice(0, 2).map((f) => `fallback ${f}`)]
 }
 
 const IMETA_KEYS = new Set(['url', 'm', 'x', 'size', 'dim'])
-/** An imeta tag as Quill writes it, for a photo whose address is in the text. */
+/** An imeta tag as Quill writes it, for a photo whose address is in the text; with up to two fallback copies on other servers, by the same hash. */
 export function checkImeta(tag: string[], content: string): boolean {
-  if (tag[0] !== 'imeta' || tag.length < 5 || tag.length > 6) return false
-  const kv = new Map<string, string>()
+  if (tag[0] !== 'imeta' || tag.length < 5 || tag.length > 8) return false
+  const kv = new Map<string, string>(), fallbacks: string[] = []
   for (const entry of tag.slice(1)) {
     const i = entry.indexOf(' ')
     if (i < 1 || entry.length > 300) return false
     const k = entry.slice(0, i), v = entry.slice(i + 1)
+    if (k === 'fallback') { fallbacks.push(v); continue }
     if (!IMETA_KEYS.has(k) || kv.has(k) || !v) return false
     kv.set(k, v)
   }
+  if (fallbacks.length > 2 || !fallbacks.every((f) => f.startsWith('https://') && f.includes(kv.get('x') ?? '!'))) return false
   const url = kv.get('url') ?? '', x = kv.get('x') ?? ''
   return url.startsWith('https://') && content.includes(url) && HEX64.test(x) && url.includes(x) && /^image\/(jpeg|png|webp|gif)$/.test(kv.get('m') ?? '') && /^\d+$/.test(kv.get('size') ?? '') && (!kv.has('dim') || /^\d+x\d+$/.test(kv.get('dim')!))
 }
@@ -100,4 +102,55 @@ export async function upload(fetchFn: typeof fetch, server: string, body: Blob, 
 export async function sha256Hex(data: ArrayBuffer): Promise<string> {
   const h = new Uint8Array(await crypto.subtle.digest('SHA-256', data))
   return [...h].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+// ---------- Finding a photo again (BUD-03, NIP-92) ----------
+// A photo that does not load can be looked for by its hash on the author's other servers. Only when the reader asks: every server tried sees their IP.
+
+const HEX64_ANY = /[0-9a-f]{64}/g
+/** BUD-03: the file's hash is the LAST 64-character hex string in the address's path. */
+export function hashFromUrl(url: string): string | null {
+  let path: string
+  try { path = new URL(url).pathname } catch { return null }
+  const all = path.match(HEX64_ANY)
+  return all ? all[all.length - 1]! : null
+}
+
+/** What a note's imeta says about one address, if one describes exactly it: the hash it claims and the fallback addresses (https only). The tags of
+ *  someone else's note are untrusted: unknown keys are ignored, an imeta of another address is not used, a fallback that is not https is dropped. */
+export function imetaFor(tags: string[][], url: string): { x: string | null; fallbacks: string[] } | null {
+  for (const tag of tags) {
+    if (tag[0] !== 'imeta') continue
+    let u = '', x: string | null = null
+    const fallbacks: string[] = []
+    for (const entry of tag.slice(1)) {
+      if (typeof entry !== 'string') continue
+      const i = entry.indexOf(' ')
+      if (i < 1) continue
+      const k = entry.slice(0, i), val = entry.slice(i + 1).trim()
+      if (k === 'url') u = val
+      else if (k === 'x' && /^[0-9a-f]{64}$/.test(val)) x = val
+      else if (k === 'fallback' && httpsUrl(val)) fallbacks.push(val)
+    }
+    if (u === url) return { x, fallbacks }
+  }
+  return null
+}
+
+const httpsUrl = (s: string): boolean => { try { const u = new URL(s); return u.protocol === 'https:' && !u.username && !u.password } catch { return false } }
+
+/** Where else to look for a photo that failed, in order: the note's own fallbacks for that address, then the author's servers (kind 10063) by hash with
+ *  the original extension; https only, never the host that just failed, each once, at most five. Null when there is no hash to look for. */
+export function photoCandidates(url: string, tags: string[][], servers: string[]): string[] | null {
+  const hash = hashFromUrl(url)
+  if (!hash) return null
+  const meta = imetaFor(tags, url)
+  if (meta?.x && meta.x !== hash) return null // the note says the file is another one: nothing trustworthy to look for
+  let failedHost = '', ext = ''
+  try { const u = new URL(url); failedHost = u.host.toLowerCase(); ext = /\.[a-z0-9]{1,5}$/i.exec(u.pathname)?.[0]?.toLowerCase() ?? '' } catch { return null }
+  const out: string[] = []
+  const add = (c: string) => { try { const u = new URL(c); if (u.protocol === 'https:' && u.host.toLowerCase() !== failedHost && !out.includes(c)) out.push(c) } catch { /* not an address */ } }
+  for (const f of meta?.fallbacks ?? []) add(f)
+  for (const s of servers) { const n = normalizeServer(s); if (n) add(`${n}/${hash}${ext}`) }
+  return out.slice(0, 5)
 }
