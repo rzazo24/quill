@@ -82,11 +82,14 @@ function plainLink(href: string, text: string, v: View, auto: boolean, media?: M
 /** The note a picture is in: its author (whose servers may have a copy) and its tags (an imeta may name copies). Someone else's tags: untrusted. */
 export interface Media { author: string; tags: string[][] }
 
-/** Load one address as a picture; true if it arrives. */
-const loads = (src: string): Promise<boolean> => new Promise((resolve) => {
+/** Load one address as a picture; true if it arrives within `ms` (a server that hangs is given up on, not waited for until the browser gives up). */
+export const PHOTO_TRY_MS = 8000
+const loads = (src: string, ms = PHOTO_TRY_MS): Promise<boolean> => new Promise((resolve) => {
   const img = new Image()
+  const done = (ok: boolean) => { clearTimeout(timer); img.onload = img.onerror = null; if (!ok) img.src = ''; resolve(ok) }
+  const timer = setTimeout(() => done(false), ms)
   img.referrerPolicy = 'no-referrer'
-  img.onload = () => resolve(true); img.onerror = () => resolve(false)
+  img.onload = () => done(true); img.onerror = () => done(false)
   img.src = src
 })
 

@@ -548,10 +548,12 @@ describe('sharing a note', () => {
   })
   it('with two servers in the writer\'s list, the photo is also copied to the second (same permission, one signature) and the imeta names that copy', async () => {
     const puts: string[] = []
+    let openGate = () => {}; const secondGate = new Promise<void>((r) => { openGate = r })
     const photoNet = {
       prepare: async () => ({ blob: new Blob(['clean-jpeg'], { type: 'image/jpeg' }), dim: '640x480' }),
       fetch: (async (url: string, init: RequestInit) => {
         const sha = (init.headers as Record<string, string>)['X-SHA-256']!; puts.push(url)
+        if (url.includes('two.example')) await secondGate // the copy is slow: the photo must not wait for it
         return new Response(JSON.stringify({ url: `${url.replace('/upload', '')}/${sha}.jpg`, sha256: sha, size: 10, type: 'image/jpeg' }))
       }) as unknown as typeof fetch,
     }
@@ -562,6 +564,9 @@ describe('sharing a note', () => {
     const input = a.root.querySelector('.composer input[type=file]') as HTMLInputElement
     Object.defineProperty(input, 'files', { value: [new File(['raw'], 'a.jpg', { type: 'image/jpeg' })] }); input.dispatchEvent(new Event('change')); await tick(300)
     expect(puts).toEqual(['https://one.example/upload', 'https://two.example/upload'])
+    expect((a.root.querySelector('.composer textarea') as HTMLTextAreaElement).value).toMatch(/^https:\/\/one\.example\//) // in the note already, the copy still going
+    expect(a.root.querySelector('.photo-uploading')).toBeNull()
+    openGate(); await tick(50)
     expect(sg.log.filter((x) => x === 'sign 24242')).toHaveLength(1)
     await click(a.root, 'Review'); await tick(50); await click(a.root, 'Publish'); await tick(300)
     const imeta = pub.sent.map((x) => x.event).find((e) => e.kind === 1)!.tags.find((x) => x[0] === 'imeta')!

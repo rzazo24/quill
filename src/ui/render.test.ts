@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { nip19 } from 'nostr-tools'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { ev, pk } from '../core/testutil.js'
 import type { Judged } from '../core/verdict.js'
 import type { ThreadNode } from '../data/feed.js'
@@ -211,6 +211,21 @@ describe('a photo that does not load', () => {
     expect(el.querySelector('img')!.getAttribute('src')).toBe(`https://b.example/${A}.jpg`)
     expect(el.textContent).toContain(`https://b.example/${A}.jpg`) // the copy's whole address is shown
     imgs.restore()
+  })
+  it('a server that hangs is given up on after a few seconds and the next one is tried', async () => {
+    vi.useFakeTimers()
+    const asked: string[] = []
+    class HangingImage { onload: (() => void) | null = null; onerror: (() => void) | null = null; referrerPolicy = ''
+      set src(s: string) { if (!s) return; asked.push(s); if (s.includes('c.example')) setTimeout(() => this.onload?.(), 10) } } // b never answers
+    const old = globalThis.Image; (globalThis as { Image: unknown }).Image = HangingImage
+    const view = { ...v, autoImages: () => true, photoServersOf: async () => ['https://b.example', 'https://c.example'] }
+    const el = document.createElement('div'); el.append(renderContent(dead, view, undefined, [pk('a')], { author: pk('a'), tags: [] }))
+    fail(el); (el.querySelector('button.pic-find') as HTMLButtonElement).click()
+    await vi.advanceTimersByTimeAsync(100); expect(asked).toEqual([`https://b.example/${A}.jpg`])
+    await vi.advanceTimersByTimeAsync(8000)
+    expect(asked).toEqual([`https://b.example/${A}.jpg`, `https://c.example/${A}.jpg`])
+    expect(el.querySelector('img')!.getAttribute('src')).toBe(`https://c.example/${A}.jpg`)
+    ;(globalThis as { Image: unknown }).Image = old; vi.useRealTimers()
   })
   it('found nowhere: says so and lists what was tried', async () => {
     const imgs = fakeImages([])

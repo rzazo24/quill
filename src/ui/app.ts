@@ -1392,9 +1392,13 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
         try { photo = { ...(await upload(net.fetch, server, blob, hash, auth)), dim }; at = i; break } catch (e) { reason = e instanceof Error ? e.message : String(e) }
       }
       if (!photo) throw new Error(reason || 'no server took it')
-      // a copy on the next server of the list, with the same permission (it names the file, not the server): readers can find it there if the first goes
-      const next = servers[at + 1]
-      if (next) { try { const copy = await upload(net.fetch, next, blob, hash, auth); if (copy.url !== photo.url) photo = { ...photo, fallbacks: [copy.url] } } catch { /* one copy is enough to publish */ } }
+      // a copy on the next server of the list, with the same permission (it names the file, not the server), made in the background: the photo is in
+      // the note at once, and the copy joins it (as a fallback) when it is done; published before that, the note simply goes without it
+      const next = servers[at + 1], first = photo
+      if (next) void upload(net.fetch, next, blob, hash, auth).then((copy) => {
+        if (copy.url === first.url || !composer?.photos?.some((p) => p.url === first.url)) return
+        composer = { ...composer, photos: composer.photos.map((p) => (p.url === first.url ? { ...p, fallbacks: [copy.url] } : p)) }
+      }).catch(() => { /* one copy is enough to publish */ })
       if (composer && composer.mode === writing.mode && composer.target?.id === writing.target?.id) {
         const text = composer.text.trimEnd(), next = `${text}${text ? '\n' : ''}${photo.url}`
         composer = { ...composer, text: next, photos: [...(composer.photos ?? []), photo], uploading: false }
