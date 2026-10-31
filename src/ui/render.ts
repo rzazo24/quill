@@ -477,7 +477,7 @@ function renderPhotoPrefs(ph: NonNullable<PrefsProps['photos']>, v: View): HTMLE
       h('form', { class: 'row', onSubmit: (e: Event) => { e.preventDefault(); ph.onChoose(custom.value) } }, custom, ' ', h('button', { type: 'submit' }, t(v.lang, 'photoServerUse'))),
       ph.chosen && !ph.suggested.includes(ph.chosen) ? h('p', { class: 'meta' }, t(v.lang, 'photoServerChosen', { server: ph.chosen.replace(/^https:\/\//, '') })) : null,
       ph.chosen && ph.onPublishList ? h('p', {}, h('button', { type: 'button', onClick: ph.onPublishList }, t(v.lang, 'photoPublishList')), ' ', h('span', { class: 'meta' }, t(v.lang, 'photoPublishHelp'))) : null)
-  return h('div', { class: 'photo-prefs' },
+  return h('div', { class: 'photo-prefs' }, h('h3', {}, t(v.lang, 'photosTitle')),
     h('label', { class: 'check' }, h('span', {}, t(v.lang, 'photosOn')), h('input', { type: 'checkbox', role: 'switch', ...(ph.on ? { checked: true } : {}), onChange: (e: Event) => ph.onToggle((e.target as HTMLInputElement).checked) })),
     h('p', { class: 'meta' }, t(v.lang, 'photosHelp')),
     ph.on ? where : null)
