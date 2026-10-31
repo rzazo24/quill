@@ -460,7 +460,7 @@ export const SOURCE_URL = 'https://github.com/rzazo24/quill'
 
 export interface PrefsProps {
   /** Photos in notes (Blossom): off by default; the servers are the writer's own list, or one chosen here. */
-  photos?: { on: boolean; listed: string[]; chosen: string | null; suggested: readonly string[]; onToggle: (on: boolean) => void; onChoose: (server: string) => void; /** publish the chosen server as the writer's list (kind 10063) */ onPublishList?: () => void }
+  photos?: { on: boolean; listed: string[]; chosen: string | null; suggested: readonly string[]; onToggle: (on: boolean) => void; onChoose: (server: string) => void; /** publish the chosen server as the writer's list (kind 10063) */ onPublishList?: () => void; /** a published list being edited here (null: not edited) */ draft?: string[] | null; onDraft?: (list: string[]) => void; onPublishDraft?: () => void }
   font: FontSize; avatars: AvatarStyle; sampleKey: string; onAvatars: (s: AvatarStyle) => void; realAvatars?: boolean; onRealAvatars?: (on: boolean) => void; reposts: boolean; onReposts: (on: boolean) => void; clientTag?: boolean; onClientTag?: (on: boolean) => void; outbox: boolean; onOutbox: (on: boolean) => void; nwc?: { relay: string | null; state: { testing: true } | { balance: number | null } | { error: string } | null; error: string | null; canSign: boolean }; onNwcSave?: (text: string) => void; onNwcRemove?: () => void; onNwcTest?: () => void; interests: string[]; onInterests: (text: string) => void; autoImages: boolean; onAutoImages: (on: boolean) => void; scheme: Scheme; onScheme: (s: Scheme) => void; halloween: boolean; onHalloween: (on: boolean) => void; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
   /** The list published on Nostr compared with this one, and what can be done about it. */
   list: { state: ListState; publishedCount: number; canSign: boolean; confirming: boolean }
@@ -468,11 +468,26 @@ export interface PrefsProps {
   onFont: (f: FontSize) => void; onAdd: (text: string) => void; onRemove: (url: string) => void; onTest: (url: string) => void; onReset: () => void
 }
 /** Text size and the relay list. */
+/** The writer's published server list, editable: the first one gets the uploads (the others are where a photo is looked for if it is gone); remove,
+ *  move up, add a suggested or another one, then publish the change (one signature for all of it). */
+function listEditor(ph: NonNullable<PrefsProps['photos']>, v: View): HTMLElement {
+  const list = ph.draft ?? ph.listed, host = (s: string) => s.replace(/^https:\/\//, '')
+  const set = (next: string[]) => ph.onDraft?.(next)
+  const custom = h('input', { type: 'url', placeholder: 'https://…', autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false', inputmode: 'url', 'aria-label': t(v.lang, 'photoServerCustom') })
+  const changed = ph.draft && JSON.stringify(ph.draft) !== JSON.stringify(ph.listed)
+  return h('div', { class: 'photo-servers photo-list' },
+    h('p', { class: 'meta' }, t(v.lang, 'photoListHelp')),
+    h('ol', {}, ...list.map((s, i) => h('li', {}, h('span', { class: 'url' }, host(s)),
+      ph.onDraft && i > 0 ? h('button', { type: 'button', class: 'link', 'aria-label': t(v.lang, 'photoServerUp', { server: host(s) }), onClick: () => set([s, ...list.filter((x) => x !== s)]) }, t(v.lang, 'photoServerFirst')) : null,
+      ph.onDraft && list.length > 1 ? h('button', { type: 'button', class: 'link', 'aria-label': t(v.lang, 'photoServerRemove', { server: host(s) }), onClick: () => set(list.filter((x) => x !== s)) }, '×') : null))),
+    ph.onDraft ? h('p', { class: 'photo-add-servers' }, ...ph.suggested.filter((s) => !list.includes(s)).map((s) => h('button', { type: 'button', onClick: () => set([...list, s].slice(0, 5)) }, `+ ${host(s)}`))) : null,
+    ph.onDraft ? h('form', { class: 'row', onSubmit: (e: Event) => { e.preventDefault(); ph.onChoose(custom.value) } }, custom, ' ', h('button', { type: 'submit' }, t(v.lang, 'photoServerAdd'))) : null,
+    changed && ph.onPublishDraft ? h('p', {}, h('button', { type: 'button', class: 'primary', onClick: ph.onPublishDraft }, t(v.lang, 'photoPublishChanges')), ' ', h('button', { type: 'button', class: 'link', onClick: () => set(ph.listed) }, t(v.lang, 'cancel'))) : null)
+}
+
 function renderPhotoPrefs(ph: NonNullable<PrefsProps['photos']>, v: View): HTMLElement {
   const custom = h('input', { type: 'url', placeholder: 'https://…', autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false', inputmode: 'url', 'aria-label': t(v.lang, 'photoServerCustom') })
-  const where = ph.listed.length
-    ? h('p', { class: 'meta' }, t(v.lang, 'photoServersListed', { list: ph.listed.map((s) => s.replace(/^https:\/\//, '')).join(', ') }))
-    : h('div', { class: 'photo-servers' }, h('p', { class: 'meta' }, t(v.lang, 'photoServersNone')),
+  const where = ph.listed.length ? listEditor(ph, v) : h('div', { class: 'photo-servers' }, h('p', { class: 'meta' }, t(v.lang, 'photoServersNone')),
       ...ph.suggested.map((s) => h('label', { class: 'radio' }, h('input', { type: 'radio', name: 'photo-server', ...(ph.chosen === s ? { checked: true } : {}), onChange: () => ph.onChoose(s) }), ' ', s.replace(/^https:\/\//, ''))),
       h('form', { class: 'row', onSubmit: (e: Event) => { e.preventDefault(); ph.onChoose(custom.value) } }, custom, ' ', h('button', { type: 'submit' }, t(v.lang, 'photoServerUse'))),
       ph.chosen && !ph.suggested.includes(ph.chosen) ? h('p', { class: 'meta' }, t(v.lang, 'photoServerChosen', { server: ph.chosen.replace(/^https:\/\//, '') })) : null,

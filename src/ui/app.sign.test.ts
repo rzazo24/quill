@@ -517,7 +517,22 @@ describe('sharing a note', () => {
     const publish = [...a.root.querySelectorAll('.photo-servers button')].find((b) => b.textContent === 'Publish as my list') as HTMLButtonElement
     expect(publish).toBeTruthy(); publish.click(); await tick(300)
     expect(sg.log).toContain('sign 10063')
-    expect(a.root.querySelector('.photo-servers')).toBeNull() // the list is now yours: it is shown instead of the choice
+    expect(a.root.querySelector('.photo-list')).not.toBeNull() // the list is now yours: it is shown (and editable) instead of the choice
+  })
+  it('Settings: a published photo server list can be edited (add, make first, remove) and the change published with one signature', async () => {
+    const list = ev(me, '', { kind: 10063, tags: [['server', 'https://blossom.nostr.build'], ['server', 'https://blossom.primal.net']], created_at: 5000 })
+    const sg = fakeSigner(), pub = publisherFake(); const a = boot({ signer: sg, pub, events: [...world, list], stored: { me, photos: '1' } }); await tick(100); await connectClave(a, sg)
+    await a.go('#/settings'); await tick(300)
+    const items = () => [...a.root.querySelectorAll('.photo-list li .url')].map((x) => x.textContent)
+    expect(items()).toEqual(['blossom.nostr.build', 'blossom.primal.net'])
+    const btn = (text: string) => [...a.root.querySelectorAll('.photo-list button')].find((b) => b.textContent === text) as HTMLButtonElement
+    btn('+ blossom.band').click(); await tick(20)
+    ;[...a.root.querySelectorAll('.photo-list li')].find((li) => li.textContent!.includes('blossom.band'))!.querySelector('button')!.click(); await tick(20) // make first
+    expect(items()).toEqual(['blossom.band', 'blossom.nostr.build', 'blossom.primal.net'])
+    btn('Publish the changes').click(); await tick(300)
+    const sent = pub.sent.map((x) => x.event).find((e) => e.kind === 10063)!
+    expect(sent.tags).toEqual([['server', 'https://blossom.band'], ['server', 'https://blossom.nostr.build'], ['server', 'https://blossom.primal.net']])
+    expect(btn('Publish the changes')).toBeUndefined()
   })
   it('with photos on, the composer uploads a cleaned photo to the chosen Blossom server and the note carries its address and imeta', async () => {
     const puts: { url: string; auth: string }[] = []
