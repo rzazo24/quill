@@ -3,7 +3,7 @@ import { nip19 } from 'nostr-tools'
 import { interestsIn } from '../core/interests.js'
 import { formatSats } from '../core/zap.js'
 import type { ZapEntry } from '../core/zaphistory.js'
-import { photoCandidates } from '../core/blossom.js'
+import { blossomCandidates, isImageExt, photoCandidates, splitBlossom, type BlossomRef } from '../core/blossom.js'
 import { markdownBlocks } from '../core/markdown.js'
 import { articleInfo, type ArticleInfo } from '../data/article.js'
 import { COMMENT_KIND } from '../core/thread.js'
@@ -121,6 +121,31 @@ function failedPhoto(href: string, v: View, box: HTMLElement, media: Media | und
   return notice
 }
 
+/** A blossom: address (BUD-10): a file named by its hash, with hints of where it is. A picture waits for a tap (each server tried sees the reader's IP
+ *  address), then it is looked for where the address says, then on its authors' servers and the note's author's; anything else stays as text. */
+function blossomEl(raw: string, ref: BlossomRef, v: View, media?: Media): HTMLElement {
+  if (!isImageExt(ref.ext) || v.plainLinks || !v.photoServersOf) return h('span', { class: 'ext blossom-uri' }, v.plainLinks && isImageExt(ref.ext) ? `[${t(v.lang, 'imageWord')} · Blossom]` : raw)
+  const box = h('span', { class: 'pic' })
+  const btn = h('button', { type: 'button', class: 'thread-link pic-btn' }, icon('image'), `${t(v.lang, 'showImage')} · Blossom`) as HTMLButtonElement
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation()
+    btn.disabled = true; btn.lastChild!.textContent = t(v.lang, 'photoFinding')
+    const authors = [...new Set([...ref.authors, ...(media ? [media.author] : [])])]
+    const lists = await Promise.all(authors.map((a) => v.photoServersOf!(a).catch(() => [] as string[])))
+    const tried = blossomCandidates(ref, lists)
+    for (const c of tried) {
+      if (!(await loads(c))) continue
+      box.replaceChildren(h('img', { src: c, alt: t(v.lang, 'imageAlt', { host: shortHost(c) }), decoding: 'async', referrerpolicy: 'no-referrer' }),
+        h('span', { class: 'pic-host meta' }, t(v.lang, 'photoFoundAt'), ' ', h('span', { class: 'ext' }, c)))
+      return
+    }
+    box.replaceChildren(h('span', { class: 'ext blossom-uri' }, raw), ' ', h('span', { class: 'meta pic-notfound' }, t(v.lang, tried.length ? 'photoNotFound' : 'photoNoServers'),
+      tried.length ? h('ul', { class: 'pic-tried' }, ...tried.map((c) => h('li', {}, h('span', { class: 'ext' }, c)))) : null))
+  })
+  box.append(btn)
+  return box
+}
+
 /** Pictures the reader asked for in this visit: they stay open when the page is drawn again. */
 const shownImages = new Set<string>()
 /** A picture linked in a note. Quill keeps no copy: the reader's browser asks the site where it lives, which sees their IP address, so by default
@@ -182,7 +207,8 @@ export function renderContent(raw: string, v: View, fromId?: string, vouch: stri
       frag.append(q ? quoteCard(q, v, href, vouch) : threadChip(href, v, 'quotedNote')) // the quoted note itself, inside; until it is known (or if no relay has it), the button to it
     }
     else for (const seg of segments(part.value)) {
-      frag.append(seg.type !== 'link' ? seg.value : v.plainLinks ? plainLink(seg.href, seg.value, v, auto, media) : isImageUrl(seg.href) ? imageEl(seg.href, v, auto, media) : isVideoUrl(seg.href) ? videoEl(seg.href, v) : h('a', { class: 'ext', href: seg.href, rel: 'noopener noreferrer nofollow', target: '_blank' }, seg.value))
+      if (seg.type === 'text') { for (const piece of splitBlossom(seg.value)) frag.append(piece.type === 'text' ? piece.value : blossomEl(piece.raw, piece.ref, v, media)); continue }
+      frag.append(v.plainLinks ? plainLink(seg.href, seg.value, v, auto, media) : isImageUrl(seg.href) ? imageEl(seg.href, v, auto, media) : isVideoUrl(seg.href) ? videoEl(seg.href, v) : h('a', { class: 'ext', href: seg.href, rel: 'noopener noreferrer nofollow', target: '_blank' }, seg.value))
       const d = seg.type === 'link' && !v.plainLinks && vouch[0] ? primalArticle(seg.href) : null
       if (d) { // an article shared as a Primal address: if its author really has one by that name, offer to read it here
         const title = v.articleTitle?.(vouch[0]!, d)

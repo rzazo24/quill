@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Event } from 'nostr-tools'
 import { checkTemplate } from '../sign/policy.js'
-import { AUTH_TTL_S, checkServerList, hashFromUrl, photoCandidates, serverListTemplate, checkImeta, checkUploadAuth, imetaTag, normalizeServer, serversFrom, upload, uploadAuthTemplate, UploadError } from './blossom.js'
+import { AUTH_TTL_S, blossomCandidates, checkServerList, hashFromUrl, parseBlossomUri, splitBlossom, photoCandidates, serverListTemplate, checkImeta, checkUploadAuth, imetaTag, normalizeServer, serversFrom, upload, uploadAuthTemplate, UploadError } from './blossom.js'
 
 const H = 'a'.repeat(64)
 const photo = { url: `https://blossom.example/${H}.jpg`, sha256: H, mime: 'image/jpeg', size: 1234, dim: '800x600' }
@@ -80,5 +80,27 @@ describe('finding a photo again by its hash', () => {
     expect(tag).toContain(`fallback https://b.example/${H}.jpg`)
     expect(checkImeta(tag, p.url)).toBe(true)
     expect(checkImeta([...imetaTag({ ...p, fallbacks: [] }), 'fallback https://evil.example/other.jpg'], p.url)).toBe(false)
+  })
+})
+
+describe('blossom: addresses (BUD-10)', () => {
+  const A = 'b1674191a88ec5cdd733e4240a81803105dc412d6c6708d53ab94fc248f4f553', P = 'ec4425ff5e9446080d2f70440188e3ca5d6da8713db7bdeef73d0ed54d9093f0'
+  it('reads the spec\'s examples: hash, extension and hints; servers without a scheme are https, http ones are dropped', () => {
+    expect(parseBlossomUri(`blossom:${A}.pdf`)).toEqual({ sha256: A, ext: 'pdf', servers: [], authors: [], size: null })
+    expect(parseBlossomUri(`blossom:${A}.pdf?xs=cdn.satellite.earth&as=${P}&xs=https://blossom.primal.net&sz=184292`))
+      .toEqual({ sha256: A, ext: 'pdf', servers: ['https://cdn.satellite.earth', 'https://blossom.primal.net'], authors: [P], size: 184292 })
+    expect(parseBlossomUri(`blossom:${A}.png?xs=http://plain.example&as=nothex`)).toEqual({ sha256: A, ext: 'png', servers: [], authors: [], size: null })
+    expect(parseBlossomUri(`blossom:${A.toUpperCase()}.png`)).toBeNull()
+    expect(parseBlossomUri(`blossom:${A}`)).toBeNull() // the extension is required
+  })
+  it('finds them in a note, without the punctuation that follows', () => {
+    const parts = splitBlossom(`look blossom:${A}.jpg?xs=cdn.example.com, nice`)
+    expect(parts.map((p) => p.type)).toEqual(['text', 'blossom', 'text'])
+    expect(parts[1]).toMatchObject({ raw: `blossom:${A}.jpg?xs=cdn.example.com`, ref: { servers: ['https://cdn.example.com'] } })
+  })
+  it('candidates in BUD-10 order: its servers, then the authors\' servers; once each, at most five', () => {
+    const ref = parseBlossomUri(`blossom:${A}.jpg?xs=a.example&xs=b.example`)!
+    expect(blossomCandidates(ref, [['https://b.example', 'https://c.example'], ['https://d.example', 'https://e.example', 'https://f.example']]))
+      .toEqual(['a', 'b', 'c', 'd', 'e'].map((h) => `https://${h}.example/${A}.jpg`))
   })
 })

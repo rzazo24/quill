@@ -154,3 +154,54 @@ export function photoCandidates(url: string, tags: string[][], servers: string[]
   for (const s of servers) { const n = normalizeServer(s); if (n) add(`${n}/${hash}${ext}`) }
   return out.slice(0, 5)
 }
+
+// ---------- blossom: addresses (BUD-10) ----------
+// A file named by its hash, with hints of where to find it: servers (xs), authors whose server lists to look in (as) and its size (sz). Quill reads
+// them in notes; it does not write them (most apps would show the text instead of the photo), the https link with its imeta does the same job.
+
+export interface BlossomRef { sha256: string; ext: string; servers: string[]; authors: string[]; size: number | null }
+const BLOSSOM_RE = /blossom:[0-9a-f]{64}\.[a-z0-9]{1,10}(?:\?[^\s<>"']*)?/g
+
+/** A blossom: address read strictly: lowercase hash, an extension, hints that are well formed (servers as https, authors as hex keys). */
+export function parseBlossomUri(raw: string): BlossomRef | null {
+  const m = /^blossom:([0-9a-f]{64})\.([a-z0-9]{1,10})(?:\?(.*))?$/.exec(raw)
+  if (!m) return null
+  const q = new URLSearchParams(m[3] ?? '')
+  const servers: string[] = []
+  for (const x of q.getAll('xs')) {
+    const s = normalizeServer(/^[a-z][a-z0-9+.-]*:\/\//i.test(x) ? x : `https://${x}`) // no scheme: https (Quill never loads http)
+    if (s && !servers.includes(s)) servers.push(s)
+  }
+  const authors = [...new Set(q.getAll('as').filter((a) => /^[0-9a-f]{64}$/.test(a)))]
+  const sz = q.get('sz'), size = sz && /^[1-9]\d{0,14}$/.test(sz) ? Number(sz) : null
+  return { sha256: m[1]!, ext: m[2]!, servers: servers.slice(0, 5), authors: authors.slice(0, 3), size }
+}
+
+/** A text in pieces: plain text and the blossom: addresses in it. */
+export function splitBlossom(text: string): ({ type: 'text'; value: string } | { type: 'blossom'; raw: string; ref: BlossomRef })[] {
+  const out: ({ type: 'text'; value: string } | { type: 'blossom'; raw: string; ref: BlossomRef })[] = []
+  let last = 0
+  for (const m of text.matchAll(BLOSSOM_RE)) {
+    const raw = m[0].replace(/[.,;:!?)\]}]+$/, ''), ref = parseBlossomUri(raw), at = m.index ?? 0
+    if (!ref) continue
+    if (at > last) out.push({ type: 'text', value: text.slice(last, at) })
+    out.push({ type: 'blossom', raw, ref })
+    last = at + raw.length
+  }
+  if (last < text.length) out.push({ type: 'text', value: text.slice(last) })
+  return out
+}
+
+export const isImageExt = (ext: string): boolean => /^(jpe?g|png|gif|webp|avif)$/.test(ext)
+
+/** Where to look for a blossom: file (BUD-10's order): the servers it names, then the servers of the authors it names, then those of the note's
+ *  author; each once, at most five, by hash and extension. */
+export function blossomCandidates(ref: BlossomRef, authorServers: string[][]): string[] {
+  const out: string[] = []
+  for (const s of [...ref.servers, ...authorServers.flat()]) {
+    const n = normalizeServer(s), url = n ? `${n}/${ref.sha256}.${ref.ext}` : null
+    if (url && !out.includes(url)) out.push(url)
+    if (out.length >= 5) break
+  }
+  return out
+}

@@ -246,3 +246,31 @@ describe('a photo that does not load', () => {
     }
   })
 })
+
+describe('blossom: addresses in a note (BUD-10)', () => {
+  const A = 'b1674191a88ec5cdd733e4240a81803105dc412d6c6708d53ab94fc248f4f553', P = 'ec4425ff5e9446080d2f70440188e3ca5d6da8713db7bdeef73d0ed54d9093f0'
+  function images(good: string[]) {
+    const asked: string[] = []
+    class Img { onload: (() => void) | null = null; onerror: (() => void) | null = null; referrerPolicy = ''; set src(s: string) { if (!s) return; asked.push(s); setTimeout(() => (good.includes(s) ? this.onload?.() : this.onerror?.()), 0) } }
+    const old = globalThis.Image; (globalThis as { Image: unknown }).Image = Img
+    return { asked, restore: () => { (globalThis as { Image: unknown }).Image = old } }
+  }
+  it('a picture waits for a tap; then its servers are tried, then its author\'s list, and the copy found is shown with its whole address', async () => {
+    const imgs = images([`https://c.example/${A}.jpg`]); const lists: string[] = []
+    const view = { ...v, autoImages: () => true, photoServersOf: async (pk: string) => { lists.push(pk); return pk === P ? ['https://c.example'] : [] } }
+    const el = document.createElement('div'); el.append(renderContent(`blossom:${A}.jpg?xs=b.example&as=${P}`, view, undefined, [pk('a')], { author: pk('a'), tags: [] }))
+    expect(imgs.asked).toEqual([]); expect(lists).toEqual([]) // nothing asked of anyone before the tap, even with pictures loading by themselves
+    ;(el.querySelector('button.pic-btn') as HTMLButtonElement).click(); await new Promise((r) => setTimeout(r, 30))
+    expect(imgs.asked).toEqual([`https://b.example/${A}.jpg`, `https://c.example/${A}.jpg`])
+    expect(el.querySelector('img')!.getAttribute('src')).toBe(`https://c.example/${A}.jpg`)
+    expect(el.textContent).toContain(`https://c.example/${A}.jpg`)
+    imgs.restore()
+  })
+  it('a file that is not a picture stays as text; in a quoted note a picture is only named', () => {
+    const view = { ...v, photoServersOf: async () => [] }
+    const el = document.createElement('div'); el.append(renderContent(`doc blossom:${A}.pdf?xs=b.example`, view))
+    expect(el.querySelector('button')).toBeNull(); expect(el.textContent).toContain(`blossom:${A}.pdf?xs=b.example`)
+    const q = document.createElement('div'); q.append(renderContent(`blossom:${A}.png`, { ...view, plainLinks: true }))
+    expect(q.textContent).toBe('[picture · Blossom]')
+  })
+})
