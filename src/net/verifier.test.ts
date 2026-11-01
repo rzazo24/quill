@@ -18,6 +18,13 @@ describe('signatures checked all together (workers)', () => {
       expect(out.map((e) => e.id)).toEqual([a.id, b.id, ...many.map((e) => e.id)])
     })
   }
+  it('a worker that never answers, or fails, does not leave anyone waiting: its batch is checked here', async () => {
+    class SilentWorker { onmessage: unknown = null; onerror: unknown = null; postMessage() { /* never answers */ } }
+    const a = good(), forged = { ...JSON.parse(JSON.stringify(good())), content: 'changed after signing' }
+    expect(await workerVerifier(() => new SilentWorker() as unknown as Worker, 1, 50)([a, forged])).toEqual([true, false])
+    class BrokenWorker { onmessage: unknown = null; onerror: (() => void) | null = null; postMessage() { setTimeout(() => this.onerror?.(), 5) } }
+    expect(await workerVerifier(() => new BrokenWorker() as unknown as Worker, 1, 60_000)([a, forged])).toEqual([true, false])
+  })
   it('drops what does not answer the question asked, before checking anything', async () => {
     let asked = 0; const counting = async (es: Event[]) => { asked += es.length; return es.map(() => true) }
     const out = await acceptMany({ kinds: [7] }, [good(), good()], counting)

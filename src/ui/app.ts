@@ -328,6 +328,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   // feed's own queries: starting them together made the feed wait for them). `startBackground` is set when the account is loaded; `background()` runs it once.
   let startBackground: (() => Promise<void>) | null = null
   let backgroundRun: Promise<void> | null = null
+  const GRAPH_WAIT_MS = 8000
   const background = (): Promise<void> => (backgroundRun ??= startBackground ? startBackground() : Promise.resolve())
   const afterFirstPaint = (): void => { if (backgroundRun === null && startBackground) setTimeout(() => { void background() }, 60) }
   let scrollToTop = false // set when a different view is shown
@@ -697,7 +698,9 @@ export function startApp(root: HTMLElement, deps: Deps): void {
       if (info.title) articleTitles.set(`${e.pubkey}:${route.identifier}`, info.title)
       return h('div', { class: 'stack' }, backLink(), renderArticle(e, info, judged!.verdict, view(), { showAnyway: articleShown.has(key), onShow: () => { articleShown.add(key); void (wide() ? loadPane(panes.detail, route) : load('route')) } }))
     }
-    if (route.name === 'mentions' || route.name === 'note' || (route.name === 'following' && feedMode === 'network')) await background() // they judge by the graph; the Following feed and Me do not
+    // they judge by the graph; the Following feed and Me do not. But never wait for it more than a few seconds: with poor coverage it can take long,
+    // and the page would sit on "loading". Without it the list is judged as it can be, and drawn again when the graph arrives (the background job reloads).
+    if (route.name === 'mentions' || route.name === 'note' || (route.name === 'following' && feedMode === 'network')) await Promise.race([background().catch(() => {}), new Promise((r) => setTimeout(r, GRAPH_WAIT_MS))])
     let content: HTMLElement
     try {
       if (route.name === 'note') {
@@ -749,7 +752,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
           content = h('div', { class: 'stack' }, route.name === 'following' ? renderFeedMode(feedMode, changeFeedMode, view()) : null, pickCard, partialNote(items.length), renderSummary(tally(items), view(), toggleSettings), empty ?? renderList(items, view(), route.name === 'following' ? `feed:${feedMode}` : route.name))
         }
       }
-    } catch { content = h('p', { class: 'empty' }, t(lang, 'noNote')) }
+    } catch { content = route.name === 'note' ? h('p', { class: 'empty' }, t(lang, 'noNote')) : noAnswer() } // a list that failed to load: say so, with Try again (not "no such note")
     return alive() ? content : null
   }
 
@@ -840,7 +843,12 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     const quiet = key === shownRoute && body !== null && !scrollToTop && !loudLoad
     loudLoad = false
     if (!quiet) { status = t(lang, 'loadingFeed'); draw() }
-    const content = await buildContent(route, () => mine === run)
+    let content: HTMLElement | null
+    try { content = await buildContent(route, () => mine === run) } catch {
+      // something failed on the way (a relay's answer, a check): never stay on "loading"; say so, with the way to try again
+      if (mine !== run) return
+      content = h('div', { class: 'empty no-answer', role: 'status' }, h('p', {}, t(lang, 'noAnswer')), h('button', { type: 'button', onClick: refresh }, t(lang, 'searchRetry')))
+    }
     if (content === null) return
     status = null; body = content; lastLoadAt = deps.nowMs?.() ?? Date.now(); draw(); afterFirstPaint()
     if (route.name !== 'mentions') void poll()

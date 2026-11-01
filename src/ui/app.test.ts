@@ -18,7 +18,7 @@ const roots: HTMLElement[] = []
 /** A choice in the search Filters (Show / Search in): its buttons are there even while the panel is folded. */
 const pickFilter = (a: { root: HTMLElement }, label: string) => ([...a.root.querySelectorAll('.search-filters button')].find((b) => b.textContent === label) as HTMLButtonElement).click()
 
-function boot(opts: { silent?: { on: boolean }; events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; copy?: (text: string) => void; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; light?: { value: boolean }; elsewhere?: { relay: string; events: Event[]; delayMs: number }; avatarProxy?: string; pick?: unknown; saveFile?: (name: string, text: string) => void } = {}) {
+function boot(opts: { silent?: { on: boolean }; events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; copy?: (text: string) => void; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; failFor?: (f: Filter) => boolean; light?: { value: boolean }; elsewhere?: { relay: string; events: Event[]; delayMs: number }; avatarProxy?: string; pick?: unknown; saveFile?: (name: string, text: string) => void } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
   // the tests do not depend on today's date: without a clock of their own, the Halloween season (late October) is not let in by itself
@@ -26,7 +26,7 @@ function boot(opts: { silent?: { on: boolean }; events?: Event[]; delayMs?: numb
   startApp(root, {
     ...(opts.avatarProxy ? { avatarProxy: opts.avatarProxy } : {}),
     ...(opts.pick !== undefined ? { pickSource: async () => opts.pick } : {}),
-    fetcher: { ...(opts.silent ? { activity: () => ({ asked: Date.now(), answered: opts.silent!.on ? 0 : Date.now() }) } : {}), query: async (f, o) => { calls.n++; filters.push(f); if (o?.only) { const el = opts.elsewhere; if (!el || !o.only.includes(el.relay)) return []; await new Promise((r) => setTimeout(r, el.delayMs)); return el.events.filter((e) => answers(f, e)) } return base.query(f, o) }, reconnect: () => { reconnects.n++ } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', prefersLight: () => !!opts.light?.value, onSchemeChange: (cb) => schemeChanged.push(cb), onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
+    fetcher: { ...(opts.silent ? { activity: () => ({ asked: Date.now(), answered: opts.silent!.on ? 0 : Date.now() }) } : {}), query: async (f, o) => { calls.n++; filters.push(f); if (opts.failFor?.(f)) throw new Error('relay trouble'); if (o?.only) { const el = opts.elsewhere; if (!el || !o.only.includes(el.relay)) return []; await new Promise((r) => setTimeout(r, el.delayMs)); return el.events.filter((e) => answers(f, e)) } return base.query(f, o) }, reconnect: () => { reconnects.n++ } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', prefersLight: () => !!opts.light?.value, onSchemeChange: (cb) => schemeChanged.push(cb), onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
     copy: opts.copy, saveFile: opts.saveFile,
     searchFetcher: opts.searchable ? { query: async (f: Filter) => opts.searchable!.filter((e) => answers(f, e) && (!(f as { search?: string }).search || e.content.toLowerCase().includes((f as { search: string }).search.toLowerCase()))) } : undefined,
     checkVersion: opts.newer ? async () => { asked.n++; return opts.newer!.value } : undefined, languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
@@ -1617,6 +1617,16 @@ describe('what your notes got, wherever they are', () => {
     events.push(ev(friend, '+', { kind: 7, created_at: 9200, tags: [['e', mine.id], ['p', me]] }))
     a.poll(); await tick(1200)
     expect(card().querySelector('.reach')!.getAttribute('aria-label')).toBe('1 reaction')
+  })
+})
+
+describe('a page that fails to load', () => {
+  it('Mentions never stays on "loading" when a question fails: it says no relay answered and offers to try again', async () => {
+    const a = boot({ events: world, stored: { me }, failFor: (f) => !!f.kinds?.includes(7) && !!f['#p'] })
+    await tick(300); await a.go('#/mentions'); await tick(400)
+    expect(a.root.querySelector('.no-answer')).not.toBeNull()
+    expect([...a.root.querySelectorAll('.no-answer button')].map((b) => b.textContent)).toContain('Try again')
+    expect(a.root.querySelector('.status.loading')).toBeNull()
   })
 })
 
