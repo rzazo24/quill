@@ -348,6 +348,7 @@ a.quote { display: grid; gap: 4px; margin: 8px 0 4px; padding: 10px 12px; border
 .quote-hidden { color: var(--muted); font-size: .9rem }
 
 /* a picture linked in a note: a button naming its site, or the picture itself once asked for */
+.emoji { display: inline-block; width: 1.4em; height: 1.4em; vertical-align: -0.35em; margin: 0 1px; border-radius: 4px; object-fit: contain }
 .pic { display: block; margin: 8px 0 4px; white-space: normal }
 .pic-btn { font-size: .85rem; padding: 4px 10px; cursor: pointer; max-width: 100%; text-align: left; justify-content: flex-start; overflow-wrap: anywhere } .pic-btn .icon { flex: none }
 .pic-open { display: block }

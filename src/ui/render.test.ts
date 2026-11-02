@@ -274,3 +274,16 @@ describe('blossom: addresses in a note (BUD-10)', () => {
     expect(q.textContent).toBe('[picture · Blossom]')
   })
 })
+
+describe('custom emoji (NIP-30)', () => {
+  const tags = [['emoji', 'soapbox', 'https://e.example/soap.png'], ['emoji', 'bad', 'http://e.example/x.png']]
+  const view = { ...v, emoji: (u: string) => `/avatar?u=${encodeURIComponent(u)}&s=48` }
+  it('a :code: named in the note\'s tags is drawn through Quill\'s server; unknown codes, http pictures and readers without the server keep the text', () => {
+    const el = document.createElement('div'); el.append(renderContent('hi :soapbox: and :bad: and :none:', view, undefined, [], { author: pk('a'), tags }))
+    const imgs = el.querySelectorAll('img.emoji'); expect(imgs.length).toBe(1)
+    expect(imgs[0]!.getAttribute('src')).toBe('/avatar?u=https%3A%2F%2Fe.example%2Fsoap.png&s=48'); expect(imgs[0]!.getAttribute('alt')).toBe(':soapbox:')
+    expect(el.textContent).toBe('hi  and :bad: and :none:')
+    const plain = document.createElement('div'); plain.append(renderContent('hi :soapbox:', v, undefined, [], { author: pk('a'), tags }))
+    expect(plain.querySelector('img')).toBeNull(); expect(plain.textContent).toBe('hi :soapbox:')
+  })
+})
