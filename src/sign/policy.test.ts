@@ -75,11 +75,13 @@ describe('quotes', () => {
 })
 
 describe('the client tag (NIP-89)', () => {
-  it('is added once, at the end, to notes and reactions only, and the policy accepts exactly that tag', () => {
+  it('is added once, at the end, to notes and comments only (never to reactions), and the policy accepts exactly that tag', () => {
     const n = withClientTag(note('hello', [['p', id]]))
     expect(n.tags).toEqual([['p', id], ['client', 'Quill']]); expect(checkTemplate(n)).toBeNull()
     expect(withClientTag(n).tags).toEqual(n.tags) // never twice
-    expect(checkTemplate(withClientTag(note('🦞', [['e', id], ['p', id]], 7)))).toBeNull()
+    const like = note('🦞', [['e', id], ['p', id]], 7)
+    expect(withClientTag(like).tags).toEqual(like.tags) // a reaction would say which app you use on every like
+    expect(checkTemplate({ ...like, tags: [...like.tags, ['client', 'Quill']] })).toBeNull() // still accepted if some older path adds it
     expect(withClientTag(note('', [['r', 'wss://a.example']], 10002)).tags).toEqual([['r', 'wss://a.example']]) // lists are left as they are
     expect(checkTemplate(note('hello', [['client', 'Quill'], ['client', 'Quill']]))).toBe('tags')
     expect(checkTemplate(note('hello', [['client', 'Other app']]))).toBe('tags')

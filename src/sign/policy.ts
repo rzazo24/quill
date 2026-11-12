@@ -25,11 +25,12 @@ export interface Template { kind: number; content: string; tags: string[][]; cre
 export type Problem = 'server-list' | 'upload' | 'zap' | 'kind' | 'empty' | 'too-long' | 'reaction' | 'tags' | 'reaction-target' | 'relay-list' | 'quote' | 'follow' | 'profile' | 'delete' | RepostProblem
 
 const TAG_NAMES = new Set(['e', 'p', 't', 'k', 'a', 'q', 'E', 'A', 'I', 'K', 'P']) // the upper-case ones: the root of a NIP-22 comment
-/** NIP-89: says the event was made with Quill (a setting, on by default). Allowed exactly like this, once, on notes and reactions. */
+/** NIP-89: says the event was made with Quill (a setting, on by default). Added to notes and comments only: a reaction carrying it would tell
+ *  everyone which app you use every time you tap a like, for nothing in return. The policy still accepts it, once, on notes and reactions. */
 export const CLIENT_TAG = ['client', 'Quill'] as const
 const isClientTag = (tag: string[]) => tag.length === 2 && tag[0] === CLIENT_TAG[0] && tag[1] === CLIENT_TAG[1]
-/** The template with the client tag at the end, for a note or a reaction that does not carry it yet; anything else as it is. */
-export const withClientTag = <T extends Template>(t: T): T => ((t.kind === 1 || t.kind === COMMENT_KIND || t.kind === 7) && !t.tags.some(isClientTag) ? { ...t, tags: [...t.tags, [...CLIENT_TAG]] } : t)
+/** The template with the client tag at the end, for a note or a comment that does not carry it yet; anything else (reactions included) as it is. */
+export const withClientTag = <T extends Template>(t: T): T => ((t.kind === 1 || t.kind === COMMENT_KIND) && !t.tags.some(isClientTag) ? { ...t, tags: [...t.tags, [...CLIENT_TAG]] } : t)
 const HEX64 = /^[0-9a-f]{64}$/
 
 /** The ids of the notes a text points at with NIP-21 references (nostr:nevent1… / nostr:note1…). */

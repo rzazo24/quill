@@ -154,7 +154,7 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   let photoServer = normalizeServer(safeGet(kv, 'photoServer') ?? '')
   let myBlossom: string[] | null = null, blossomFor: string | null = null, blossomDraft: string[] | null = null // an edit of the published list, not yet published
   const photoServers = (): string[] => (myBlossom?.length ? myBlossom : photoServer ? [photoServer] : [])
-  let clientTag = safeGet(kv, 'clientTag') !== '0' // say "published with Quill" (NIP-89 client tag) on notes and reactions: on unless turned off
+  let clientTag = safeGet(kv, 'clientTag') !== '0' // say "published with Quill" (NIP-89 client tag) on notes, never on reactions: on unless turned off
   let readOutbox = parseReposts(safeGet(kv, 'outbox')) // on unless turned off ('0'), like reposts
   let realAvatars = safeGet(kv, 'realAvatars') === '1' // off unless turned on
   const pictures = new Map<string, string>() // profile picture addresses, learnt with the names

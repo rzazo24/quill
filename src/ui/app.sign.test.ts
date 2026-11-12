@@ -159,7 +159,7 @@ describe('reacting, one tap', () => {
     expect(a.pub.sent).toHaveLength(1)
     const e = a.pub.sent[0]!.event
     expect(e.kind).toBe(7); expect(e.content).toBe('❤️')
-    expect(e.tags).toEqual([['e', post.id], ['p', friend], ['k', '1'], ['client', 'Quill']]) // says it was made with Quill (on unless turned off)
+    expect(e.tags).toEqual([['e', post.id], ['p', friend], ['k', '1']]) // no client tag on a like: it would say which app you use every time
     expect(a.text()).toContain('❤️ → '); expect(a.text()).not.toContain('Published to')
   })
   it('with "Say that I publish from Quill" turned off in Settings, nothing says which app was used', async () => {
