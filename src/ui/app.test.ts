@@ -260,8 +260,8 @@ describe('settings: text size and relays', () => {
 
   it('the Me page has a Settings section with the default relays and the text-size choices', async () => {
     const a = start(); await a.go('#/settings'); await tick(80)
-    expect(urls(a)).toHaveLength(6); expect(urls(a)).toContain('relay.hivescope.xyz'); expect([...prefs(a).querySelectorAll('.seg:not(.avatars):not(.scheme) button')].map((b) => b.textContent)).toEqual(['Small', 'Normal', 'Large', 'Very large'])
-    expect(a.setRelays.at(-1)).toHaveLength(6); expect(prefs(a).textContent).not.toContain('Restore the default relays')
+    expect(urls(a)).toHaveLength(5); expect(urls(a)).toContain('relay.hivescope.xyz'); expect([...prefs(a).querySelectorAll('.seg:not(.avatars):not(.scheme) button')].map((b) => b.textContent)).toEqual(['Small', 'Normal', 'Large', 'Very large'])
+    expect(a.setRelays.at(-1)).toHaveLength(5); expect(prefs(a).textContent).not.toContain('Restore the default relays')
   })
   it('text size is applied at once, remembered, and restored on the next start', async () => {
     const a = start(); await a.go('#/settings'); await tick(80); expect(document.documentElement.getAttribute('data-font')).toBe('normal')
@@ -272,13 +272,13 @@ describe('settings: text size and relays', () => {
   it('adding a relay stores it, tells the network code, and reads everything again from the new list', async () => {
     const a = start(); await a.go('#/settings'); await tick(80); const before = a.calls.n
     await add(a, 'Relay.Example.com/'); await tick(80)
-    expect(urls(a)).toContain('relay.example.com'); expect(urls(a)).toHaveLength(7); expect(JSON.parse(a.mem.get('relays')!)).toContain('wss://relay.example.com'); expect(a.setRelays.at(-1)).toContain('wss://relay.example.com')
+    expect(urls(a)).toContain('relay.example.com'); expect(urls(a)).toHaveLength(6); expect(JSON.parse(a.mem.get('relays')!)).toContain('wss://relay.example.com'); expect(a.setRelays.at(-1)).toContain('wss://relay.example.com')
     expect(a.calls.n).toBeGreaterThan(before); expect(prefs(a).textContent).toContain('Restore the default relays')
   })
   it('refuses insecure, malformed and repeated addresses, says why, and changes nothing', async () => {
     const a = start(); await a.go('#/settings'); await tick(80); const sets = a.setRelays.length
     for (const [bad, msg] of [['ws://relay.example.com', 'not a valid secure relay'], ['localhost', 'not a valid secure relay'], ['wss://relay.primal.net', 'already in the list']] as const) {
-      await add(a, bad); expect(prefs(a).querySelector('[role=alert]')!.textContent).toContain(msg); expect(urls(a)).toHaveLength(6)
+      await add(a, bad); expect(prefs(a).querySelector('[role=alert]')!.textContent).toContain(msg); expect(urls(a)).toHaveLength(5)
     }
     expect(a.mem.has('relays')).toBe(false); expect(a.setRelays).toHaveLength(sets)
   })
@@ -286,16 +286,16 @@ describe('settings: text size and relays', () => {
     const a = start({ stored: { relays: JSON.stringify(['wss://a.example.com', 'wss://b.example.com']) } }); await a.go('#/settings'); await tick(80)
     expect(urls(a)).toEqual(['a.example.com', 'b.example.com']); await press(a, 'Remove wss://a.example.com'); expect(urls(a)).toEqual(['b.example.com'])
     expect((prefs(a).querySelector('.relay-list button[aria-label^="Remove"]') as HTMLButtonElement).disabled).toBe(true)
-    await press(a, 'Restore the default relays'); expect(urls(a)).toHaveLength(6); expect(a.setRelays.at(-1)).toHaveLength(6); expect(prefs(a).textContent).not.toContain('Restore the default relays')
+    await press(a, 'Restore the default relays'); expect(urls(a)).toHaveLength(5); expect(a.setRelays.at(-1)).toHaveLength(5); expect(prefs(a).textContent).not.toContain('Restore the default relays')
   })
   it('a corrupt stored list falls back to the defaults', async () => {
-    const a = start({ stored: { relays: '{"not":"a list"}' } }); await a.go('#/settings'); await tick(80); expect(urls(a)).toHaveLength(6)
+    const a = start({ stored: { relays: '{"not":"a list"}' } }); await a.go('#/settings'); await tick(80); expect(urls(a)).toHaveLength(5)
   })
   it('Test says whether a relay answers, per relay', async () => {
-    const a = start({ reachable: (u) => u.includes('nos.lol') }); await a.go('#/settings'); await tick(80)
+    const a = start({ reachable: (u) => u.includes('nostr.oxtr.dev') }); await a.go('#/settings'); await tick(80)
     const row = (name: string) => [...prefs(a).querySelectorAll('.relay-list li')].find((li) => li.textContent!.includes(name))!
-    ;(row('nos.lol').querySelector('button') as HTMLElement).click(); ;(row('nostr.mom').querySelector('button') as HTMLElement).click(); await tick(80)
-    expect(row('nos.lol').querySelector('.probe')!.textContent).toBe('Answers'); expect(row('nostr.mom').querySelector('.probe')!.textContent).toBe('No answer'); expect(row('nos.lol').querySelector('.probe.up')).not.toBeNull()
+    ;(row('nostr.oxtr.dev').querySelector('button') as HTMLElement).click(); ;(row('relay.damus.io').querySelector('button') as HTMLElement).click(); await tick(80)
+    expect(row('nostr.oxtr.dev').querySelector('.probe')!.textContent).toBe('Answers'); expect(row('relay.damus.io').querySelector('.probe')!.textContent).toBe('No answer'); expect(row('nostr.oxtr.dev').querySelector('.probe.up')).not.toBeNull()
   })
 })
 
@@ -1634,15 +1634,15 @@ describe('your notes, safe (Settings)', () => {
   it('checks where your notes are, offers to copy the missing ones, and hands you a file with everything you published', async () => {
     const mine1 = ev(me, 'a note only on one relay', { created_at: 9000 }), mine2 = ev(me, 'another', { created_at: 9100 })
     const saved: { name: string; text: string }[] = []
-    const a = boot({ events: [...world, mine1, mine2], stored: { me }, elsewhere: { relay: 'wss://nos.lol', events: [mine1, mine2, ev(me, '{"name":"me"}', { kind: 0 })], delayMs: 0 }, saveFile: (name, text) => { saved.push({ name, text }) } })
+    const a = boot({ events: [...world, mine1, mine2], stored: { me }, elsewhere: { relay: 'wss://nostr.oxtr.dev', events: [mine1, mine2, ev(me, '{"name":"me"}', { kind: 0 })], delayMs: 0 }, saveFile: (name, text) => { saved.push({ name, text }) } })
     await tick(300); await a.go('#/settings'); await tick(100)
     const card = () => a.root.querySelector('section.rescue')!
     expect(card().querySelector('h2')!.textContent).toBe('Your notes, safe')
     const button = (label: string) => [...card().querySelectorAll('button')].find((b) => b.textContent!.startsWith(label)) as HTMLButtonElement
     button('Check my notes').click(); await tick(300)
     expect(card().querySelector('.rescue-summary')!.textContent).toBe('2 notes · 2 on a single relay · 2 missing from some of your relays')
-    expect([...card().querySelectorAll('.rescue-relays li')].find((l) => l.textContent!.includes('nos.lol'))!.textContent).toContain('2')
-    expect(button('Copy the missing ones').textContent).toBe('Copy the missing ones (10)') // two notes, five relays without them
+    expect([...card().querySelectorAll('.rescue-relays li')].find((l) => l.textContent!.includes('nostr.oxtr.dev'))!.textContent).toContain('2')
+    expect(button('Copy the missing ones').textContent).toBe('Copy the missing ones (8)') // two notes, four relays without them
     button('Download the copy').click(); await tick(300)
     expect(saved).toHaveLength(1); expect(saved[0]!.name).toMatch(/^nostr-backup-[0-9a-f]{8}-\d{4}-\d{2}-\d{2}\.json$/)
     expect(JSON.parse(saved[0]!.text).events.map((e: Event) => e.id).sort()).toHaveLength(3)

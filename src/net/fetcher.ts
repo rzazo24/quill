@@ -20,8 +20,9 @@ export interface Fetcher {
   activity?(): { asked: number; answered: number; /** when (ms) an answer last came back partial (cut short, or most relays failed) */ partial?: number }
 }
 
+// nos.lol and nostr.mom taken out on 2026-11-13: for a week they took no writes (no OK, newest stored note hours old); relay.damus.io in their place.
 export const DEFAULT_RELAYS = [
-  'wss://relay.hivescope.xyz', 'wss://relay.primal.net', 'wss://nostr.bitcoiner.social', 'wss://nos.lol', 'wss://nostr.oxtr.dev', 'wss://nostr.mom',
+  'wss://relay.hivescope.xyz', 'wss://relay.primal.net', 'wss://nostr.bitcoiner.social', 'wss://nostr.oxtr.dev', 'wss://relay.damus.io',
 ]
 
 /** Does the event answer the filter? (A relay can send anything; we do not trust it to have applied the filter.) */
