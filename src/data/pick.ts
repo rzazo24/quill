@@ -8,7 +8,7 @@ export interface PickItem { id: string; pubkey: string; title: string; summary: 
 export interface DailyPick { date: string; items: PickItem[] }
 const HEX64 = /^[0-9a-f]{64}$/
 /** Where the morning selection finds its notes besides the reader's relays (see the digest's global step). */
-export const PICK_RELAYS = ['wss://relay.damus.io', 'wss://relay.primal.net', 'wss://nostr.bitcoiner.social', 'wss://nostr.oxtr.dev']
+export const PICK_RELAYS = ['wss://relay.ditto.pub', 'wss://relay.primal.net', 'wss://nostr.bitcoiner.social', 'wss://nostr.oxtr.dev']
 const text = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '')
 
 /** The file as published, in the reader's language; null when it is missing or not what it should be. Entries that are not well formed are dropped. */

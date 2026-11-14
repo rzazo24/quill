@@ -21,8 +21,9 @@ export interface Fetcher {
 }
 
 // nos.lol and nostr.mom taken out on 2026-11-13: for a week they took no writes (no OK, newest stored note hours old); relay.damus.io in their place.
+// relay.damus.io swapped for relay.ditto.pub on 2026-11-14: Cloudflare 521/522 two days running, and it never answered reads from a data-centre address.
 export const DEFAULT_RELAYS = [
-  'wss://relay.hivescope.xyz', 'wss://relay.primal.net', 'wss://nostr.bitcoiner.social', 'wss://nostr.oxtr.dev', 'wss://relay.damus.io',
+  'wss://relay.hivescope.xyz', 'wss://relay.primal.net', 'wss://nostr.bitcoiner.social', 'wss://nostr.oxtr.dev', 'wss://relay.ditto.pub',
 ]
 
 /** Does the event answer the filter? (A relay can send anything; we do not trust it to have applied the filter.) */

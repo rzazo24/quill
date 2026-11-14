@@ -294,8 +294,8 @@ describe('settings: text size and relays', () => {
   it('Test says whether a relay answers, per relay', async () => {
     const a = start({ reachable: (u) => u.includes('nostr.oxtr.dev') }); await a.go('#/settings'); await tick(80)
     const row = (name: string) => [...prefs(a).querySelectorAll('.relay-list li')].find((li) => li.textContent!.includes(name))!
-    ;(row('nostr.oxtr.dev').querySelector('button') as HTMLElement).click(); ;(row('relay.damus.io').querySelector('button') as HTMLElement).click(); await tick(80)
-    expect(row('nostr.oxtr.dev').querySelector('.probe')!.textContent).toBe('Answers'); expect(row('relay.damus.io').querySelector('.probe')!.textContent).toBe('No answer'); expect(row('nostr.oxtr.dev').querySelector('.probe.up')).not.toBeNull()
+    ;(row('nostr.oxtr.dev').querySelector('button') as HTMLElement).click(); ;(row('relay.ditto.pub').querySelector('button') as HTMLElement).click(); await tick(80)
+    expect(row('nostr.oxtr.dev').querySelector('.probe')!.textContent).toBe('Answers'); expect(row('relay.ditto.pub').querySelector('.probe')!.textContent).toBe('No answer'); expect(row('nostr.oxtr.dev').querySelector('.probe.up')).not.toBeNull()
   })
 })
 
