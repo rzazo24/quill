@@ -32,6 +32,8 @@ export type FollowPanel =
 export interface Flash { kind: 'error' | 'info'; text: string }
 
 export interface SignUiState {
+  /** With the reader's own AI key: the review offers to translate the draft, which then goes back through the review as text. */
+  draftTranslate?: { host: string; busy: boolean; error?: string; canUndo: boolean }
   signer: 'disconnected' | 'connecting' | 'connected'
   /** A NIP-07 extension is in this browser: offer it first */
   extension?: boolean
@@ -64,7 +66,7 @@ export interface SignUiState {
 
 export interface SignUiHandlers {
   openConnect(): void; cancelConnect(): void; bunker(text: string): void; dismissFlash(): void; confirmFollow(): void; acceptList(): void; cancelFollow(): void; confirmShare(): void; confirmDelete(): void; cancelDelete(): void; startQuote(): void; cancelShare(): void; askDisconnect(): void; cancelDisconnect(): void; disconnect(): void; copy(text: string): void
-  edit(text: string): void; discardDraft(): void; review(): void; publish(): void; back(): void; cancelComposer(): void; retry(): void; dismissResult(): void
+  edit(text: string): void; discardDraft(): void; review(): void; publish(): void; back(): void; translateDraft?(to: 'en' | 'es'): void; undoTranslate?(): void; cancelComposer(): void; retry(): void; dismissResult(): void
   startNote(): void; cancelSigning(): void; startLink(): void; useExtension?(): void; pasteBunker(): void; editBunker(text: string): void; setLinkOpen(open: boolean): void
   addPhoto?(file: File): void
   zapPick?(sats: number): void; zapCustom?(sats: number): void; zapComment?(text: string): void; confirmZap?(): void; cancelZap?(): void
@@ -271,8 +273,18 @@ function renderReview(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement 
     h('p', { class: 'meta' }, t(v.lang, 'previewRelays', { n: s.relays.length }), ` · kind ${r.template.kind} (${kind}) · ${r.template.tags.length} tags`),
     r.template.tags.some((x) => x[0] === 'client') ? h('p', { class: 'meta' }, t(v.lang, 'previewClient')) : null,
     h('p', { class: 'meta' }, t(v.lang, 'previewPublic')),
-    h('p', { class: 'buttons' }, h('button', { type: 'button', onClick: hd.publish }, t(v.lang, 'publish')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.back }, t(v.lang, 'backEdit'))),
+    s.draftTranslate && r.template.kind !== 7 ? draftTranslateArea(s.draftTranslate, hd, v) : null,
+    h('p', { class: 'buttons' }, h('button', { type: 'button', onClick: hd.publish, ...(s.draftTranslate?.busy ? { disabled: true } : {}) }, t(v.lang, 'publish')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.back }, t(v.lang, 'backEdit'))),
   )
+}
+
+/** Translating the draft before signing: the translation replaces the text and is reviewed like anything else (nothing is signed without being on screen). */
+function draftTranslateArea(d: NonNullable<SignUiState['draftTranslate']>, hd: SignUiHandlers, v: View): HTMLElement {
+  const go = (to: 'en' | 'es') => h('button', { type: 'button', ...(d.busy ? { disabled: true } : {}), onClick: () => hd.translateDraft?.(to) }, t(v.lang, to === 'en' ? 'draftToEnglish' : 'draftToSpanish'))
+  return h('div', { class: 'draft-translate' },
+    h('p', { class: 'buttons' }, go('en'), ' ', go('es'), d.canUndo ? ' ' : null, d.canUndo ? h('button', { type: 'button', class: 'link', ...(d.busy ? { disabled: true } : {}), onClick: () => hd.undoTranslate?.() }, t(v.lang, 'draftUndo')) : null),
+    d.busy ? h('p', { class: 'meta', role: 'status' }, t(v.lang, 'translating')) : h('p', { class: 'meta' }, t(v.lang, 'draftGoesTo', { host: d.host })),
+    d.error ? h('p', { class: 'error', role: 'alert' }, t(v.lang, 'translateFailed', { error: d.error })) : null)
 }
 
 function renderResult(r: Published, relays: string[], hd: SignUiHandlers, v: View): HTMLElement {

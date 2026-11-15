@@ -56,7 +56,7 @@ const publisherFake = (outcomes: Record<string, string> = { 'wss://r1.example': 
   return { p, sent }
 }
 
-function boot(o: { verifyAll?: boolean; events?: Event[]; signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; stored?: Record<string, string>; clipboard?: string | Error; copied?: string[]; wide?: boolean; errorMs?: number; verifyWaits?: number[]; zapNet?: Parameters<typeof startApp>[1]['zapNet']; photoNet?: Parameters<typeof startApp>[1]['photoNet'] } = {}) {
+function boot(o: { aiFetch?: typeof fetch; verifyAll?: boolean; events?: Event[]; signer?: ReturnType<typeof fakeSigner>; pub?: ReturnType<typeof publisherFake>; stored?: Record<string, string>; clipboard?: string | Error; copied?: string[]; wide?: boolean; errorMs?: number; verifyWaits?: number[]; zapNet?: Parameters<typeof startApp>[1]['zapNet']; photoNet?: Parameters<typeof startApp>[1]['photoNet'] } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = [], mem = new Map(Object.entries(o.stored ?? { me }))
   const pub = o.pub ?? publisherFake()
@@ -69,6 +69,7 @@ function boot(o: { verifyAll?: boolean; events?: Event[]; signer?: ReturnType<ty
     ...(o.verifyAll ? { verify: () => true } : {}), // the test events carry fake signatures
     ...(o.zapNet ? { zapNet: o.zapNet } : {}),
     ...(o.photoNet ? { photoNet: o.photoNet } : {}),
+    ...(o.aiFetch ? { aiFetch: o.aiFetch } : {}),
   })
   const go = async (hash: string) => { location.hash = hash; listeners.forEach((l) => l()); await tick(60) }
   return { root, mem, pub, go, text: () => root.textContent ?? '' }
@@ -1129,3 +1130,23 @@ describe('zaps paid with the reader\'s wallet (NWC)', () => {
     expect(a.root.querySelector('button.zap-btn')).toBeNull(); expect(a.root.querySelector('.actions')).not.toBeNull()
   })
 })
+
+describe('translating the draft before publishing (own AI key)', () => {
+  it('the review offers it; the translation replaces the text and is reviewed again; "Back to my text" restores it; what gets signed is what is on screen', async () => {
+    const sent: string[] = []
+    const aiFetch = (async (_u: string, init: RequestInit) => { sent.push(JSON.parse(String(init.body)).messages[1].content); return new Response(JSON.stringify({ choices: [{ message: { content: 'Good morning, #nostr' } }] })) }) as unknown as typeof fetch
+    const sg = fakeSigner(); const a = boot({ signer: sg, aiFetch, stored: { me, ai: JSON.stringify({ base: 'https://api.example.com/v1', model: 'm-1', key: 'sk-secret-123' }) } }); await tick(100); await connectClave(a, sg)
+    ;(a.root.querySelector('[aria-label="Write a note"]') as HTMLElement).click(); await tick()
+    const ta = a.root.querySelector('textarea') as HTMLTextAreaElement; ta.value = 'Buenos días, #nostr'; ta.dispatchEvent(new Event('input'))
+    await click(a.root, 'Review')
+    expect(a.text()).toContain('your draft goes to api.example.com'); expect(sent).toHaveLength(0)
+    await click(a.root, 'Translate into English'); await tick(60)
+    expect(sent).toEqual(['Buenos días, #nostr'])
+    expect(a.root.querySelector('pre.preview')!.textContent).toBe('Good morning, #nostr')
+    await click(a.root, 'Back to my text')
+    expect(a.root.querySelector('pre.preview')!.textContent).toBe('Buenos días, #nostr'); expect(btn(a.root, 'Back to my text')).toBeUndefined()
+    await click(a.root, 'Translate into English'); await tick(60); await click(a.root, 'Publish'); await tick(120)
+    expect(a.pub.sent.at(-1)!.event.content).toBe('Good morning, #nostr'); expect(a.pub.sent.at(-1)!.event.tags).toContainEqual(['t', 'nostr'])
+  })
+})
+

@@ -1078,6 +1078,29 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     translations.set(e.id, 'text' in r ? { state: 'done', text: r.text, host: hostOf(cfg.base), model: cfg.model } : { state: 'error', error: r.error }); retranslate(e)
   }
 
+  /** Translating the draft from the review: the translation replaces the composer's text (so mentions and hashtags are worked out again) and the
+   *  review is made again from it. The reader's own words stay at hand until they publish or leave. */
+  let draftTr: { for: Composer; busy: boolean; error?: string; original?: string } | null = null
+  async function translateDraft(to: 'en' | 'es'): Promise<void> {
+    const c = composer
+    if (!aiCfg || !c || !review || draftTr?.busy) return
+    const count = underLimit(safeGet(kv, 'aiCount'), today())
+    const original = draftTr?.for === c ? draftTr.original : undefined
+    if (!count.ok) { draftTr = { for: c, busy: false, error: t(lang, 'translateLimit'), ...(original !== undefined ? { original } : {}) }; return draw() }
+    safeSet(kv, 'aiCount', count.next)
+    draftTr = { for: c, busy: true, ...(original !== undefined ? { original } : {}) }; draw()
+    const r = await aiTranslate(aiCfg, c.text, to, aiFetch)
+    if (composer !== c) return // left meanwhile
+    if ('error' in r) { draftTr = { for: c, busy: false, error: r.error, ...(original !== undefined ? { original } : {}) }; return draw() }
+    draftTr = { for: c, busy: false, original: original ?? c.text }
+    c.text = r.text; writeDraft(draftKey(c), r.text); doReview()
+  }
+  function undoTranslate(): void {
+    const c = composer
+    if (!c || draftTr?.for !== c || draftTr.original === undefined) return
+    c.text = draftTr.original; writeDraft(draftKey(c), c.text); draftTr = null; doReview()
+  }
+
   function saveNwc(text: string): void {
     const c = parseNwc(text)
     if (!c) { nwcError = t(lang, 'nwcInvalid'); draw(); return }
@@ -1797,11 +1820,12 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
       h('details', { class: 'newcomer' }, h('summary', {}, t(lang, 'newTitle')), h('ol', {}, h('li', {}, t(lang, 'newStep1')), h('li', {}, t(lang, 'newStep2')), h('li', {}, t(lang, 'newStep3')))),
       loginError ? h('p', { class: 'error', role: 'alert' }, loginError) : null)
     const signArea = signer ? renderSignArea({
-      emojiPicker: isWide, photos: photosOn && photoServers().length > 0 && signer.state === 'connected', signer: signer.state, extension: !!signer.hasExtension?.(), who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, zapFlow, flash, composer, review, step, result, relays, bunkerText, linkOpen, confirmDisconnect: confirmingDisconnect, shareConfirm, deleteConfirm, followPanel: followPanel(),
+      emojiPicker: isWide, photos: photosOn && photoServers().length > 0 && signer.state === 'connected', signer: signer.state, extension: !!signer.hasExtension?.(), who: who() || (signer.pubkey ? shortNpub(signer.pubkey) : null), connect, connectOpen, zapFlow, flash, composer, review, step, result, ...(aiCfg && composer && review ? { draftTranslate: { host: hostOf(aiCfg.base), busy: draftTr?.for === composer && draftTr.busy, canUndo: draftTr?.for === composer && draftTr.original !== undefined, ...(draftTr?.for === composer && draftTr.error ? { error: draftTr.error } : {}) } } : {}), relays, bunkerText, linkOpen, confirmDisconnect: confirmingDisconnect, shareConfirm, deleteConfirm, followPanel: followPanel(),
     }, {
       openConnect, startLink, pasteBunker: () => void pasteBunker(), useExtension: () => void useExtension(), cancelConnect, bunker: (x) => void bunker(x), dismissFlash: () => { flash = null; draw() }, confirmFollow: () => void confirmFollow(), acceptList, cancelFollow: () => { followFlow = null; draw() }, confirmShare: () => void share(), startQuote: () => { if (shareConfirm) startQuote(shareConfirm) }, cancelShare: () => { shareConfirm = null; draw() }, confirmDelete: () => void deleteNote(), cancelDelete: () => { deleteConfirm = null; draw() }, askDisconnect: () => { confirmingDisconnect = true; draw() }, cancelDisconnect: () => { confirmingDisconnect = false; draw() },
       disconnect: () => { confirmingDisconnect = false; void signer.disconnect(); composer = review = result = null; flash = null; draw() }, copy: (x) => { deps.copy?.(x); say('info', t(lang, 'copied')); draw() },
       edit: (x) => { if (composer) { composer.text = x; writeDraft(draftKey(composer), x) } }, discardDraft: () => { if (composer) { writeDraft(draftKey(composer), null); composer = { ...composer, text: '', restored: false }; draw(); root.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus() } }, review: doReview, publish: () => void publish(), back: () => { review = null; draw() }, cancelComposer: () => { if (composer?.text.trim()) say('info', t(lang, 'draftKept')); composer = null; review = null; draw() },
+      translateDraft: (to) => void translateDraft(to), undoTranslate,
       retry: () => void retry(), dismissResult: () => { result = null; draw() }, startNote, cancelSigning: () => signing?.abort(),
       editBunker: (x) => { bunkerText = x }, setLinkOpen: (o) => { linkOpen = o },
       addPhoto: (f: File) => void addPhoto(f),
