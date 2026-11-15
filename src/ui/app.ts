@@ -35,6 +35,7 @@ import { DEFAULT_RELAYS, memo, queryAuthors, type Fetcher } from '../net/fetcher
 import { fromOutbox } from '../data/outbox.js'
 import { failedRelays, type Publisher } from '../net/publisher.js'
 import { Delivery, DELAYS } from '../net/delivery.js'
+import { checkConfig, hostOf, PRESETS, translate as aiTranslate, underLimit, type AiConfig } from '../core/translate.js'
 import { backupFile, checkHeld, collectBackup, copyNotes, coverage, missedEvents, readBackup, scanNotes, snapshots, type CopyResult } from '../data/rescue.js'
 import { isLockedError } from '../sign/signer.js'
 import { PipelineError, signAndPublish, signOnly, type Published, type SignerApi, type Step } from '../sign/pipeline.js'
@@ -44,7 +45,7 @@ import { checkTemplate, MAX_NOTE_CHARS, withClientTag, type Template } from '../
 import { adopt, h, markDrawn, place, reuseNotes } from './dom.js'
 import { cobweb, icon, logo, pumpkin } from './icons.js'
 import { ago, detectLang, problemText, setSpooky, t, type Key, type Lang } from './i18n.js'
-import { PAGE, POLL_KIND, renderRescue, type RescueState, renderArticle, renderContent, npubEl, renderTrust, renderPeople, renderProfileHead, renderProfileMode, renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
+import { PAGE, POLL_KIND, type TranslationState, translationBox, renderRescue, type RescueState, renderArticle, renderContent, npubEl, renderTrust, renderPeople, renderProfileHead, renderProfileMode, renderRepostGroups, renderFollowers, renderFeedMode, renderHelp, renderPrefs, renderReactionGroups, avatarEl, nameOf, renderJudged, renderList, renderSettings, renderSummary, renderTree, type View } from './render.js'
 import { reactionBar, renderSignArea, type Composer, type Flash, type FollowPanel, type Review } from './sign-ui.js'
 import { installHint, type Env } from './install.js'
 import { halloweenOn, parseScheme, parseTheme, type Scheme, type ThemeChoice, parseAvatars, parseFeedMode, parseFont, parseLang, parseReposts, parseSettings, parseWords, safeGet, safeSet, type AvatarStyle, type FeedMode, type FontSize, type KV } from './store.js'
@@ -75,6 +76,8 @@ export interface Deps {
   /** "Back" button: where the reader came from (the browser's history). */
   goBack?: () => void
   checkVersion?: () => Promise<boolean>; onTick?: (cb: () => void) => void; reload?: () => void
+  /** Translating with the reader's own AI key: the request goes from the browser to their provider. Tests pass a fake. */
+  aiFetch?: typeof fetch
   /** How long the notices stay (tests make them short). */
   popupMs?: number; errorMs?: number
   /** Waits before each re-check of the follow list after publishing it (the relays take a moment to show it). */
@@ -411,8 +414,10 @@ export function startApp(root: HTMLElement, deps: Deps): void {
     return [barFor(j.event)]
   }
   /** The lists are built once and reused between redraws, so a bar already on screen keeps what it showed: redo the bar(s) of this note in place. */
+  /** The notes on screen are not drawn again for this: each copy of the note gets its translation box put in, swapped or taken out. */
+  const retranslate = (e: NostrEvent) => { for (const body of root.querySelectorAll(`article.note[data-id="${e.id}"] .body`)) { const old = body.nextElementSibling?.classList.contains('translation') ? body.nextElementSibling : null; const box = translationBox(e, view()); if (old && box) old.replaceWith(box); else if (old) old.remove(); else if (box) body.after(box) } }
   const rebar = (e: NostrEvent) => { for (const old of root.querySelectorAll(`article.note[data-id="${e.id}"] .actions`)) old.replaceWith(barFor(e)) }
-  const view = (): View => ({ pages: listPages, lang, names, photoServersOf, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), wantReach, ...(deps.avatarProxy ? { emoji: (u: string) => `${deps.avatarProxy}?u=${encodeURIComponent(u)}&s=48` } : {}), picture: (pk: string, px: number) => { const u = realAvatars && (pk === me || !!session?.follows.has(pk)) ? pictures.get(pk) : undefined; return u && deps.avatarProxy ? `${deps.avatarProxy}?u=${encodeURIComponent(u)}&s=${px}` : u }, zapsOf: (id: string) => { const z = zapMap.get(id); if (z === undefined) wantZaps(id); return z ?? undefined }, quoted: (id: string) => quotedMap.get(id), wantQuote, suggestPeople: (word: string) => (session ? matchPeople(names, word, ctx(), 50).filter((p) => fold(p.name).split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(fold(word)))).slice(0, 5) : []), articleTitle: (pk: string, d: string) => (articleTitles.has(`${pk}:${d}`) ? articleTitles.get(`${pk}:${d}`) ?? null : undefined), wantArticle, ...(me ? { saved: { has: (id: string) => savedNotes().some((x) => x.event.id === id), toggle: toggleSaved } } : {}), seen: rememberNotes, interests, deleted: deletedIds(), ...(me ? { self: me } : {}), ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk), deleteNote: (e: NostrEvent) => { if (e.pubkey === me && e.kind === 1) { deleteConfirm = e; draw() } } } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
+  const view = (): View => ({ pages: listPages, lang, names, photoServersOf, actions: signer ? actions : undefined, nowMs: deps.nowMs?.(), avatars: avatarStyle, halloween: halloween(), reach: (id: string) => reachMap.get(id), wantReach, ...(aiCfg ? { translate: (e: NostrEvent, a?: 'go' | 'cancel' | 'hide') => void translateNote(e, a), translation: (id: string) => translations.get(id) } : {}), ...(deps.avatarProxy ? { emoji: (u: string) => `${deps.avatarProxy}?u=${encodeURIComponent(u)}&s=48` } : {}), picture: (pk: string, px: number) => { const u = realAvatars && (pk === me || !!session?.follows.has(pk)) ? pictures.get(pk) : undefined; return u && deps.avatarProxy ? `${deps.avatarProxy}?u=${encodeURIComponent(u)}&s=${px}` : u }, zapsOf: (id: string) => { const z = zapMap.get(id); if (z === undefined) wantZaps(id); return z ?? undefined }, quoted: (id: string) => quotedMap.get(id), wantQuote, suggestPeople: (word: string) => (session ? matchPeople(names, word, ctx(), 50).filter((p) => fold(p.name).split(/[^\p{L}\p{N}]+/u).some((w) => w.startsWith(fold(word)))).slice(0, 5) : []), articleTitle: (pk: string, d: string) => (articleTitles.has(`${pk}:${d}`) ? articleTitles.get(`${pk}:${d}`) ?? null : undefined), wantArticle, ...(me ? { saved: { has: (id: string) => savedNotes().some((x) => x.event.id === id), toggle: toggleSaved } } : {}), seen: rememberNotes, interests, deleted: deletedIds(), ...(me ? { self: me } : {}), ...(signer?.state === 'connected' && me ? { mute: (pk: string) => { if (pk !== me) void startFollow(pk, session?.muted.has(pk) ? 'unmute' : 'mute') }, isMuted: (pk: string) => !!session?.muted.has(pk), deleteNote: (e: NostrEvent) => { if (e.pubkey === me && e.kind === 1) { deleteConfirm = e; draw() } } } : {}), autoImages: (pk: string) => autoImages && !!session?.follows.has(pk), copy: (x) => deps.copy?.(x), hints: relays.slice(0, 2), ...(markFrom !== null ? { isNew: (e: NostrEvent) => e.created_at > markFrom! } : {}) })
   const ctx = () => contextOf(session!, { mutedWords: words, mutedKeys: [] })
   const who = () => (signer?.pubkey ? nameOf(view(), signer.pubkey) : '')
 
@@ -1039,6 +1044,40 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
   const zapNet = deps.zapNet ?? { getJson, nwc: (c: NwcConnection, m: NwcMethod, params?: Record<string, unknown>) => nwcCall(c, m, params) }
   const nwcKey = () => `nwc:${me}`
   const nwcOf = (): NwcConnection | null => (me ? parseNwc(safeGet(kv, nwcKey()) ?? '') : null)
+  // Translating notes with the reader's own AI key (core/translate.ts). Off until set up; the key stays in this device's storage only.
+  const aiStored = (): AiConfig | null => { try { const c = checkConfig(JSON.parse(safeGet(kv, 'ai') ?? 'null') ?? {}); return 'ok' in c ? c.ok : null } catch { return null } }
+  let aiCfg = aiStored(), aiState: { testing: true } | { error: string } | { ok: string } | null = null, aiError: string | null = null
+  const translations = new Map<string, TranslationState>()
+  const aiFetch = deps.aiFetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a))
+  const today = () => new Date(deps.nowMs?.() ?? Date.now()).toISOString().slice(0, 10)
+  function saveAi(c: { base: string; model: string; key: string }): void {
+    const r = checkConfig(c)
+    if ('error' in r) { aiError = t(lang, r.error === 'base' ? 'aiBadBase' : r.error === 'model' ? 'aiBadModel' : 'aiBadKey'); return draw() }
+    aiCfg = r.ok; aiError = null; aiState = null; safeSet(kv, 'ai', JSON.stringify(r.ok)); safeSet(kv, 'aiConsent', null); draw(); void testAi()
+  }
+  function removeAi(): void { aiCfg = null; aiState = null; aiError = null; translations.clear(); safeSet(kv, 'ai', null); safeSet(kv, 'aiConsent', null); draw() }
+  async function testAi(): Promise<void> {
+    if (!aiCfg) return
+    aiState = { testing: true }; draw()
+    const r = await aiTranslate(aiCfg, lang === 'es' ? 'Hello, world!' : '¡Hola, mundo!', lang, aiFetch)
+    aiState = 'text' in r ? { ok: r.text.slice(0, 80) } : { error: r.error }; draw()
+  }
+  /** The "…" asked to translate a note (no action), or the reader answered in its box. The first time with a provider, it asks before sending. */
+  async function translateNote(e: NostrEvent, action?: 'go' | 'cancel' | 'hide'): Promise<void> {
+    if (!aiCfg) return
+    if (action === 'cancel' || action === 'hide') { translations.delete(e.id); return retranslate(e) }
+    if (!action && safeGet(kv, 'aiConsent') !== aiCfg.base) { translations.set(e.id, { state: 'consent', host: hostOf(aiCfg.base) }); return retranslate(e) }
+    if (action === 'go') safeSet(kv, 'aiConsent', aiCfg.base)
+    const count = underLimit(safeGet(kv, 'aiCount'), today())
+    if (!count.ok) { translations.set(e.id, { state: 'error', error: t(lang, 'translateLimit') }); return retranslate(e) }
+    safeSet(kv, 'aiCount', count.next)
+    const cfg = aiCfg
+    translations.set(e.id, { state: 'loading' }); retranslate(e)
+    const r = await aiTranslate(cfg, e.content, lang, aiFetch)
+    if (!translations.has(e.id)) return // hidden meanwhile
+    translations.set(e.id, 'text' in r ? { state: 'done', text: r.text, host: hostOf(cfg.base), model: cfg.model } : { state: 'error', error: r.error }); retranslate(e)
+  }
+
   function saveNwc(text: string): void {
     const c = parseNwc(text)
     if (!c) { nwcError = t(lang, 'nwcInvalid'); draw(); return }
@@ -1780,7 +1819,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
     const helpPage = renderHelp(view(), helpOpen, (id, isOpen) => { if (isOpen) helpOpen.add(id); else helpOpen.delete(id) })
     const content: (HTMLElement | null)[] = route.name === 'help' ? [signArea, helpPage]
       : !me ? [...(route.name === 'note' && guestBody ? [guestBody] : []), loginForm, signArea, route.name === 'note' ? null : guestPick]
-      : route.name === 'settings' ? [signArea, renderPrefs({ zapHistory: { open: zapHistoryOpen, state: zapHistoryState, onToggle: (o: boolean) => { zapHistoryOpen = o; if (o) void loadZapHistory(); else draw() } }, ...(signer ? { photos: { on: photosOn, listed: myBlossom ?? [], chosen: photoServer, suggested: SUGGESTED_SERVERS, onToggle: setPhotos, onChoose: choosePhotoServer, draft: blossomDraft, ...(signer.state === 'connected' ? { onPublishList: () => void publishPhotoList(), onDraft: (l: string[]) => { blossomDraft = JSON.stringify(l) === JSON.stringify(myBlossom) ? null : l; draw() }, onPublishDraft: () => void publishPhotoDraft() } : {}) } } : {}), font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, realAvatars, onRealAvatars: changeRealAvatars, scheme, onScheme: changeScheme, halloween: halloween(), onHalloween: changeTheme, autoImages, onAutoImages: changeAutoImages, interests, onInterests: changeInterests, reposts: showReposts, onReposts: changeReposts, clientTag, onClientTag: changeClientTag, outbox: readOutbox, onOutbox: changeOutbox, nwc: { relay: nwcOf()?.relays[0] ?? null, state: nwcState, error: nwcError, canSign: signer?.state === 'connected' }, onNwcSave: saveNwc, onNwcRemove: removeNwc, onNwcTest: () => void testNwc(), relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
+      : route.name === 'settings' ? [signArea, renderPrefs({ zapHistory: { open: zapHistoryOpen, state: zapHistoryState, onToggle: (o: boolean) => { zapHistoryOpen = o; if (o) void loadZapHistory(); else draw() } }, ...(signer ? { photos: { on: photosOn, listed: myBlossom ?? [], chosen: photoServer, suggested: SUGGESTED_SERVERS, onToggle: setPhotos, onChoose: choosePhotoServer, draft: blossomDraft, ...(signer.state === 'connected' ? { onPublishList: () => void publishPhotoList(), onDraft: (l: string[]) => { blossomDraft = JSON.stringify(l) === JSON.stringify(myBlossom) ? null : l; draw() }, onPublishDraft: () => void publishPhotoDraft() } : {}) } } : {}), font, avatars: avatarStyle, sampleKey: me!, onAvatars: changeAvatars, realAvatars, onRealAvatars: changeRealAvatars, scheme, onScheme: changeScheme, halloween: halloween(), onHalloween: changeTheme, autoImages, onAutoImages: changeAutoImages, interests, onInterests: changeInterests, reposts: showReposts, onReposts: changeReposts, clientTag, onClientTag: changeClientTag, outbox: readOutbox, onOutbox: changeOutbox, nwc: { relay: nwcOf()?.relays[0] ?? null, state: nwcState, error: nwcError, canSign: signer?.state === 'connected' }, onNwcSave: saveNwc, onNwcRemove: removeNwc, onNwcTest: () => void testNwc(), ai: { saved: aiCfg ? { host: hostOf(aiCfg.base), model: aiCfg.model } : null, state: aiState, error: aiError, presets: PRESETS }, onAiSave: saveAi, onAiTest: () => void testAi(), onAiRemove: removeAi, relays, isDefault: sameList(relays, defaultRelays), error: relayError, probe: probes, onFont: changeFont, onAdd: onAddRelay, onRemove: (u) => changeRelays(removeRelay(relays, u)), onTest: onTestRelay, onReset: () => changeRelays(defaultRelays),
         list: { state: listState(published, relays), publishedCount: published?.length ?? 0, canSign: signer?.state === 'connected', confirming: confirmingList },
         onAskPublish: () => { confirmingList = true; draw() }, onCancelPublish: () => { confirmingList = false; draw() }, onPublish: () => void publishList(), onUsePublished: () => { if (published) changeRelays(published) } }, view()), renderRescue({ state: rescue, saving: rescueSaving, savedCount: rescueSaved, restoreNote, onSaveMissed: () => void saveMissed(), ...(publisher ? { onRestore: (f: File) => void restoreRescue(f) } : {}), onScan: () => void scanRescue(), onCopy: () => void copyRescue(), onSave: () => void saveRescue() }, view()), renderSettings({ settings, words, graph: session ? { ...session.graphInfo, loaded: session.graphInfo.graph.loaded } : null, onSettings: changeSettings, onWords: changeWords }, view())]
       : isWide ? [wideView(route, signArea, signOut)]

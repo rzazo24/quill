@@ -363,7 +363,7 @@ a.quote { display: grid; gap: 4px; margin: 8px 0 4px; padding: 10px 12px; border
 .fab-search { position: fixed; z-index: 6; left: max(calc(16px + env(safe-area-inset-left)), calc((100% - var(--col)) / 2 + 16px)); bottom: calc(var(--tab-h) + var(--tab-safe) + 16px); width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: var(--panel); border: 2px solid var(--accent); color: var(--accent); box-shadow: 0 4px 16px rgba(0,0,0,.5) }
 .search-form { display: grid; gap: 8px } .search-form .meta { margin: 0 }
 .search-row { display: flex; align-items: center; gap: 10px; color: var(--muted) }
-.search-box { flex: 1; min-width: 0; font: inherit; font-size: 1rem; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text) }
+.search-box { flex: 1; min-width: 0; font: inherit; font-size: 1rem; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--input-bg, #0b0f16); color: inherit }
 .search-box:focus { outline: 2px solid var(--accent); outline-offset: 1px }
 .search-people h2 { margin: 0 0 6px; font-size: 1rem } .search-people ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
 .search-people li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap } .search-people li a { display: inline-flex; align-items: center; gap: 8px; color: var(--text); text-decoration: none }
@@ -398,7 +398,7 @@ button.npub-copy { display: block; min-height: 0; padding: 0; background: none; 
 /* a note about one of the reader's topics: a mark and an accent edge, nothing moved */
 .note.interesting { border-left: 3px solid var(--accent) }
 .interest { display: flex; align-items: center; gap: 5px; margin: 0 0 2px; font-size: .82rem; color: var(--accent) } .interest .icon { flex: none }
-textarea.interests { width: 100%; box-sizing: border-box; font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text) }
+textarea.interests { width: 100%; box-sizing: border-box; font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--input-bg, #0b0f16); color: inherit }
 .prefs label.check + label.check { margin-top: 12px }
 
 /* a note the reader deleted: just a line that says so */
@@ -536,3 +536,12 @@ ul.zap-history .zap-dir { flex: none; width: 1em; text-align: center; font-weigh
 ul.zap-history .zap-main { flex: 1; min-width: 0; overflow-wrap: anywhere } ul.zap-history .zap-comment { color: var(--muted) }
 ul.zap-history li > .meta { flex: none; font-size: .8rem }
 .pic-failed { display: inline } .pic-find { margin-left: 4px } .pic-tried { margin: 4px 0 0; padding-left: 18px; font-size: .8rem } .pic-tried li { overflow-wrap: anywhere }
+/* Translating with the reader's own AI key: the settings form and the box under a note */
+.ai .warning { border-left: 3px solid #f59e0b; padding: 8px 10px; background: rgba(245, 158, 11, .08); border-radius: 6px; font-size: .9rem }
+.ai-form { display: grid; gap: 10px }
+.ai-form label { display: grid; gap: 4px }
+.ai-form input, .ai-form select { width: 100%; box-sizing: border-box; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border, #2a3445); background: var(--input-bg, #0b0f16); color: inherit }
+.ai-form button { justify-self: start }
+.translation { margin: 8px 0 4px; padding: 8px 12px; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--card-2, rgba(127, 127, 127, .08)) }
+.translation p { margin: 4px 0 }
+.translation-text { white-space: pre-wrap; overflow-wrap: anywhere }

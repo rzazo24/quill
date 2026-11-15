@@ -18,7 +18,7 @@ const roots: HTMLElement[] = []
 /** A choice in the search Filters (Show / Search in): its buttons are there even while the panel is folded. */
 const pickFilter = (a: { root: HTMLElement }, label: string) => ([...a.root.querySelectorAll('.search-filters button')].find((b) => b.textContent === label) as HTMLButtonElement).click()
 
-function boot(opts: { silent?: { on: boolean }; events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; copy?: (text: string) => void; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; failFor?: (f: Filter) => boolean; light?: { value: boolean }; elsewhere?: { relay: string; events: Event[]; delayMs: number }; avatarProxy?: string; pick?: unknown; saveFile?: (name: string, text: string) => void } = {}) {
+function boot(opts: { silent?: { on: boolean }; events?: Event[]; delayMs?: number; stored?: Record<string, string>; languages?: string[]; env?: { ios: boolean; standalone: boolean }; clock?: { now: number }; newer?: { value: boolean }; reachable?: (url: string) => boolean; goBack?: () => void; wide?: { value: boolean }; copy?: (text: string) => void; searchable?: Event[]; onlyWhenAll?: (e: Event) => boolean; slowFor?: (f: Filter) => number; failFor?: (f: Filter) => boolean; light?: { value: boolean }; elsewhere?: { relay: string; events: Event[]; delayMs: number }; avatarProxy?: string; pick?: unknown; saveFile?: (name: string, text: string) => void; aiFetch?: typeof fetch } = {}) {
   const root = document.createElement('div'); document.body.append(root); roots.push(root)
   const location = { hash: '' }, listeners: (() => void)[] = []
   // the tests do not depend on today's date: without a clock of their own, the Halloween season (late October) is not let in by itself
@@ -27,7 +27,7 @@ function boot(opts: { silent?: { on: boolean }; events?: Event[]; delayMs?: numb
     ...(opts.avatarProxy ? { avatarProxy: opts.avatarProxy } : {}),
     ...(opts.pick !== undefined ? { pickSource: async () => opts.pick } : {}),
     fetcher: { ...(opts.silent ? { activity: () => ({ asked: Date.now(), answered: opts.silent!.on ? 0 : Date.now() }) } : {}), query: async (f, o) => { calls.n++; filters.push(f); if (opts.failFor?.(f)) throw new Error('relay trouble'); if (o?.only) { const el = opts.elsewhere; if (!el || !o.only.includes(el.relay)) return []; await new Promise((r) => setTimeout(r, el.delayMs)); return el.events.filter((e) => answers(f, e)) } return base.query(f, o) }, reconnect: () => { reconnects.n++ } }, env: opts.env, goBack: opts.goBack, nowMs: opts.clock ? () => opts.clock!.now : undefined, onVisible: (cb) => visible.push(cb), onTick: (cb) => ticks.push(cb), onPoll: (cb) => polls.push(cb), setRelays: (l) => setRelays.push(l), probeRelay: async (u) => (opts.reachable ?? (() => true))(u), isWide: () => !!opts.wide?.value, verify: (e) => e.content !== 'tampered', prefersLight: () => !!opts.light?.value, onSchemeChange: (cb) => schemeChanged.push(cb), onWide: (cb) => wideChanged.push(cb), reload: () => { reloads.n++ },
-    copy: opts.copy, saveFile: opts.saveFile,
+    copy: opts.copy, saveFile: opts.saveFile, aiFetch: opts.aiFetch,
     searchFetcher: opts.searchable ? { query: async (f: Filter) => opts.searchable!.filter((e) => answers(f, e) && (!(f as { search?: string }).search || e.content.toLowerCase().includes((f as { search: string }).search.toLowerCase()))) } : undefined,
     checkVersion: opts.newer ? async () => { asked.n++; return opts.newer!.value } : undefined, languages: opts.languages ?? ['en'], location, onHash: (cb) => listeners.push(cb), setHash: (h) => { location.hash = h; listeners.forEach((l) => l()) },
     storage: { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => void mem.set(k, v), removeItem: (k) => void mem.delete(k) },
@@ -1664,3 +1664,30 @@ describe('Show more survives the page being drawn again', () => {
     expect(cards()).toBe(40) // …and what was opened is still open
   })
 })
+
+describe('translating a note with the reader\'s own AI key', () => {
+  const menuItem = (n: Element, label: string) => { (n.querySelector('.more-btn') as HTMLButtonElement).click(); return [...n.querySelectorAll('.more-list button')].find((b) => b.textContent === label) as HTMLButtonElement | undefined }
+  const ai = JSON.stringify({ base: 'https://api.example.com/v1', model: 'm-1', key: 'sk-secret-123' })
+  it('is not offered until set up; then asks once before sending, shows the translation marked as such, and Settings never shows the key', async () => {
+    const note = ev(friend, 'Bonjour tout le monde', { created_at: 8000 })
+    const plain = boot({ events: [...world, note], stored: { me } }); await tick(300)
+    const card0 = [...plain.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('Bonjour'))!
+    expect(menuItem(card0, 'Translate')).toBeUndefined()
+    const asked: { url: string; body: string; auth: string }[] = []
+    const aiFetch = (async (url: string, init: RequestInit) => { asked.push({ url, body: String(init.body), auth: (init.headers as Record<string, string>).authorization }); return new Response(JSON.stringify({ choices: [{ message: { content: 'Hello everyone' } }] })) }) as unknown as typeof fetch
+    const a = boot({ events: [...world, note], stored: { me, ai }, aiFetch }); await tick(300)
+    const card = () => [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('Bonjour'))!
+    menuItem(card(), 'Translate')!.click(); await tick(30)
+    expect(card().querySelector('.translation')!.textContent).toContain('goes to api.example.com'); expect(asked).toHaveLength(0) // nothing sent before the yes
+    ;([...card().querySelectorAll('.translation button')].find((b) => b.textContent === 'Translate') as HTMLButtonElement).click(); await tick(50)
+    expect(asked).toHaveLength(1); expect(asked[0]!.url).toBe('https://api.example.com/v1/chat/completions'); expect(asked[0]!.auth).toBe('Bearer sk-secret-123'); expect(asked[0]!.body).toContain('Bonjour tout le monde')
+    expect(card().querySelector('.translation-text')!.textContent).toBe('Hello everyone'); expect(card().querySelector('.translation')!.textContent).toContain('Machine translation · m-1 at api.example.com')
+    ;([...card().querySelectorAll('.translation button')].find((b) => b.textContent === 'Hide translation') as HTMLButtonElement).click(); await tick(30)
+    expect(card().querySelector('.translation')).toBeNull()
+    menuItem(card(), 'Translate')!.click(); await tick(50) // already said yes to this provider: straight away
+    expect(asked).toHaveLength(2); expect(card().querySelector('.translation-text')!.textContent).toBe('Hello everyone')
+    await a.go('#/settings'); await tick(100)
+    expect(a.text()).toContain('Translating with m-1 at api.example.com.'); expect(a.root.innerHTML).not.toContain('sk-secret-123')
+  })
+})
+
