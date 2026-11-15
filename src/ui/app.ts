@@ -34,6 +34,7 @@ import { contextOf, loadGraphInfo, loadOwnLists, pendingGraph, type Session } fr
 import { DEFAULT_RELAYS, memo, queryAuthors, type Fetcher } from '../net/fetcher.js'
 import { fromOutbox } from '../data/outbox.js'
 import { failedRelays, type Publisher } from '../net/publisher.js'
+import { Delivery, DELAYS } from '../net/delivery.js'
 import { backupFile, checkHeld, collectBackup, copyNotes, coverage, missedEvents, readBackup, scanNotes, snapshots, type CopyResult } from '../data/rescue.js'
 import { isLockedError } from '../sign/signer.js'
 import { PipelineError, signAndPublish, signOnly, type Published, type SignerApi, type Step } from '../sign/pipeline.js'
@@ -119,6 +120,9 @@ export function startApp(root: HTMLElement, deps: Deps): void {
   const fetcher = memo(deps.fetcher)
   const kv = deps.storage
   const { signer, publisher } = deps
+  // Checks a little later that what was published is really on each relay, and sends the same signed event again where it is not (net/delivery.ts).
+  // It asks the raw fetcher: the memo would answer from what it already saw.
+  const delivery = publisher ? new Delivery({ publisher, fetcher: deps.fetcher, kv, now: deps.nowMs }) : null
   const defaultRelays = deps.relays ?? DEFAULT_RELAYS
   let relays = parseRelays(safeGet(kv, 'relays')) ?? defaultRelays
   let font: FontSize = parseFont(safeGet(kv, 'font'))
@@ -1295,6 +1299,7 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
       try {
         result = await signAndPublish({ signer, publisher, kv, now: deps.nowMs, signal: mine.signal, followBase: opts.followBase, ...(opts.profileBase ? { profileBase: opts.profileBase } : {}), ...(opts.deleteTarget ? { deleteTarget: opts.deleteTarget } : {}) }, clientTag ? withClientTag(template) : template, (s) => { step = s; draw() })
         step = null; fetcher.clear()
+        if (result && delivery) { delivery.track(result.event, result.outcomes); setTimeout(() => void delivery.tick(), DELAYS[0]! + 1000) }
         const shown = result
         if (shown && !failedRelays(shown.outcomes).length) setTimeout(() => { if (result === shown) { result = null; draw() } }, 5000) // all went well: the card goes by itself
         return true
@@ -1845,11 +1850,12 @@ if (!content || !live() || (!force && scrolled() > 200)) return false
   // Coming back to the app after a while (an installed app stays alive in the background): show fresh notes, not what was there hours ago.
   // back from the background: a phone may have cut the relay connections meanwhile, so fresh ones, and a look at what is new right away
   deps.onVisible?.((awayMs) => {
-    void checkUpdate()
+    void checkUpdate(); void delivery?.tick()
     if (awayMs > 20_000) { fetcher.reconnect(); void checkLocked() }
     if (me && !busy && (deps.nowMs?.() ?? Date.now()) - lastLoadAt > 120_000) refresh(); else if (!busy && awayMs > 20_000) void poll().then(checkNewNotes)
   })
-  deps.onTick?.(() => { void checkUpdate() })
+  deps.onTick?.(() => { void checkUpdate(); void delivery?.tick() })
+  void delivery?.tick() // what was left from the last visit
   deps.onPoll?.(() => { if (!busy) void poll().then(checkNewNotes) })
   void checkUpdate()
   draw()
