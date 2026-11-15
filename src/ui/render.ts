@@ -561,8 +561,8 @@ export interface PrefsProps {
   /** The reader's zap history (from the public receipts), folded until opened: then it is read. */
   zapHistory?: { open: boolean; state: 'loading' | 'failed' | ZapEntry[] | null; onToggle: (open: boolean) => void }
   /** Translating notes with the reader's own AI key: what is saved (never the key itself), the last test, and the presets to pick from. */
-  ai?: { saved: { host: string; model: string } | null; state: { testing: true } | { error: string } | { ok: string } | null; error: string | null; presets: { id: string; name: string; base: string; model: string }[] }
-  onAiSave?: (c: { base: string; model: string; key: string }) => void; onAiTest?: () => void; onAiRemove?: () => void
+  ai?: { to: Lang; saved: { host: string; model: string } | null; state: { testing: true } | { error: string } | { ok: string } | null; error: string | null; presets: { id: string; name: string; base: string; model: string }[] }
+  onAiTo?: (l: Lang) => void; onAiSave?: (c: { base: string; model: string; key: string }) => void; onAiTest?: () => void; onAiRemove?: () => void
   font: FontSize; avatars: AvatarStyle; sampleKey: string; onAvatars: (s: AvatarStyle) => void; realAvatars?: boolean; onRealAvatars?: (on: boolean) => void; reposts: boolean; onReposts: (on: boolean) => void; clientTag?: boolean; onClientTag?: (on: boolean) => void; outbox: boolean; onOutbox: (on: boolean) => void; nwc?: { relay: string | null; state: { testing: true } | { balance: number | null } | { error: string } | null; error: string | null; canSign: boolean }; onNwcSave?: (text: string) => void; onNwcRemove?: () => void; onNwcTest?: () => void; interests: string[]; onInterests: (text: string) => void; autoImages: boolean; onAutoImages: (on: boolean) => void; scheme: Scheme; onScheme: (s: Scheme) => void; halloween: boolean; onHalloween: (on: boolean) => void; relays: string[]; isDefault: boolean; error: string | null; probe: ReadonlyMap<string, 'testing' | 'up' | 'down'>
   /** The list published on Nostr compared with this one, and what can be done about it. */
   list: { state: ListState; publishedCount: number; canSign: boolean; confirming: boolean }
@@ -678,7 +678,9 @@ function aiArea(p: PrefsProps, v: View): HTMLElement {
   const a = p.ai!
   const said = !a.state ? null : 'testing' in a.state ? h('p', { class: 'status loading', role: 'status' }, h('span', {}, t(v.lang, 'aiTesting'))) : 'error' in a.state ? h('p', { class: 'error', role: 'alert' }, t(v.lang, 'translateFailed', { error: a.state.error })) : h('p', { class: 'meta', role: 'status' }, t(v.lang, 'aiTestOk', { text: a.state.ok }))
   if (a.saved) return h('div', { class: 'ai' }, h('h3', {}, t(v.lang, 'aiTitle')),
-    h('p', { class: 'meta' }, t(v.lang, 'aiSaved', { host: a.saved.host, model: a.saved.model })), said,
+    h('p', { class: 'meta' }, t(v.lang, 'aiSaved', { host: a.saved.host, model: a.saved.model })),
+    h('div', { class: 'seg ai-to', role: 'group', 'aria-label': t(v.lang, 'aiTo') }, h('span', { class: 'meta' }, t(v.lang, 'aiTo'), ' '), ...(['es', 'en'] as const).map((l) => h('button', { type: 'button', 'aria-pressed': String(a.to === l), onClick: () => p.onAiTo?.(l) }, l === 'es' ? 'Español' : 'English'))),
+    said,
     h('p', { class: 'buttons' }, h('button', { type: 'button', onClick: () => p.onAiTest?.() }, t(v.lang, 'aiTest')), ' ', h('button', { type: 'button', class: 'danger', onClick: () => p.onAiRemove?.() }, t(v.lang, 'aiRemove'))),
     h('p', { class: 'meta' }, t(v.lang, 'aiPrivacy')))
   const base = h('input', { type: 'url', class: 'ai-base', autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false', placeholder: 'https://api.deepseek.com', 'aria-label': t(v.lang, 'aiBase') }) as HTMLInputElement

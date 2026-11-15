@@ -1689,5 +1689,15 @@ describe('translating a note with the reader\'s own AI key', () => {
     await a.go('#/settings'); await tick(100)
     expect(a.text()).toContain('Translating with m-1 at api.example.com.'); expect(a.root.innerHTML).not.toContain('sk-secret-123')
   })
+  it('translates into the language chosen for it, not the interface\'s: an English interface can read translations in Spanish', async () => {
+    const note = ev(friend, 'Good morning everyone', { created_at: 8000 })
+    const bodies: string[] = []
+    const aiFetch = (async (_u: string, init: RequestInit) => { bodies.push(String(init.body)); return new Response(JSON.stringify({ choices: [{ message: { content: 'Buenos días a todos' } }] })) }) as unknown as typeof fetch
+    const a = boot({ events: [...world, note], languages: ['en'], stored: { me, lang: 'en', ai, aiTo: 'es', aiConsent: 'https://api.example.com/v1' }, aiFetch }); await tick(300)
+    const card = [...a.root.querySelectorAll('article.note')].find((n) => n.textContent!.includes('Good morning'))!
+    menuItem(card, 'Translate')!.click(); await tick(50)
+    expect(JSON.parse(bodies[0]!).messages[0].content).toMatch(/into Spanish/)
+    expect(card.querySelector('.translation-text')!.textContent).toBe('Buenos días a todos')
+  })
 })
 
