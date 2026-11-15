@@ -20,7 +20,8 @@ const MAX_INPUT = 4000
 
 /** A usable configuration, or why not. Only https (a page served over https cannot call plain http, and a key must not travel in clear). */
 export function checkConfig(c: Partial<AiConfig>): { ok: AiConfig } | { error: 'base' | 'model' | 'key' } {
-  const base = (c.base ?? '').trim().replace(/\/+$/, ''), model = (c.model ?? '').trim(), key = (c.key ?? '').trim()
+  // a key pasted on a phone can bring invisible company (spaces, line breaks, zero-width or non-breaking characters): none belong in a key
+  const base = (c.base ?? '').trim().replace(/\/+$/, ''), model = (c.model ?? '').trim(), key = (c.key ?? '').replace(/[\s\u00a0\u200b-\u200d\u2060\ufeff]+/g, '')
   let u: URL | null = null
   try { u = new URL(base) } catch { /* below */ }
   if (!u || u.protocol !== 'https:' || u.username || u.password || u.search || u.hash) return { error: 'base' }
