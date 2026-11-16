@@ -281,8 +281,9 @@ function renderReview(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement 
 function draftTranslateArea(d: NonNullable<SignUiState['draftTranslate']>, hd: SignUiHandlers, v: View): HTMLElement {
   const go = (to: 'en' | 'es') => h('button', { type: 'button', ...(d.busy ? { disabled: true } : {}), onClick: () => hd.translateDraft?.(to) }, t(v.lang, to === 'en' ? 'draftToEnglish' : 'draftToSpanish'))
   return h('div', { class: 'draft-translate' },
-    h('p', { class: 'buttons' }, h('span', { class: 'meta' }, t(v.lang, 'translateLabel')), ' ', go('en'), ' ', go('es'), ' ', d.busy ? h('span', { class: 'meta', role: 'status' }, t(v.lang, 'translating')) : h('span', { class: 'meta', title: t(v.lang, 'draftGoesTo', { host: d.host }) }, t(v.lang, 'draftVia', { host: d.host })),
-      d.canUndo ? ' ' : null, d.canUndo ? h('button', { type: 'button', class: 'link', ...(d.busy ? { disabled: true } : {}), onClick: () => hd.undoTranslate?.() }, t(v.lang, 'draftUndo')) : null),
+    h('div', { class: 'draft-translate-row' }, h('span', { class: 'meta' }, t(v.lang, 'translateLabel')), go('en'), go('es'),
+      d.canUndo ? h('button', { type: 'button', class: 'link', ...(d.busy ? { disabled: true } : {}), onClick: () => hd.undoTranslate?.() }, t(v.lang, 'draftUndo')) : null),
+    d.busy ? h('p', { class: 'meta draft-via', role: 'status' }, t(v.lang, 'translating')) : h('p', { class: 'meta draft-via', title: t(v.lang, 'draftGoesTo', { host: d.host }) }, t(v.lang, 'draftVia', { host: d.host })),
     d.error ? h('p', { class: 'error', role: 'alert' }, t(v.lang, 'translateFailed', { error: d.error })) : null)
 }
 

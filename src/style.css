@@ -545,3 +545,8 @@ ul.zap-history li > .meta { flex: none; font-size: .8rem }
 .translation { margin: 8px 0 4px; padding: 8px 12px; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--card-2, rgba(127, 127, 127, .08)) }
 .translation p { margin: 4px 0 }
 .translation-text { white-space: pre-wrap; overflow-wrap: anywhere }
+/* Review: translating the draft, one tidy row of buttons and the provider underneath */
+.draft-translate { margin: 10px 0 14px }
+.draft-translate-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px }
+.draft-translate-row button:not(.link) { min-height: 36px; padding: 0 14px }
+.draft-via { margin: 6px 0 0; font-size: .85rem; overflow-wrap: anywhere }
