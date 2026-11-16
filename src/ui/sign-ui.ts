@@ -270,8 +270,7 @@ function renderReview(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement 
     h('pre', { class: 'preview' }, r.template.content),
     r.target ? h('p', { class: 'meta' }, t(v.lang, r.quote ? 'previewQuoteOf' : 'previewReplyTo', { who: nameOf(v, r.target.pubkey) })) : null,
     r.mentions ? h('p', { class: 'meta' }, t(v.lang, 'previewMentions', { n: r.mentions })) : null,
-    h('p', { class: 'meta' }, t(v.lang, 'previewRelays', { n: s.relays.length }), ` · kind ${r.template.kind} (${kind}) · ${r.template.tags.length} tags`),
-    r.template.tags.some((x) => x[0] === 'client') ? h('p', { class: 'meta' }, t(v.lang, 'previewClient')) : null,
+    h('p', { class: 'meta', title: `kind ${r.template.kind}` }, [t(v.lang, 'previewRelays', { n: s.relays.length }), t(v.lang, kind === 'reaction' ? 'previewReaction' : 'previewNote'), r.template.tags.length === 1 ? t(v.lang, 'previewTag') : t(v.lang, 'previewTags', { n: r.template.tags.length }), ...(r.template.tags.some((x) => x[0] === 'client') ? [t(v.lang, 'previewClientShort')] : [])].join(' · ')),
     h('p', { class: 'meta' }, t(v.lang, 'previewPublic')),
     s.draftTranslate && r.template.kind !== 7 ? draftTranslateArea(s.draftTranslate, hd, v) : null,
     h('p', { class: 'buttons' }, h('button', { type: 'button', onClick: hd.publish, ...(s.draftTranslate?.busy ? { disabled: true } : {}) }, t(v.lang, 'publish')), ' ', h('button', { type: 'button', class: 'link', onClick: hd.back }, t(v.lang, 'backEdit'))),
@@ -282,8 +281,8 @@ function renderReview(s: SignUiState, hd: SignUiHandlers, v: View): HTMLElement 
 function draftTranslateArea(d: NonNullable<SignUiState['draftTranslate']>, hd: SignUiHandlers, v: View): HTMLElement {
   const go = (to: 'en' | 'es') => h('button', { type: 'button', ...(d.busy ? { disabled: true } : {}), onClick: () => hd.translateDraft?.(to) }, t(v.lang, to === 'en' ? 'draftToEnglish' : 'draftToSpanish'))
   return h('div', { class: 'draft-translate' },
-    h('p', { class: 'buttons' }, go('en'), ' ', go('es'), d.canUndo ? ' ' : null, d.canUndo ? h('button', { type: 'button', class: 'link', ...(d.busy ? { disabled: true } : {}), onClick: () => hd.undoTranslate?.() }, t(v.lang, 'draftUndo')) : null),
-    d.busy ? h('p', { class: 'meta', role: 'status' }, t(v.lang, 'translating')) : h('p', { class: 'meta' }, t(v.lang, 'draftGoesTo', { host: d.host })),
+    h('p', { class: 'buttons' }, h('span', { class: 'meta' }, t(v.lang, 'translateLabel')), ' ', go('en'), ' ', go('es'), ' ', d.busy ? h('span', { class: 'meta', role: 'status' }, t(v.lang, 'translating')) : h('span', { class: 'meta', title: t(v.lang, 'draftGoesTo', { host: d.host }) }, t(v.lang, 'draftVia', { host: d.host })),
+      d.canUndo ? ' ' : null, d.canUndo ? h('button', { type: 'button', class: 'link', ...(d.busy ? { disabled: true } : {}), onClick: () => hd.undoTranslate?.() }, t(v.lang, 'draftUndo')) : null),
     d.error ? h('p', { class: 'error', role: 'alert' }, t(v.lang, 'translateFailed', { error: d.error })) : null)
 }
 
