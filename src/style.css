@@ -398,7 +398,7 @@ button.npub-copy { display: block; min-height: 0; padding: 0; background: none; 
 /* a note about one of the reader's topics: a mark and an accent edge, nothing moved */
 .note.interesting { border-left: 3px solid var(--accent) }
 .interest { display: flex; align-items: center; gap: 5px; margin: 0 0 2px; font-size: .82rem; color: var(--accent) } .interest .icon { flex: none }
-textarea.interests { width: 100%; box-sizing: border-box; font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--input-bg, #0b0f16); color: inherit }
+textarea.interests { width: 100%; box-sizing: border-box; font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text) }
 .prefs label.check + label.check { margin-top: 12px }
 
 /* a note the reader deleted: just a line that says so */
