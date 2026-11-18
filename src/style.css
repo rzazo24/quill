@@ -363,7 +363,7 @@ a.quote { display: grid; gap: 4px; margin: 8px 0 4px; padding: 10px 12px; border
 .fab-search { position: fixed; z-index: 6; left: max(calc(16px + env(safe-area-inset-left)), calc((100% - var(--col)) / 2 + 16px)); bottom: calc(var(--tab-h) + var(--tab-safe) + 16px); width: 56px; height: 56px; min-height: 56px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: var(--panel); border: 2px solid var(--accent); color: var(--accent); box-shadow: 0 4px 16px rgba(0,0,0,.5) }
 .search-form { display: grid; gap: 8px } .search-form .meta { margin: 0 }
 .search-row { display: flex; align-items: center; gap: 10px; color: var(--muted) }
-.search-box { flex: 1; min-width: 0; font: inherit; font-size: 1rem; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--input-bg, #0b0f16); color: inherit }
+.search-box { flex: 1; min-width: 0; font: inherit; font-size: 1rem; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text) }
 .search-box:focus { outline: 2px solid var(--accent); outline-offset: 1px }
 .search-people h2 { margin: 0 0 6px; font-size: 1rem } .search-people ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
 .search-people li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap } .search-people li a { display: inline-flex; align-items: center; gap: 8px; color: var(--text); text-decoration: none }
@@ -437,7 +437,7 @@ textarea.interests { width: 100%; box-sizing: border-box; font: inherit; padding
 .zap-custom { width: 8.5em; min-height: 0; padding: 4px 8px; font: inherit; font-size: 16px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px } .zap-comment { width: 100%; margin-top: 10px; font-size: 16px }
 .review.zap h2 { display: flex; align-items: center; gap: 6px }
 .wallet-risk.warning { border-left: 3px solid #f59e0b; padding: 8px 10px; background: rgba(245, 158, 11, .08); border-radius: 6px; font-size: .9rem }
-.nwc-form { display: grid; gap: 8px; justify-items: start } .nwc-input { width: 100%; box-sizing: border-box; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border, #2a3445); background: var(--input-bg, #0b0f16); color: inherit }
+.nwc-form { display: grid; gap: 8px; justify-items: start } .nwc-input { width: 100%; box-sizing: border-box; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text) }
 .actions .zap-btn { color: #f59e0b }
 /* notes that came late from people's own relays: a pill that floats over the top of the list without taking any room (nothing below it moves) */
 .late-wrap { position: sticky; top: 8px; height: 0; z-index: 5; display: flex; justify-content: center; align-items: flex-start; overflow: visible; pointer-events: none }
@@ -540,7 +540,7 @@ ul.zap-history li > .meta { flex: none; font-size: .8rem }
 .ai .warning { border-left: 3px solid #f59e0b; padding: 8px 10px; background: rgba(245, 158, 11, .08); border-radius: 6px; font-size: .9rem }
 .ai-form { display: grid; gap: 10px }
 .ai-form label { display: grid; gap: 4px }
-.ai-form input, .ai-form select { width: 100%; box-sizing: border-box; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border, #2a3445); background: var(--input-bg, #0b0f16); color: inherit }
+.ai-form input, .ai-form select { width: 100%; box-sizing: border-box; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text) }
 .ai-form button { justify-self: start }
 .translation { margin: 8px 0 4px; padding: 8px 12px; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--card-2, rgba(127, 127, 127, .08)) }
 .translation p { margin: 4px 0 }
