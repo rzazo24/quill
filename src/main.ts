@@ -18,6 +18,19 @@ function markEdgeGap(): void {
   document.documentElement.style.setProperty('--edge-gap', `${gap > 20 ? gap : 0}px`) // how far short of the screen's bottom the page stops
 }
 markEdgeGap(); addEventListener('resize', markEdgeGap)
+
+/** The page itself never scrolls (only <main> does), but iOS scrolls it anyway to lift a field above the keyboard, and does not always scroll it
+ *  back when the keyboard goes: the page is then drawn in place while taps land as if it were still lifted (tap the heart and nothing, tap above
+ *  it and the heart reacts) until the app is restarted. So once nothing is being typed in, the page is put back at the top. */
+function unlift(): void {
+  const el = document.activeElement as HTMLElement | null
+  if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return // the keyboard may be up: iOS needs the lift
+  if (scrollX || scrollY || document.documentElement.scrollTop || document.body.scrollTop) { scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0 }
+}
+document.addEventListener('focusout', () => { setTimeout(unlift, 50); setTimeout(unlift, 400) }) // and again once the keyboard has finished going
+visualViewport?.addEventListener('resize', () => setTimeout(unlift, 50))
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') unlift() })
+addEventListener('scroll', () => setTimeout(unlift, 100), { passive: true })
 import { isNewer } from './ui/update.js'
 
 const storage = ((): Storage | undefined => { try { return window.localStorage } catch { return undefined } })()
