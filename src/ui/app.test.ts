@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { nip19, type Event, type Filter } from 'nostr-tools'
+import { generateSecretKey, getPublicKey, nip19, type Event, type Filter } from 'nostr-tools'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ev, pk } from '../core/testutil.js'
 import { answers, type Fetcher } from '../net/fetcher.js'
@@ -1232,6 +1232,17 @@ describe('the npub on an account page', () => {
     await a.go(`#/user/${friend}`); await tick(300)
     const b = a.root.querySelector('.profile button.npub-copy') as HTMLButtonElement; expect(b.textContent).toMatch(/^npub1.+…/)
     b.click(); expect(copied).toEqual([nip19.npubEncode(friend)]); expect(b.textContent).toBe('Copied')
+  })
+})
+
+describe('an account that shows its own private key', () => {
+  it('its page warns that anyone can post as it; an ordinary account gets no warning', async () => {
+    const sk = generateSecretKey(), shared = getPublicKey(sk)
+    const a = boot({ events: [...world, ev(shared, JSON.stringify({ name: `board ${nip19.nsecEncode(sk)}` }), { kind: 0 })], stored: { me } }); await tick(200)
+    await a.go(`#/user/${shared}`); await tick(300)
+    expect(a.root.querySelector('.profile .key-public')?.textContent).toContain('anyone can sign in and post as this account')
+    await a.go(`#/user/${friend}`); await tick(300)
+    expect(a.root.querySelector('.profile')).not.toBeNull(); expect(a.root.querySelector('.profile .key-public')).toBeNull()
   })
 })
 

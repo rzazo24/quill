@@ -2,6 +2,7 @@
 // it, and its notes judged by the filter. Everything here was written by a stranger and is treated as text.
 import type { Event } from 'nostr-tools'
 import { cleanText } from '../core/text.js'
+import { keyIsPublic } from '../core/publickey.js'
 import { judgeAll, type Context, type Judged, type Settings, DEFAULT_SETTINGS } from '../core/verdict.js'
 import type { Fetcher } from '../net/fetcher.js'
 import { nameOf, newestPerAuthor } from './lists.js'
@@ -23,6 +24,8 @@ export interface ProfileInfo {
   following: number | null
   /** Your follows that follow this account, in a steady order. */
   via: string[]
+  /** The profile shows this account's own private key: anyone can post as it. */
+  keyPublic?: boolean
 }
 
 const text = (v: unknown, max: number): string | undefined => (typeof v === 'string' ? cleanText(v, max).trim() || undefined : undefined)
@@ -52,7 +55,8 @@ export async function loadProfile(f: Fetcher, pubkey: string, s: Session, ctx: C
   const seenIds = new Set<string>()
   const notes = [...here1, ...there, ...arrived()].filter((e) => !seenIds.has(e.id) && seenIds.add(e.id))
   const newest = (kind: number) => newestPerAuthor(meta.filter((e) => e.kind === kind && e.pubkey === pubkey)).get(pubkey)
-  const info: ProfileInfo = { pubkey, ...profileFields(newest(0)), following: followingCount(newest(3)), via: followedVia(s, pubkey) }
+  const meta0 = newest(0)
+  const info: ProfileInfo = { pubkey, ...profileFields(meta0), following: followingCount(newest(3)), via: followedVia(s, pubkey), ...(meta0 && keyIsPublic(pubkey, meta0.content) ? { keyPublic: true } : {}) }
   // you opened this account on purpose: "outside your network" would only hide everything it wrote; the other rules (muted, bursts, repeats, links) still apply
   const here: Settings = { ...settings, rules: { ...settings.rules, outsideNetwork: false } }
   const mine = notes.filter((e) => e.kind === 1 && e.pubkey === pubkey).sort((a, b) => b.created_at - a.created_at || (a.id < b.id ? -1 : 1)).slice(0, PROFILE_NOTES)

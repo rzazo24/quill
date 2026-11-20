@@ -456,6 +456,7 @@ export function renderProfileHead(info: ProfileInfo, relation: 'you' | 'follow' 
   return h('section', { class: 'profile card' },
     h('div', { class: 'profile-top' }, avatarEl(info.pubkey, v, 'lg'),
       h('div', {}, h('h2', {}, nameOf(v, info.pubkey)), npubEl(info.pubkey, v), info.nip05 ? h('div', { class: 'meta' }, info.nip05) : null)),
+    info.keyPublic ? h('p', { class: 'warning key-public', role: 'note' }, h('strong', {}, t(v.lang, 'keyPublicTitle')), ' ', t(v.lang, 'keyPublicText')) : null,
     info.about ? h('div', { class: 'about' }, renderContent(info.about, v)) : null,
     info.website ? h('p', { class: 'meta' }, info.website) : null,
     h('p', { class: 'meta relation' }, [t(v.lang, rel), info.following === null ? null : t(v.lang, 'profileFollowing', { n: info.following })].filter(Boolean).join(' · ')),

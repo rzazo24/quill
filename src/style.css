@@ -550,3 +550,5 @@ ul.zap-history li > .meta { flex: none; font-size: .8rem }
 .draft-translate-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px }
 .draft-translate-row button:not(.link) { min-height: 36px; padding: 0 14px }
 .draft-via { margin: 6px 0 0; font-size: .85rem; overflow-wrap: anywhere }
+/* A profile that shows its own private key: anyone can post as it */
+.profile .key-public { border-left: 3px solid #f59e0b; padding: 8px 10px; background: rgba(245, 158, 11, .08); border-radius: 6px; font-size: .9rem; margin: 8px 0 }
